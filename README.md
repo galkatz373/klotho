@@ -21,7 +21,8 @@ PR 03 — `klotho-ir` (IntentDoc, PlayerIntent, MindIntent, InferIntent, RON).
 PR 04a — predicate / Rite language RFC, `klotho-canon` CFG checks.
 PR 04b — `klotho-canon` eval (pred compiler, tables, tiny-fragment contradiction).
 PR 05 — `klotho-trace` (TraceEvent, prefix hash, replay equality).
-Next: PR 06 `klotho-world`.
+PR 06 — `klotho-world` (projection, `space_ix`, snapshot, feature `mutate`).
+Next: PR 07 `klotho-commit`.
 
 ## Build
 
@@ -42,6 +43,7 @@ klotho/
   crates/klotho-ir/       # IntentDoc, PlayerIntent, MindIntent, InferIntent, RON
   crates/klotho-canon/    # Laws, Affordances, Pred bytecode, Rite ISA, eval
   crates/klotho-trace/    # TraceEvent, TraceLog prefix hash, TraceDelta
+  crates/klotho-world/    # Private World, Projection, space_ix, snapshot
   docs/hld.md             # High-level design (rev 5)
   docs/pred-lang.md       # Predicate / Rite RFC (PR 04a)
 ```

@@ -116,6 +116,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "klotho-world"
+version = "0.1.0"
+dependencies = [
+ "klotho-canon",
+ "klotho-core",
+ "klotho-ir",
+ "klotho-trace",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.189"
 source = "registry+https://github.com/rust-lang/crates.io-index"

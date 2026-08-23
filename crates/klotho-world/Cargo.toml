@@ -1,0 +1,24 @@
+[package]
+name = "klotho-world"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Klotho World: private projection of Canon + Trace + Intent"
+readme = false
+publish = false
+
+[features]
+default = []
+# Write path. Enable only from klotho-commit.
+mutate = []
+
+[dependencies]
+klotho-canon.workspace = true
+klotho-core.workspace = true
+klotho-ir.workspace = true
+klotho-trace.workspace = true
+
+[lints]
+workspace = true

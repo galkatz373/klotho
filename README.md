@@ -20,7 +20,8 @@ PR 02 — `klotho-prove` (K9 provenance DAG, `LicenseSpan`, in-memory CAS).
 PR 03 — `klotho-ir` (IntentDoc, PlayerIntent, MindIntent, InferIntent, RON).
 PR 04a — predicate / Rite language RFC, `klotho-canon` CFG checks.
 PR 04b — `klotho-canon` eval (pred compiler, tables, tiny-fragment contradiction).
-Next: PR 05 `klotho-trace`.
+PR 05 — `klotho-trace` (TraceEvent, prefix hash, replay equality).
+Next: PR 06 `klotho-world`.
 
 ## Build
 
@@ -40,6 +41,7 @@ klotho/
   crates/klotho-prove/    # Provenance DAG, LicenseSpan, blake3 CAS
   crates/klotho-ir/       # IntentDoc, PlayerIntent, MindIntent, InferIntent, RON
   crates/klotho-canon/    # Laws, Affordances, Pred bytecode, Rite ISA, eval
+  crates/klotho-trace/    # TraceEvent, TraceLog prefix hash, TraceDelta
   docs/hld.md             # High-level design (rev 5)
   docs/pred-lang.md       # Predicate / Rite RFC (PR 04a)
 ```

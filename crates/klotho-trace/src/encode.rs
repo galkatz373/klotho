@@ -1,0 +1,443 @@
+//! Canonical little-endian encoding of [`TraceEvent`]. Hashed bytes never go
+//! through serde. Tag numbers are frozen: bump [`EVENT_VERSION`] to invalidate.
+
+use klotho_core::{Mm, PoseMm, ResourceId, Sigil, Tick, VelFx, YawMd};
+
+use crate::error::TraceError;
+use crate::event::{IslandSnap, PoseReason, RelTag, RiteEnd, TraceBody, TraceEvent};
+
+/// Encoding version. Bump ⇒ every prefix hash changes.
+pub const EVENT_VERSION: u8 = 1;
+
+const TAG_RITE_BEGAN: u8 = 1;
+const TAG_RITE_ADVANCED: u8 = 2;
+const TAG_RITE_ENDED: u8 = 3;
+const TAG_QTY_CHANGED: u8 = 4;
+const TAG_ISLAND_SNAP: u8 = 5;
+const TAG_POSE_COMMITTED: u8 = 6;
+const TAG_SAVE_REQUESTED: u8 = 7;
+const TAG_LEARNED: u8 = 8;
+const TAG_REL_ADD: u8 = 9;
+const TAG_REL_DEL: u8 = 10;
+const TAG_EMITTED: u8 = 11;
+const TAG_UTTERED: u8 = 12;
+
+/// Encode one event to canonical LE bytes.
+#[must_use]
+pub fn encode_event(e: &TraceEvent) -> Vec<u8> {
+    let mut b = Buf::new();
+    b.u8(EVENT_VERSION);
+    b.u64_le(e.tick.0);
+    match &e.body {
+        TraceBody::RiteBegan {
+            actor,
+            rite,
+            target,
+        } => {
+            b.u8(TAG_RITE_BEGAN);
+            b.sigil(*actor);
+            b.u16_le(*rite);
+            b.opt_sigil(*target);
+        }
+        TraceBody::RiteAdvanced {
+            actor,
+            rite,
+            pc,
+            wait_left,
+        } => {
+            b.u8(TAG_RITE_ADVANCED);
+            b.sigil(*actor);
+            b.u16_le(*rite);
+            b.u16_le(*pc);
+            b.u16_le(*wait_left);
+        }
+        TraceBody::RiteEnded {
+            actor,
+            rite,
+            status,
+        } => {
+            b.u8(TAG_RITE_ENDED);
+            b.sigil(*actor);
+            b.u16_le(*rite);
+            b.u8(*status as u8);
+        }
+        TraceBody::QtyChanged {
+            id,
+            res,
+            to,
+            quantum,
+        } => {
+            b.u8(TAG_QTY_CHANGED);
+            b.sigil(*id);
+            b.u8(res.0);
+            b.i32_le(*to);
+            b.i32_le(*quantum);
+        }
+        TraceBody::IslandSnap(s) => {
+            b.u8(TAG_ISLAND_SNAP);
+            encode_snap(&mut b, s);
+        }
+        TraceBody::PoseCommitted { s, xz, yaw, reason } => {
+            b.u8(TAG_POSE_COMMITTED);
+            b.sigil(*s);
+            b.i32_le(xz.0.0);
+            b.i32_le(xz.1.0);
+            b.i32_le(yaw.0);
+            b.u8(*reason as u8);
+        }
+        TraceBody::SaveRequested => b.u8(TAG_SAVE_REQUESTED),
+        TraceBody::Learned { mind, fact } => {
+            b.u8(TAG_LEARNED);
+            b.sigil(*mind);
+            b.u16_le(*fact);
+        }
+        TraceBody::RelAdd { a, rel, b: obj } => {
+            b.u8(TAG_REL_ADD);
+            b.sigil(*a);
+            b.u8(rel.0);
+            b.sigil(*obj);
+        }
+        TraceBody::RelDel { a, rel, b: obj } => {
+            b.u8(TAG_REL_DEL);
+            b.sigil(*a);
+            b.u8(rel.0);
+            b.sigil(*obj);
+        }
+        TraceBody::Emitted { kind, a, b: obj } => {
+            b.u8(TAG_EMITTED);
+            b.u16_le(*kind);
+            b.sigil(*a);
+            b.opt_sigil(*obj);
+        }
+        TraceBody::Uttered { speaker, fact_ids } => {
+            b.u8(TAG_UTTERED);
+            b.sigil(*speaker);
+            b.u32_le(fact_ids.len() as u32);
+            for f in fact_ids {
+                b.u16_le(*f);
+            }
+        }
+    }
+    b.bytes
+}
+
+/// Decode one event. Used by tests and later replay loaders.
+pub fn decode_event(bytes: &[u8]) -> Result<TraceEvent, TraceError> {
+    let mut r = Reader { bytes, pos: 0 };
+    let ver = r.u8()?;
+    if ver != EVENT_VERSION {
+        return Err(TraceError::BadEvent);
+    }
+    let tick = Tick(r.u64_le()?);
+    let tag = r.u8()?;
+    let body = match tag {
+        TAG_RITE_BEGAN => TraceBody::RiteBegan {
+            actor: r.sigil()?,
+            rite: r.u16_le()?,
+            target: r.opt_sigil()?,
+        },
+        TAG_RITE_ADVANCED => TraceBody::RiteAdvanced {
+            actor: r.sigil()?,
+            rite: r.u16_le()?,
+            pc: r.u16_le()?,
+            wait_left: r.u16_le()?,
+        },
+        TAG_RITE_ENDED => TraceBody::RiteEnded {
+            actor: r.sigil()?,
+            rite: r.u16_le()?,
+            status: match r.u8()? {
+                0 => RiteEnd::Success,
+                1 => RiteEnd::Fail,
+                2 => RiteEnd::FailBudget,
+                _ => return Err(TraceError::BadEvent),
+            },
+        },
+        TAG_QTY_CHANGED => TraceBody::QtyChanged {
+            id: r.sigil()?,
+            res: ResourceId(r.u8()?),
+            to: r.i32_le()?,
+            quantum: r.i32_le()?,
+        },
+        TAG_ISLAND_SNAP => TraceBody::IslandSnap(decode_snap(&mut r)?),
+        TAG_POSE_COMMITTED => TraceBody::PoseCommitted {
+            s: r.sigil()?,
+            xz: (Mm(r.i32_le()?), Mm(r.i32_le()?)),
+            yaw: YawMd(r.i32_le()?),
+            reason: match r.u8()? {
+                1 => PoseReason::Interact,
+                2 => PoseReason::Land,
+                3 => PoseReason::Pick,
+                4 => PoseReason::Drop,
+                5 => PoseReason::Hinge,
+                _ => return Err(TraceError::BadEvent),
+            },
+        },
+        TAG_SAVE_REQUESTED => TraceBody::SaveRequested,
+        TAG_LEARNED => TraceBody::Learned {
+            mind: r.sigil()?,
+            fact: r.u16_le()?,
+        },
+        TAG_REL_ADD => TraceBody::RelAdd {
+            a: r.sigil()?,
+            rel: RelTag(r.u8()?),
+            b: r.sigil()?,
+        },
+        TAG_REL_DEL => TraceBody::RelDel {
+            a: r.sigil()?,
+            rel: RelTag(r.u8()?),
+            b: r.sigil()?,
+        },
+        TAG_EMITTED => TraceBody::Emitted {
+            kind: r.u16_le()?,
+            a: r.sigil()?,
+            b: r.opt_sigil()?,
+        },
+        TAG_UTTERED => {
+            let speaker = r.sigil()?;
+            let n = r.u32_le()? as usize;
+            let mut fact_ids = Vec::with_capacity(n);
+            for _ in 0..n {
+                fact_ids.push(r.u16_le()?);
+            }
+            TraceBody::Uttered { speaker, fact_ids }
+        }
+        _ => return Err(TraceError::BadEvent),
+    };
+    if r.pos != r.bytes.len() {
+        return Err(TraceError::BadEvent);
+    }
+    Ok(TraceEvent { tick, body })
+}
+
+fn encode_snap(b: &mut Buf, s: &IslandSnap) {
+    debug_assert_eq!(s.poses.len(), s.members.len());
+    debug_assert_eq!(s.vels.len(), s.members.len());
+    debug_assert_eq!(s.yaw_rates.len(), s.members.len());
+    debug_assert_eq!(s.sleep_ticks.len(), s.members.len());
+    b.u16_le(s.island);
+    b.u32_le(s.members.len() as u32);
+    for &m in &s.members {
+        b.sigil(m);
+    }
+    for p in &s.poses {
+        encode_pose(b, *p);
+    }
+    for &(vx, vz) in &s.vels {
+        b.i32_le(vx.0);
+        b.i32_le(vz.0);
+    }
+    for &y in &s.yaw_rates {
+        b.i32_le(y);
+    }
+    for &t in &s.sleep_ticks {
+        b.u16_le(t);
+    }
+}
+
+fn decode_snap(r: &mut Reader<'_>) -> Result<IslandSnap, TraceError> {
+    let island = r.u16_le()?;
+    let n = r.u32_le()? as usize;
+    let mut members = Vec::with_capacity(n);
+    for _ in 0..n {
+        members.push(r.sigil()?);
+    }
+    let mut poses = Vec::with_capacity(n);
+    for _ in 0..n {
+        poses.push(decode_pose(r)?);
+    }
+    let mut vels = Vec::with_capacity(n);
+    for _ in 0..n {
+        vels.push((VelFx(r.i32_le()?), VelFx(r.i32_le()?)));
+    }
+    let mut yaw_rates = Vec::with_capacity(n);
+    for _ in 0..n {
+        yaw_rates.push(r.i32_le()?);
+    }
+    let mut sleep_ticks = Vec::with_capacity(n);
+    for _ in 0..n {
+        sleep_ticks.push(r.u16_le()?);
+    }
+    IslandSnap::new(island, members, poses, vels, yaw_rates, sleep_ticks)
+}
+
+fn encode_pose(b: &mut Buf, p: PoseMm) {
+    b.i32_le(p.x.0);
+    b.i32_le(p.z.0);
+    b.i32_le(p.y.0);
+    b.i32_le(p.yaw.0);
+}
+
+fn decode_pose(r: &mut Reader<'_>) -> Result<PoseMm, TraceError> {
+    let x = Mm(r.i32_le()?);
+    let z = Mm(r.i32_le()?);
+    let y = Mm(r.i32_le()?);
+    let yaw = YawMd(r.i32_le()?);
+    Ok(PoseMm { x, z, y, yaw })
+}
+
+struct Buf {
+    bytes: Vec<u8>,
+}
+
+impl Buf {
+    fn new() -> Self {
+        Self { bytes: Vec::new() }
+    }
+
+    fn u8(&mut self, v: u8) {
+        self.bytes.push(v);
+    }
+
+    fn u16_le(&mut self, v: u16) {
+        self.bytes.extend_from_slice(&v.to_le_bytes());
+    }
+
+    fn u32_le(&mut self, v: u32) {
+        self.bytes.extend_from_slice(&v.to_le_bytes());
+    }
+
+    fn u64_le(&mut self, v: u64) {
+        self.bytes.extend_from_slice(&v.to_le_bytes());
+    }
+
+    fn i32_le(&mut self, v: i32) {
+        self.bytes.extend_from_slice(&v.to_le_bytes());
+    }
+
+    fn sigil(&mut self, s: Sigil) {
+        self.bytes.extend_from_slice(&s.raw().to_le_bytes());
+    }
+
+    fn opt_sigil(&mut self, s: Option<Sigil>) {
+        match s {
+            None => self.u8(0),
+            Some(v) => {
+                self.u8(1);
+                self.sigil(v);
+            }
+        }
+    }
+}
+
+struct Reader<'a> {
+    bytes: &'a [u8],
+    pos: usize,
+}
+
+impl Reader<'_> {
+    fn take(&mut self, n: usize) -> Result<&[u8], TraceError> {
+        let end = self.pos.checked_add(n).ok_or(TraceError::BadEvent)?;
+        if end > self.bytes.len() {
+            return Err(TraceError::BadEvent);
+        }
+        let slice = &self.bytes[self.pos..end];
+        self.pos = end;
+        Ok(slice)
+    }
+
+    fn u8(&mut self) -> Result<u8, TraceError> {
+        Ok(self.take(1)?[0])
+    }
+
+    fn u16_le(&mut self) -> Result<u16, TraceError> {
+        let b = self.take(2)?;
+        Ok(u16::from_le_bytes([b[0], b[1]]))
+    }
+
+    fn u32_le(&mut self) -> Result<u32, TraceError> {
+        let b = self.take(4)?;
+        Ok(u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+    }
+
+    fn u64_le(&mut self) -> Result<u64, TraceError> {
+        let b = self.take(8)?;
+        Ok(u64::from_le_bytes([
+            b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+        ]))
+    }
+
+    fn i32_le(&mut self) -> Result<i32, TraceError> {
+        let b = self.take(4)?;
+        Ok(i32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+    }
+
+    fn sigil(&mut self) -> Result<Sigil, TraceError> {
+        let b = self.take(16)?;
+        let mut raw = [0u8; 16];
+        raw.copy_from_slice(b);
+        Ok(Sigil::from_raw(u128::from_le_bytes(raw)))
+    }
+
+    fn opt_sigil(&mut self) -> Result<Option<Sigil>, TraceError> {
+        match self.u8()? {
+            0 => Ok(None),
+            1 => Ok(Some(self.sigil()?)),
+            _ => Err(TraceError::BadEvent),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use klotho_core::{LocusKind, PoseMm, YawMd};
+
+    use super::*;
+    use crate::event::TraceBody;
+
+    fn actor(id: u128) -> Sigil {
+        Sigil::pack(LocusKind::Actor, 0, id).unwrap()
+    }
+
+    #[test]
+    fn rite_began_round_trip() {
+        let e = TraceEvent::new(
+            Tick(3),
+            TraceBody::RiteBegan {
+                actor: actor(1),
+                rite: 7,
+                target: Some(actor(2)),
+            },
+        );
+        let bytes = encode_event(&e);
+        assert_eq!(bytes[0], EVENT_VERSION);
+        assert_eq!(decode_event(&bytes).unwrap(), e);
+    }
+
+    #[test]
+    fn le_tick() {
+        let e = TraceEvent::new(Tick(1), TraceBody::SaveRequested);
+        let bytes = encode_event(&e);
+        assert_eq!(&bytes[1..9], &[1, 0, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(bytes[9], TAG_SAVE_REQUESTED);
+    }
+
+    #[test]
+    fn island_snap_round_trip() {
+        let s = actor(9);
+        let snap = IslandSnap::new(
+            4,
+            vec![s],
+            vec![PoseMm::new(Mm(10), Mm(0), Mm(20), YawMd(0))],
+            vec![(VelFx::ZERO, VelFx::ONE)],
+            vec![0],
+            vec![3],
+        )
+        .unwrap();
+        let e = TraceEvent::new(Tick(0), TraceBody::IslandSnap(snap));
+        assert_eq!(decode_event(&encode_event(&e)).unwrap(), e);
+    }
+
+    #[test]
+    fn unknown_tag_fails() {
+        let bytes = [EVENT_VERSION, 0, 0, 0, 0, 0, 0, 0, 0, 99];
+        assert_eq!(decode_event(&bytes), Err(TraceError::BadEvent));
+    }
+
+    #[test]
+    fn snap_len_mismatch() {
+        assert_eq!(
+            IslandSnap::new(0, vec![actor(1)], vec![], vec![], vec![], vec![]),
+            Err(TraceError::SnapLen)
+        );
+    }
+}

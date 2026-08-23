@@ -17,7 +17,8 @@ The full high-level design is in [`docs/hld.md`](docs/hld.md).
 
 PR 01 — workspace and `klotho-core` (K20 number freeze, K25 `Rng`).
 PR 02 — `klotho-prove` (K9 provenance DAG, `LicenseSpan`, in-memory CAS).
-Next: PR 03 `klotho-ir`.
+PR 03 — `klotho-ir` (IntentDoc, PlayerIntent, MindIntent, InferIntent, RON).
+Next: PR 04a predicate / Rite language RFC.
 
 ## Build
 
@@ -35,6 +36,7 @@ cargo fmt --all -- --check
 klotho/
   crates/klotho-core/     # Tick, Mm, VelFx, YawMd, Sigil, Budget, Hash, Rng
   crates/klotho-prove/    # Provenance DAG, LicenseSpan, blake3 CAS
+  crates/klotho-ir/       # IntentDoc, PlayerIntent, MindIntent, InferIntent, RON
   docs/hld.md             # High-level design (rev 5)
 ```
 

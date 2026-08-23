@@ -1,9 +1,11 @@
 //! Integer space types the kernel can check without linking `klotho-space`.
 
+use serde::{Deserialize, Serialize};
+
 use crate::{Mm, Sigil, YawMd};
 
 /// Integer 3-vector in millimetres. Y is height.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Serialize, Deserialize)]
 pub struct IVec3 {
     /// X, millimetres.
     pub x: i32,
@@ -60,7 +62,7 @@ const fn max_i32(a: i32, b: i32) -> i32 {
 ///
 /// Empty iff `min` exceeds `max` on any axis. Edge-touching boxes overlap
 /// (a locked door's face still blocks).
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
 pub struct AabbMm {
     /// Inclusive minimum corner.
     pub min: IVec3,
@@ -146,7 +148,7 @@ impl AabbMm {
 }
 
 /// Committed pose. Ground plane is XZ; Y is height. Yaw is millidegrees about Y.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Serialize, Deserialize)]
 pub struct PoseMm {
     /// X, millimetres.
     pub x: Mm,
@@ -184,7 +186,7 @@ impl PoseMm {
 /// rechecks `OpaqueClosed`. `overlaps_closed_opaque` is a hint: if it says no
 /// overlap and the kernel finds one, the reject is
 /// [`crate::RejectReason::WitnessMismatch`].
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
 pub struct HullWitness {
     /// Locus whose hull is being moved.
     pub mover: Sigil,

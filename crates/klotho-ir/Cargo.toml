@@ -1,17 +1,18 @@
 [package]
-name = "klotho-prove"
+name = "klotho-ir"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Klotho provenance DAG, LicenseSpan, and in-memory CAS (K9)"
+description = "Klotho Intent IR: IntentDoc, PlayerIntent, MindIntent, InferIntent (RON canonical)"
 readme = false
 publish = false
 
 [dependencies]
-blake3.workspace = true
 klotho-core.workspace = true
+klotho-prove.workspace = true
+ron.workspace = true
 serde.workspace = true
 
 [lints]

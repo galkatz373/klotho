@@ -3,8 +3,12 @@
 use core::fmt;
 use core::ops::{Add, AddAssign, Mul, Neg, Sub, SubAssign};
 
+use serde::{Deserialize, Serialize};
+
 /// Position along one axis, millimetres. Authoring metres convert at cook.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default, Serialize, Deserialize,
+)]
 pub struct Mm(pub i32);
 
 impl Mm {
@@ -73,7 +77,9 @@ impl fmt::Display for Mm {
 ///
 /// `ONE` is 1 mm / tick. Fractional millimetres live in the low 16 bits so
 /// integration is deterministic across OS/arch without floats.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default, Serialize, Deserialize,
+)]
 pub struct VelFx(pub i32);
 
 impl VelFx {
@@ -182,7 +188,9 @@ impl fmt::Display for VelFx {
 /// Yaw in millidegrees. Canonical range is `[0, 360_000)`.
 ///
 /// 1° = 1_000 millidegrees. Presenters convert to radians; the kernel does not.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default, Serialize, Deserialize,
+)]
 pub struct YawMd(pub i32);
 
 impl YawMd {

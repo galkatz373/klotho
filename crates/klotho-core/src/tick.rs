@@ -3,8 +3,12 @@
 use core::fmt;
 use core::ops::{Add, AddAssign, Sub};
 
+use serde::{Deserialize, Serialize};
+
 /// One global tick. Pause stops `step`; it does not mint a Place.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default, Serialize, Deserialize,
+)]
 pub struct Tick(pub u64);
 
 impl Tick {
@@ -51,7 +55,9 @@ impl fmt::Display for Tick {
 }
 
 /// Cook / hull binding epoch. Canonical hulls are keyed by `(Sigil, Epoch)`.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default, Serialize, Deserialize,
+)]
 pub struct Epoch(pub u64);
 
 impl Epoch {

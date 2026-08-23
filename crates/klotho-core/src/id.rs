@@ -2,12 +2,14 @@
 
 use core::fmt;
 
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
 /// Kind byte packed into the top 8 bits of a [`Sigil`].
 ///
 /// Discriminant 0 is reserved (invalid). Generation wrap (256) is v1-accepted:
 /// a Sigil is never reused within a Trace prefix that still references it.
 #[repr(u8)]
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Serialize, Deserialize)]
 pub enum LocusKind {
     /// Player or NPC body.
     Actor = 1,
@@ -123,20 +125,62 @@ impl fmt::Display for Sigil {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+struct SigilDto {
+    kind: LocusKind,
+    generation: u8,
+    /// Decimal string: RON has no u128.
+    id: String,
+}
+
+impl Serialize for Sigil {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let kind = self
+            .kind()
+            .ok_or_else(|| serde::ser::Error::custom("sigil kind byte is invalid"))?;
+        SigilDto {
+            kind,
+            generation: self.generation(),
+            id: self.id().to_string(),
+        }
+        .serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Sigil {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let dto = SigilDto::deserialize(deserializer)?;
+        let id: u128 = dto
+            .id
+            .parse()
+            .map_err(|_| serde::de::Error::custom("sigil id is not a decimal integer"))?;
+        Sigil::pack(dto.kind, dto.generation, id)
+            .ok_or_else(|| serde::de::Error::custom("sigil id exceeds 112 bits"))
+    }
+}
+
 /// Cooked Law table index.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default, Serialize, Deserialize,
+)]
 pub struct LawId(pub u16);
 
 /// Cooked Affordance table index (`Lockable`, `Portable`, …).
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default, Serialize, Deserialize,
+)]
 pub struct AffordanceId(pub u16);
 
 /// Resource row (`mass_g`, `heat`, `stamina`, …).
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default, Serialize, Deserialize,
+)]
 pub struct ResourceId(pub u8);
 
 /// Local player slot. v1 is one local player; listen-server may use 0..=1.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default, Serialize, Deserialize,
+)]
 pub struct PlayerId(pub u8);
 
 #[cfg(test)]

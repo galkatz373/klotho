@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use klotho_core::{BlobId, Hash};
+use serde::{Deserialize, Serialize};
 
 use crate::artifact::ArtifactKind;
 use crate::cas::Cas;
@@ -16,7 +17,7 @@ use crate::license::LicenseSpan;
 const NODE_VERSION: u8 = 1;
 
 /// Stable id of a provenance node: blake3 of its canonical encoding.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Serialize, Deserialize)]
 pub struct ProvenanceId(pub Hash);
 
 impl ProvenanceId {

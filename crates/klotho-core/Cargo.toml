@@ -9,5 +9,8 @@ description = "Klotho kernel numbers, identities, and commit-path primitives (K2
 readme = false
 publish = false
 
+[dependencies]
+serde.workspace = true
+
 [lints]
 workspace = true

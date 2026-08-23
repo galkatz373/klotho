@@ -1,0 +1,50 @@
+[
+    AddAffordance(Affordance(id: "Hittable", requires: [], grants: [], conflicts: [])),
+    AddAffordance(Affordance(id: "Solid", requires: [], grants: [], conflicts: [])),
+    AddAffordance(Affordance(
+        id: "Armed",
+        requires: [],
+        grants: ["Fire"],
+        conflicts: [],
+    )),
+    AddLaw(Law(
+        id: "fire.hitscan",
+        when: EqVerb(Fire),
+        body: Pred(
+            must: And(Affordance(Self, "Armed"), Qty(Self, "ammo", Ge, 1)),
+            ought: None,
+        ),
+    )),
+    AddRite(RiteGraph(id: "fire", cap_steps: 8, cap_ticks: 4, entry: 0, nodes: [
+        { pc: 0, op: Bind(Self) },
+        { pc: 1, op: Spend("ammo", 1, 4) },
+        { pc: 2, op: Emit("Hit") },
+        { pc: 3, op: Complete(Success) },
+        { pc: 4, op: Complete(Fail) },
+    ])),
+    AddLaw(Law(
+        id: "never_clip_closed",
+        when: Or(SourceIs(Space), SourceIs(Motion)),
+        body: Pred(must: Not(SweptHitsOpaqueClosed), ought: None),
+    )),
+    AddLaw(Law(
+        id: "projectile.cap",
+        when: EqVerb(Fire),
+        body: Cap(mark: Affordance(Other, "Hittable"), n: 100, require_rel: None),
+    )),
+    AddRite(RiteGraph(id: "apply_hit", cap_steps: 8, cap_ticks: 4, entry: 0, nodes: [
+        { pc: 0, op: Bind(Target) },
+        { pc: 1, op: Setq(Target, "health", -25) },
+        { pc: 2, op: Branch(Qty(Target, "health", Le, 0), 3, 5) },
+        { pc: 3, op: RelAdd(Target, Dead, Target) },
+        { pc: 4, op: Awake(Target) },
+        { pc: 5, op: Complete(Success) },
+    ])),
+    AddRite(RiteGraph(id: "respawn", cap_steps: 8, cap_ticks: 90, entry: 0, nodes: [
+        { pc: 0, op: Wait(90, None) },
+        { pc: 1, op: RelDel(Self, Dead, Self) },
+        { pc: 2, op: Setq(Self, "health", 100) },
+        { pc: 3, op: Complete(Success) },
+    ])),
+    AddBeat(Beat(id: "respawn_wave", notes: "90 ticks after Dead")),
+]

@@ -1,0 +1,12 @@
+RiteGraph(id: "trade.offer", cap_steps: 24, cap_ticks: 600, entry: 0, nodes: [
+    Bind(Target),
+    Guard(Not(TargetIs(Name("fathers_hammer"))), 10),
+    Guard(Or(Rel(Target, OwnedBy, Self), Rel(Target, WieldedBy, Self)), 10),
+    RelAdd(Target, Owes, Self),
+    Wait(120, Some(DialogueChoice)),
+    Guard(And(SourceIs(Player), AgencyClaimed(DialogueChoice)), 8),
+    Complete(Success),
+    RelDel(Target, Owes, Self),
+    Complete(Fail),
+    Complete(Fail),
+])

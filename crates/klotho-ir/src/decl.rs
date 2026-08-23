@@ -181,7 +181,8 @@ impl BindSrc {
 pub enum RiteOp {
     /// End.
     Halt(Status),
-    /// If pred is false, jump to fail_pc.
+    /// If pred is false, jump to fail_pc. Appendix A `Guard(pred, fail: 10)` is
+    /// rewritten to `Guard(pred, 10)` in [`crate::from_ron`].
     Guard(Pred, u16),
     /// Subtract qty; jump to fail_pc if insufficient.
     Spend(Name, i32, u16),
@@ -209,7 +210,7 @@ impl RiteOp {
     pub(crate) fn check(&self) -> Result<(), IrError> {
         match self {
             Self::Halt(_) | Self::Wait(_, _) | Self::Complete(_) => Ok(()),
-            Self::Guard(p, _) | Self::Branch(p, _, _) => p.check(),
+            Self::Guard(pred, _) | Self::Branch(pred, _, _) => pred.check(),
             Self::Spend(n, _, _) | Self::Emit(n) => n.check(),
             Self::Bind(b) => b.check(),
             Self::Setq(s, n, _) => {
@@ -226,7 +227,8 @@ impl RiteOp {
 }
 
 /// CFG node. Canonical RON is tagged (`Op(...)` / `Labeled(...)`).
-/// Cook CFG checks (reachability, no fall-through after COMPLETE) are PR 04a.
+/// [`crate::from_ron`] also accepts Appendix A bare ops and `{ pc, op }` maps
+/// by normalizing them first.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
 pub enum RiteNode {
     /// Op at the next implicit pc (`Op(Bind(Target))`).

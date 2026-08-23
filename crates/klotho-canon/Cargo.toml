@@ -1,0 +1,17 @@
+[package]
+name = "klotho-canon"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Klotho Canon: cooked types and rite CFG checks (PR 04a; eval is 04b)"
+readme = false
+publish = false
+
+[dependencies]
+klotho-core.workspace = true
+klotho-ir.workspace = true
+
+[lints]
+workspace = true

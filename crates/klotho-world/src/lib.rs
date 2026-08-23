@@ -15,15 +15,18 @@ mod grid;
 mod heap;
 mod mutate;
 mod proj;
+mod spec;
 mod view;
 mod world;
 
 pub use error::WorldError;
-pub use grid::{CELL_MM, GridIndex};
+pub use grid::{CELL_MM, GridIndex, world_aabb};
 pub use heap::IntentHeap;
 #[cfg(any(test, feature = "mutate"))]
 pub use mutate::WorldMut;
 pub use proj::{Projection, RiteMachine};
+#[cfg(any(test, feature = "mutate"))]
+pub use spec::SpecDelta;
 pub use view::WorldView;
 pub use world::{World, WorldSnapshot};
 

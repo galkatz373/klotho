@@ -8,6 +8,7 @@ use klotho_ir::{PlayerIntent, Rel};
 use klotho_trace::TraceEvent;
 
 use crate::error::WorldError;
+use crate::spec::SpecDelta;
 use crate::world::World;
 
 /// Exclusive write handle. Only `klotho-commit` should construct this at runtime.
@@ -111,5 +112,21 @@ impl WorldMut<'_> {
     /// Set the global tick.
     pub fn set_tick(&mut self, t: Tick) {
         self.world.set_tick(t);
+    }
+
+    /// Fork projection for a proposal-local transaction (K21).
+    #[must_use]
+    pub fn begin_spec(&self) -> SpecDelta {
+        SpecDelta::from_parts(self.world.projection().clone(), self.world.tick())
+    }
+
+    /// Atomic install of a successful spec: replace projection, append Trace
+    /// (events already applied on the spec — do not apply twice).
+    pub fn commit_spec(&mut self, spec: SpecDelta) {
+        let (proj, events) = spec.into_parts();
+        *self.world.projection_mut() = proj;
+        for e in events {
+            self.world.trace_mut().append(e);
+        }
     }
 }

@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use klotho_canon::RiteId;
 use klotho_core::{AabbMm, AffordanceId, BlobId, LocusKind, PoseMm, ResourceId, Sigil, VelFx};
-use klotho_ir::Rel;
+use klotho_ir::{Channel, Rel};
 use klotho_trace::{RelTag, TraceBody, TraceEvent};
 
 use crate::MAX_LOCI;
@@ -46,6 +46,8 @@ pub struct RiteMachine {
     pub wait_left: u16,
     /// Bound target.
     pub target: Option<Sigil>,
+    /// Channel that may resume this WAIT (`None` = any).
+    pub wait_ch: Option<Channel>,
 }
 
 impl Projection {
@@ -217,6 +219,7 @@ impl Projection {
                             pc: 0,
                             wait_left: 0,
                             target: *target,
+                            wait_ch: None,
                         },
                     );
                 }
@@ -445,6 +448,23 @@ impl Projection {
     pub fn rite(&self, actor: Sigil, rite: RiteId) -> Option<RiteMachine> {
         let i = self.slot(actor)?;
         self.rites.get(&(i, rite.0)).copied()
+    }
+
+    /// First active rite for `actor`, if any (lowest rite id).
+    #[must_use]
+    pub fn first_rite(&self, actor: Sigil) -> Option<(RiteId, RiteMachine)> {
+        let i = self.slot(actor)?;
+        self.rites
+            .iter()
+            .filter(|((slot, _), _)| *slot == i)
+            .min_by_key(|((_, rite), _)| *rite)
+            .map(|((_, rite), m)| (RiteId(*rite), *m))
+    }
+
+    pub(crate) fn put_rite(&mut self, actor: Sigil, rite: RiteId, m: RiteMachine) {
+        if let Some(i) = self.slot(actor) {
+            self.rites.insert((i, rite.0), m);
+        }
     }
 
     /// `Opaque ∧ LockedBy`.

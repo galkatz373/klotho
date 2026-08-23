@@ -123,6 +123,10 @@ impl World {
         snap
     }
 
+    pub(crate) fn projection(&self) -> &Projection {
+        &self.view
+    }
+
     pub(crate) fn projection_mut(&mut self) -> &mut Projection {
         &mut self.view
     }

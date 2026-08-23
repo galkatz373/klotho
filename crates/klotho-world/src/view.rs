@@ -13,6 +13,12 @@ pub struct WorldView<'a> {
 }
 
 impl WorldView<'_> {
+    /// Wrap a projection (speculative or live).
+    #[must_use]
+    pub fn of(proj: &Projection) -> WorldView<'_> {
+        WorldView { proj }
+    }
+
     /// Loci that currently hold `a`.
     pub fn with_affordance(&self, a: AffordanceId) -> impl Iterator<Item = Sigil> + '_ {
         self.proj.with_affordance(a)
@@ -74,6 +80,24 @@ impl WorldView<'_> {
     #[must_use]
     pub fn hull_id(&self, s: Sigil) -> Option<klotho_core::BlobId> {
         self.proj.hull_id(s)
+    }
+
+    /// Local (unposed) hull AABB.
+    #[must_use]
+    pub fn hull(&self, s: Sigil) -> Option<AabbMm> {
+        self.proj.hull(s)
+    }
+
+    /// Active rite, if any.
+    #[must_use]
+    pub fn first_rite(&self, s: Sigil) -> Option<(RiteId, crate::RiteMachine)> {
+        self.proj.first_rite(s)
+    }
+
+    /// Named rite row.
+    #[must_use]
+    pub fn rite(&self, actor: Sigil, rite: RiteId) -> Option<crate::RiteMachine> {
+        self.proj.rite(actor, rite)
     }
 }
 

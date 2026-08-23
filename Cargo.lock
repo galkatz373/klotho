@@ -82,6 +82,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "klotho-commit"
+version = "0.1.0"
+dependencies = [
+ "klotho-canon",
+ "klotho-core",
+ "klotho-ir",
+ "klotho-trace",
+ "klotho-world",
+]
+
+[[package]]
 name = "klotho-core"
 version = "0.1.0"
 dependencies = [

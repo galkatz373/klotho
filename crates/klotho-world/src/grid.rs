@@ -114,7 +114,7 @@ impl GridIndex {
 /// Translate a local hull by a millimetre translation (yaw ignored: hulls that
 /// swing must ship a new local AABB).
 #[must_use]
-pub fn world_aabb(local: AabbMm, translation: IVec3) -> AabbMm {
+pub const fn world_aabb(local: AabbMm, translation: IVec3) -> AabbMm {
     AabbMm {
         min: local.min.wrapping_add(translation),
         max: local.max.wrapping_add(translation),

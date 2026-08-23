@@ -7,6 +7,7 @@ members = [
     "crates/klotho-canon",
     "crates/klotho-trace",
     "crates/klotho-world",
+    "crates/klotho-commit",
 ]
 
 [workspace.package]
@@ -25,6 +26,7 @@ klotho-ir = { path = "crates/klotho-ir" }
 klotho-canon = { path = "crates/klotho-canon" }
 klotho-trace = { path = "crates/klotho-trace" }
 klotho-world = { path = "crates/klotho-world" }
+klotho-commit = { path = "crates/klotho-commit" }
 ron = "0.11.0"
 serde = { version = "1.0.228", features = ["derive"] }
 

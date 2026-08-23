@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/klotho-core"]
+members = ["crates/klotho-core", "crates/klotho-prove"]
 
 [workspace.package]
 version = "0.1.0"
@@ -9,6 +9,10 @@ rust-version = "1.85"
 license = "MIT OR Apache-2.0"
 authors = ["Gal Katz"]
 repository = "https://github.com/galkatz373/klotho"
+
+[workspace.dependencies]
+blake3 = "=1.8.7"
+klotho-core = { path = "crates/klotho-core" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

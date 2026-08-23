@@ -1,0 +1,20 @@
+# Klotho clippy policy.
+#
+# `forbidden_gameplay_imports` (HLD K2 / PR 11a): gameplay crates and slices
+# must not import `klotho-manifest::tables`. That lint is enforced by
+# `scripts/ci/forbidden-imports.sh` until a custom dylint exists. Only
+# `klotho-render`, `klotho-audio`, and `klotho-compile` may touch those tables.
+#
+# K25: no unordered container iteration on the commit path. Enforced here so
+# `klotho-core` (and later kernel crates) cannot silently HashMap-iterate.
+
+disallowed-methods = [
+    { path = "std::collections::HashMap::iter", reason = "K25: unordered iteration is forbidden on the commit path; use BTreeMap or a sorted Vec" },
+    { path = "std::collections::HashMap::iter_mut", reason = "K25: unordered iteration is forbidden on the commit path; use BTreeMap or a sorted Vec" },
+    { path = "std::collections::HashMap::keys", reason = "K25: unordered iteration is forbidden on the commit path; use BTreeMap or a sorted Vec" },
+    { path = "std::collections::HashMap::values", reason = "K25: unordered iteration is forbidden on the commit path; use BTreeMap or a sorted Vec" },
+    { path = "std::collections::HashMap::values_mut", reason = "K25: unordered iteration is forbidden on the commit path; use BTreeMap or a sorted Vec" },
+    { path = "std::collections::HashMap::drain", reason = "K25: unordered iteration is forbidden on the commit path; use BTreeMap or a sorted Vec" },
+    { path = "std::collections::HashSet::iter", reason = "K25: unordered iteration is forbidden on the commit path; use BTreeMap or a sorted Vec" },
+    { path = "std::collections::HashSet::drain", reason = "K25: unordered iteration is forbidden on the commit path; use BTreeMap or a sorted Vec" },
+]

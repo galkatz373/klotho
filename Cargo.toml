@@ -1,0 +1,26 @@
+[workspace]
+resolver = "3"
+members = ["crates/klotho-core"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+authors = ["Gal Katz"]
+repository = "https://github.com/galkatz373/klotho"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+disallowed_methods = "deny"
+todo = "warn"
+unimplemented = "warn"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+panic = "abort"

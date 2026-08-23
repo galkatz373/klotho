@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Klotho Canon: cooked types and rite CFG checks (PR 04a; eval is 04b)"
+description = "Klotho Canon: pred compiler, eval, Law/Affordance/Beat tables"
 readme = false
 publish = false
 

@@ -1,6 +1,6 @@
 # Predicate and Rite language (PR 04a)
 
-Author-facing AST lives in `klotho-ir`. This document is the grammar, caps, and **cook CFG** that `klotho-canon` enforces. Evaluation is PR 04b. Interpreter is `klotho-commit`.
+Author-facing AST lives in `klotho-ir`. This document is the grammar, caps, and **cook CFG** that `klotho-canon` enforces. Pred eval is `klotho-canon`. The rite interpreter is `klotho-commit`.
 
 Closed-world, two-valued: failing to prove is **false**. No nested quantifiers. No recursion. No string match. Arithmetic is `Qty` compare only.
 
@@ -32,7 +32,7 @@ Every `Name(id)` is a cook-time pin to a seed Sigil. Unbound names fail cook.
 
 Combinators: binary `And` / `Or`, `Not`. `ExistsRelated` / `CountRelated` scan cap 64; `pred` is quantifier-free.
 
-Sugar (cook desugar, PR 04b): `Possessed(actor, relic)` → `Rel(relic, WieldedBy, actor)`.
+Sugar (cook desugar): `Burning(s)` → `Qty(s, heat) Ge 400`. `OpaqueClosed(s)` → Opaque ∧ `ExistsRelated` `LockedBy`. `Possessed` is not in the IR (authors write `Rel(..., WieldedBy, ...)`).
 
 ## LawBody
 
@@ -73,10 +73,10 @@ The rev-4 unlabeled `trade.offer` (`Complete(Success)` then dead `RelDel`) fails
 | Rite steps / rite / tick | 64 |
 | Rite steps / tick | 2,000 |
 
-Exceed → `RejectReason::Budget` at runtime (PR 04b / 07). Cook does not execute.
+Exceed → `RejectReason::Budget` at runtime. Cook does not execute world preds; it does tiny-fragment contradiction and the `Lockable` key-or-rite check.
 
-## Cooked types (no eval yet)
+## Cooked types
 
 `PredChunk` ops: `PushAtom`, `And`, `Or`, `Not`, `ExistsRelated`, `CountRelated`, `Halt`.
 
-`RiteChunk`: labeled `RiteInstr { pc, op }` plus caps. Compiler is PR 04b.
+`PredProgram` wraps the chunk with interned `Atom`s and `RelatedScan` payloads. `RiteChunk`: labeled `RiteInstr { pc, op }` plus caps; Guard/Branch preds compile to `PredProgram`s on `CookedRite`.

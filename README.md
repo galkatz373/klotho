@@ -19,7 +19,8 @@ PR 01 — workspace and `klotho-core` (K20 number freeze, K25 `Rng`).
 PR 02 — `klotho-prove` (K9 provenance DAG, `LicenseSpan`, in-memory CAS).
 PR 03 — `klotho-ir` (IntentDoc, PlayerIntent, MindIntent, InferIntent, RON).
 PR 04a — predicate / Rite language RFC, `klotho-canon` CFG checks.
-Next: PR 04b `klotho-canon` eval.
+PR 04b — `klotho-canon` eval (pred compiler, tables, tiny-fragment contradiction).
+Next: PR 05 `klotho-trace`.
 
 ## Build
 
@@ -38,7 +39,7 @@ klotho/
   crates/klotho-core/     # Tick, Mm, VelFx, YawMd, Sigil, Budget, Hash, Rng
   crates/klotho-prove/    # Provenance DAG, LicenseSpan, blake3 CAS
   crates/klotho-ir/       # IntentDoc, PlayerIntent, MindIntent, InferIntent, RON
-  crates/klotho-canon/    # Cooked types + rite CFG (eval is PR 04b)
+  crates/klotho-canon/    # Laws, Affordances, Pred bytecode, Rite ISA, eval
   docs/hld.md             # High-level design (rev 5)
   docs/pred-lang.md       # Predicate / Rite RFC (PR 04a)
 ```

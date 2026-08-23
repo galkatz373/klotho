@@ -26,6 +26,20 @@ pub enum CookError {
     Cycle,
     /// `Name(id)` is not a seed locus / declared id.
     UnboundName(String),
+    /// IntentDoc failed structural validation.
+    InvalidDoc(String),
+    /// Duplicate Law / Affordance / Rite / Beat / seed locus id.
+    DuplicateId(String),
+    /// `RetractLaw` named a law that is not in the draft.
+    UnknownRetract(String),
+    /// Compiled pred exceeds [`crate::PRED_OPS_PER_EVAL`].
+    PredTooLarge,
+    /// Packed table id space exhausted.
+    TableFull,
+    /// Tiny-fragment Law `must` is unsatisfiable, or two Laws contradict.
+    Contradiction(String),
+    /// `Lockable` is declared without a key-or-rite admission pred.
+    LockableNeedsKeyOrRite,
 }
 
 impl fmt::Display for CookError {
@@ -39,6 +53,13 @@ impl fmt::Display for CookError {
             Self::FallOff(pc) => write!(f, "FallOff({pc})"),
             Self::Cycle => write!(f, "Cycle"),
             Self::UnboundName(n) => write!(f, "UnboundName({n})"),
+            Self::InvalidDoc(s) => write!(f, "InvalidDoc({s})"),
+            Self::DuplicateId(s) => write!(f, "DuplicateId({s})"),
+            Self::UnknownRetract(s) => write!(f, "UnknownRetract({s})"),
+            Self::PredTooLarge => write!(f, "PredTooLarge"),
+            Self::TableFull => write!(f, "TableFull"),
+            Self::Contradiction(s) => write!(f, "Contradiction({s})"),
+            Self::LockableNeedsKeyOrRite => write!(f, "LockableNeedsKeyOrRite"),
         }
     }
 }

@@ -1,21 +1,22 @@
 [package]
-name = "hearth-slice"
+name = "klotho-space"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Hearth headless goldens (PR 07b): lock / carry / burn / trade"
+description = "Klotho space: stateless 2.5D AABB + swept-capsule SyncProposer"
+readme = false
 publish = false
 
 [dependencies]
-klotho-canon.workspace = true
 klotho-commit.workspace = true
 klotho-core.workspace = true
-klotho-ir.workspace = true
-klotho-space.workspace = true
-klotho-trace.workspace = true
 klotho-world.workspace = true
+
+[dev-dependencies]
+klotho-canon.workspace = true
+klotho-ir.workspace = true
 
 [lints]
 workspace = true

@@ -1,21 +1,17 @@
 [package]
-name = "hearth-slice"
+name = "klotho-input"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Hearth headless goldens (PR 07b): lock / carry / burn / trade"
+description = "Klotho input: device sample → PlayerIntent via a bind table"
+readme = false
 publish = false
 
 [dependencies]
-klotho-canon.workspace = true
-klotho-commit.workspace = true
 klotho-core.workspace = true
 klotho-ir.workspace = true
-klotho-space.workspace = true
-klotho-trace.workspace = true
-klotho-world.workspace = true
 
 [lints]
 workspace = true

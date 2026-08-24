@@ -1,9 +1,12 @@
-//! Appendix A goldens 1–7. Golden 8 needs PR 10 (space admission).
+//! Appendix A goldens 1–8.
 
 use hearth_slice::{boot, pin, replay};
 use klotho_commit::Proposal;
-use klotho_core::{Budget, LocusKind, RejectReason, Tick};
+use klotho_core::{
+    AabbMm, BlobId, Budget, IVec3, LocusKind, Mm, PoseMm, RejectReason, Tick, VelFx, YawMd,
+};
 use klotho_ir::{FactId, InferIntent, IntentTarget, ModelId, Name, Rel, Verb, from_ron};
+use klotho_space::Space;
 
 fn intents(src: &str) -> Vec<klotho_ir::PlayerIntent> {
     from_ron(src).expect("PlayerIntent RON")
@@ -156,6 +159,87 @@ fn golden_07_player_carry_hammer_pride_reject() {
         "{ds:?}"
     );
     assert!(!k.world().view().has_rel(hammer, Rel::WieldedBy, player));
+}
+
+fn plant_walk_into_door(k: &mut klotho_commit::CommitKernel) {
+    let player = pin(k, "player");
+    let door = pin(k, "oak_door");
+    let mut ph = [0u8; 32];
+    ph[0] = 1;
+    let mut dh = [0u8; 32];
+    dh[0] = 2;
+    let mut w = k.world_mut();
+    w.set_hull(
+        player,
+        AabbMm::new(
+            IVec3 {
+                x: -200,
+                y: 0,
+                z: -200,
+            },
+            IVec3 {
+                x: 200,
+                y: 1800,
+                z: 200,
+            },
+        ),
+        BlobId::from_bytes(ph),
+    )
+    .unwrap();
+    w.set_hull(
+        door,
+        AabbMm::new(
+            IVec3 {
+                x: -400,
+                y: 0,
+                z: -50,
+            },
+            IVec3 {
+                x: 400,
+                y: 2000,
+                z: 50,
+            },
+        ),
+        BlobId::from_bytes(dh),
+    )
+    .unwrap();
+    w.set_pose(player, PoseMm::new(Mm(0), Mm(0), Mm(1400), YawMd(0)))
+        .unwrap();
+    w.set_pose(door, PoseMm::new(Mm(0), Mm(0), Mm(1850), YawMd(0)))
+        .unwrap();
+    w.set_island(door, 1, 12).unwrap();
+    w.set_vel(player, VelFx::ZERO, VelFx::from_mm_per_tick(500), 0)
+        .unwrap();
+}
+
+#[test]
+fn golden_08_idle_locked_door_blocks_then_unlock_admits() {
+    let mut k = boot();
+    let player = pin(&k, "player");
+    let door = pin(&k, "oak_door");
+    plant_walk_into_door(&mut k);
+    assert!(k.world().view().opaque_closed(door));
+    let mut space = Space;
+    let blocked = k.step(Tick(1), Budget::HEARTH, &mut [&mut space]).unwrap();
+    assert!(
+        blocked
+            .rejects
+            .iter()
+            .any(|(_, r)| matches!(r, RejectReason::Law(_) | RejectReason::WitnessMismatch)),
+        "{blocked:?}"
+    );
+    assert_eq!(k.world().view().pose(player).unwrap().z, Mm(1400));
+
+    replay(
+        &mut k,
+        &intents(include_str!("../fixtures/golden_01_lockpick.ron")),
+    );
+    assert!(!k.world().view().has_rel(door, Rel::LockedBy, door));
+    plant_walk_into_door(&mut k);
+    let mut space = Space;
+    let open = k.step(Tick(1), Budget::HEARTH, &mut [&mut space]).unwrap();
+    assert!(open.rejects.is_empty(), "{open:?}");
+    assert_eq!(k.world().view().pose(player).unwrap().z, Mm(1900));
 }
 
 #[test]

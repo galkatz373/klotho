@@ -10,10 +10,12 @@ use std::env;
 use std::fs;
 use std::process::ExitCode;
 
-use hearth_slice::{boot, replay};
+use hearth_slice::boot;
+use klotho_commit::Proposal;
 use klotho_core::Tick;
 use klotho_ir::{PlayerIntent, from_ron};
 use klotho_sim::{METRIC_PROJ_US, METRIC_SNAP_BYTES, Sim};
+use klotho_space::Space;
 
 fn main() -> ExitCode {
     match run() {
@@ -27,7 +29,7 @@ fn main() -> ExitCode {
 
 fn run() -> Result<(), String> {
     let script = env::args().nth(1);
-    let mut kernel = boot();
+    let kernel = boot();
     let intents: Vec<PlayerIntent> = match script.as_deref() {
         Some(path) => {
             let src = fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
@@ -40,17 +42,57 @@ fn run() -> Result<(), String> {
     };
 
     let n = intents.len();
-    let deltas = replay(&mut kernel, &intents);
     let mut sim = Sim::new(kernel);
-    // One extra empty tick so the phase loop (Step → InferKick → NetFlush) runs.
-    let report = sim
-        .tick(Tick(1), &mut [])
-        .map_err(|e| format!("sim tick: {e:?}"))?;
-
-    let rejects: usize = deltas.iter().map(|d| d.rejects.len()).sum();
+    let mut space = Space;
+    let mut rejects = 0usize;
+    let mut report = None;
+    for mut pi in intents {
+        pi.at = sim.kernel().world().tick();
+        // Devices emit PlayerIntent; the runtime wraps Proposal::Player.
+        sim.ingest(wrap_player(pi));
+        let r = sim
+            .tick(Tick(1), &mut [&mut space])
+            .map_err(|e| format!("sim tick: {e:?}"))?;
+        rejects += r.delta.rejects.len();
+        report = Some(r);
+    }
+    let report = match report {
+        Some(r) => r,
+        None => sim
+            .tick(Tick(1), &mut [&mut space])
+            .map_err(|e| format!("sim tick: {e:?}"))?,
+    };
     println!(
         "intents={n} rejects={rejects} {}={} {}={}",
         METRIC_SNAP_BYTES, report.snap_bytes, METRIC_PROJ_US, report.proj_us
     );
     Ok(())
+}
+
+/// Devices emit [`PlayerIntent`]; this is the only wrap site in the runtime.
+fn wrap_player(pi: PlayerIntent) -> Proposal {
+    Proposal::Player(pi)
+}
+
+#[cfg(test)]
+mod tests {
+    use klotho_core::{PlayerId, Tick};
+    use klotho_input::{DeviceSample, InputMapper};
+    use klotho_ir::Verb;
+
+    use super::*;
+
+    #[test]
+    fn injected_device_is_wrapped_as_player_proposal() {
+        let mut sample = DeviceSample::new(PlayerId(0), Tick(4));
+        sample.buttons.insert(klotho_input::Button::KeyE);
+        let pi = InputMapper::hearth().map(&sample);
+        match wrap_player(pi) {
+            Proposal::Player(p) => {
+                assert_eq!(p.verb, Verb::Use);
+                assert_eq!(p.at, Tick(4));
+            }
+            other => panic!("expected Player, got {other:?}"),
+        }
+    }
 }

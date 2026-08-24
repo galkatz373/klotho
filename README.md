@@ -26,7 +26,9 @@ PR 07 — `klotho-commit` (K21 speculate, rite VM, Laws on post-state).
 PR 07b — Hearth headless goldens (lock / carry / burn / trade).
 PR 07c — Ash headless goldens (same `klotho-commit` binary, K26).
 PR 08 — `klotho-sim` phase loop and headless `klotho-runtime`.
-Next: PR 09 input, PR 10 space.
+PR 09 — `klotho-input` (device → PlayerIntent, bind table).
+PR 10 — `klotho-space` (stateless 2.5D admission, golden 8).
+Next: PR 11a manifest, PR 11b compile/kitbash.
 
 ## Build
 
@@ -50,6 +52,8 @@ klotho/
   crates/klotho-world/    # Private World, Projection, space_ix, snapshot
   crates/klotho-commit/   # CommitKernel, Proposal, AdmitBuf, rite VM
   crates/klotho-sim/      # phase loop, budget timers, profile hook
+  crates/klotho-input/    # device sample → PlayerIntent
+  crates/klotho-space/    # 2.5D AABB / swept-capsule SyncProposer
   crates/klotho-runtime/  # headless Intent-script player
   examples/hearth-slice/  # Appendix A goldens (PR 07b)
   examples/ash-slice/     # Appendix B goldens (PR 07c)

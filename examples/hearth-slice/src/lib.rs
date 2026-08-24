@@ -1,6 +1,6 @@
 //! Hearth headless slice (PR 07b). Appendix A Canon, recorded `PlayerIntent`s.
 //!
-//! No GPU. Golden 8 (idle locked door sweep) waits on PR 10.
+//! No GPU. Golden 8 (idle locked door sweep) is PR 10.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]

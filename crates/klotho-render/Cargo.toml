@@ -17,6 +17,7 @@ klotho-prove.workspace = true
 klotho-world.workspace = true
 pollster = "0.4"
 wgpu = "27.0"
+winit = "0.30"
 
 [dev-dependencies]
 klotho-canon.workspace = true

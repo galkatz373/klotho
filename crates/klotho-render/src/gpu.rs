@@ -12,7 +12,10 @@ use crate::math::{model_from_pose, view_proj};
 use crate::palette::albedo;
 use crate::presenter::{Presenter, draw_list};
 
-const TARGET: u32 = 64;
+/// Offscreen golden size (16:9, row-aligned for readback).
+pub const GOLDEN_WIDTH: u32 = 640;
+/// Offscreen golden height.
+pub const GOLDEN_HEIGHT: u32 = 360;
 const SHADER: &str = include_str!("shader.wgsl");
 
 struct GpuMesh {
@@ -29,8 +32,12 @@ pub struct WgpuPresenter {
     frame_bg: wgpu::BindGroup,
     frame_buf: wgpu::Buffer,
     object_layout: wgpu::BindGroupLayout,
+    color_tex: Option<wgpu::Texture>,
     color: wgpu::TextureView,
     depth: wgpu::TextureView,
+    width: u32,
+    height: u32,
+    format: wgpu::TextureFormat,
     meshes: BTreeMap<BlobId, GpuMesh>,
     /// Last present: how many clusters were drawn.
     pub last_drawn: u16,
@@ -67,10 +74,32 @@ impl WgpuPresenter {
             trace: wgpu::Trace::Off,
         }))
         .ok()?;
-        Some(Self::from_device(device, queue))
+        Some(Self::from_device(
+            device,
+            queue,
+            GOLDEN_WIDTH,
+            GOLDEN_HEIGHT,
+            wgpu::TextureFormat::Rgba8UnormSrgb,
+            true,
+        ))
     }
 
-    fn from_device(device: wgpu::Device, queue: wgpu::Queue) -> Self {
+    /// GPU device (surface configure).
+    #[must_use]
+    pub fn device(&self) -> &wgpu::Device {
+        &self.device
+    }
+
+    /// Build around an existing device. `offscreen` allocates a readback target.
+    #[must_use]
+    pub fn from_device(
+        device: wgpu::Device,
+        queue: wgpu::Queue,
+        width: u32,
+        height: u32,
+        format: wgpu::TextureFormat,
+        offscreen: bool,
+    ) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("clustered-forward"),
             source: wgpu::ShaderSource::Wgsl(SHADER.into()),
@@ -124,7 +153,7 @@ impl WgpuPresenter {
                 entry_point: Some("fs"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                    format,
                     blend: Some(wgpu::BlendState::REPLACE),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
@@ -159,8 +188,9 @@ impl WgpuPresenter {
                 resource: frame_buf.as_entire_binding(),
             }],
         });
-        let color = make_target(&device, wgpu::TextureFormat::Rgba8UnormSrgb);
-        let depth = make_target(&device, wgpu::TextureFormat::Depth24Plus);
+        let (color_tex, color) =
+            make_color(&device, width.max(1), height.max(1), format, offscreen);
+        let depth = make_depth(&device, width.max(1), height.max(1));
         Self {
             device,
             queue,
@@ -168,12 +198,22 @@ impl WgpuPresenter {
             frame_bg,
             frame_buf,
             object_layout,
+            color_tex,
             color,
             depth,
+            width: width.max(1),
+            height: height.max(1),
+            format,
             meshes: BTreeMap::new(),
             last_drawn: 0,
             last_rejected: 0,
         }
+    }
+
+    /// Pixel size of the current target.
+    #[must_use]
+    pub fn size(&self) -> (u32, u32) {
+        (self.width, self.height)
     }
 
     /// Upload a mesh if the `KLTH` header validates. Returns whether it is cached.
@@ -237,58 +277,14 @@ impl WgpuPresenter {
         }
     }
 
-    fn write_frame(&self, observer: Observer, vis: &VisualManifest) {
-        let vp = view_proj(observer, 1.0);
-        let light = light_dir(vis);
-        let mut bytes = [0u8; 80];
-        for (i, v) in vp.iter().enumerate() {
-            bytes[i * 4..i * 4 + 4].copy_from_slice(&v.to_le_bytes());
-        }
-        bytes[64..68].copy_from_slice(&light[0].to_le_bytes());
-        bytes[68..72].copy_from_slice(&light[1].to_le_bytes());
-        bytes[72..76].copy_from_slice(&light[2].to_le_bytes());
-        self.queue.write_buffer(&self.frame_buf, 0, &bytes);
-    }
-}
-
-fn light_dir(vis: &VisualManifest) -> [f32; 3] {
-    for l in &vis.lights {
-        if let LightKind::Point { .. } = l.kind {
-            let x = l.pos.x as f32;
-            let y = l.pos.y as f32;
-            let z = l.pos.z as f32;
-            let n = (x * x + y * y + z * z).sqrt().max(1.0);
-            return [x / n, y / n, z / n];
-        }
-    }
-    [0.35, 0.8, 0.45]
-}
-
-fn make_target(device: &wgpu::Device, format: wgpu::TextureFormat) -> wgpu::TextureView {
-    let usage = if format == wgpu::TextureFormat::Depth24Plus {
-        wgpu::TextureUsages::RENDER_ATTACHMENT
-    } else {
-        wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC
-    };
-    let t = device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("target"),
-        size: wgpu::Extent3d {
-            width: TARGET,
-            height: TARGET,
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format,
-        usage,
-        view_formats: &[],
-    });
-    t.create_view(&wgpu::TextureViewDescriptor::default())
-}
-
-impl Presenter for WgpuPresenter {
-    fn present(&mut self, vis: &VisualManifest, observer: Observer, budget: GpuBudget) {
+    /// Draw into an external color view (swapchain). Depth must match [`Self::size`].
+    pub fn present_to(
+        &mut self,
+        color: &wgpu::TextureView,
+        vis: &VisualManifest,
+        observer: Observer,
+        budget: GpuBudget,
+    ) {
         let drawn = draw_list(vis, observer, budget);
         self.last_drawn = drawn.len() as u16;
         self.write_frame(observer, vis);
@@ -342,7 +338,7 @@ impl Presenter for WgpuPresenter {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("clustered-forward"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self.color,
+                    view: color,
                     depth_slice: None,
                     resolve_target: None,
                     ops: wgpu::Operations {
@@ -379,6 +375,162 @@ impl Presenter for WgpuPresenter {
             }
         }
         self.queue.submit(Some(encoder.finish()));
+    }
+
+    /// Resize depth (and offscreen color if present) to a new swapchain size.
+    pub fn resize(&mut self, width: u32, height: u32) {
+        let width = width.max(1);
+        let height = height.max(1);
+        if width == self.width && height == self.height {
+            return;
+        }
+        self.width = width;
+        self.height = height;
+        let (tex, view) = make_color(
+            &self.device,
+            width,
+            height,
+            self.format,
+            self.color_tex.is_some(),
+        );
+        self.color_tex = tex;
+        self.color = view;
+        self.depth = make_depth(&self.device, width, height);
+    }
+
+    /// Read the offscreen target. `None` if this presenter has no readback texture.
+    pub fn read_rgba(&self) -> Option<Vec<u8>> {
+        let tex = self.color_tex.as_ref()?;
+        let bpp = 4u32;
+        let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let unpadded = self.width * bpp;
+        let padded = unpadded.div_ceil(align) * align;
+        let size = u64::from(padded) * u64::from(self.height);
+        let buf = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("readback"),
+            size,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("readback"),
+            });
+        encoder.copy_texture_to_buffer(
+            tex.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buf,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded),
+                    rows_per_image: Some(self.height),
+                },
+            },
+            wgpu::Extent3d {
+                width: self.width,
+                height: self.height,
+                depth_or_array_layers: 1,
+            },
+        );
+        self.queue.submit(Some(encoder.finish()));
+        let slice = buf.slice(..);
+        slice.map_async(wgpu::MapMode::Read, |_| {});
+        let _ = self.device.poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
+        let data = slice.get_mapped_range();
+        let mut out = vec![0u8; (self.width * self.height * 4) as usize];
+        for y in 0..self.height as usize {
+            let src = y * padded as usize;
+            let dst = y * unpadded as usize;
+            out[dst..dst + unpadded as usize].copy_from_slice(&data[src..src + unpadded as usize]);
+        }
+        drop(data);
+        buf.unmap();
+        Some(out)
+    }
+
+    fn write_frame(&self, observer: Observer, vis: &VisualManifest) {
+        let aspect = self.width as f32 / self.height.max(1) as f32;
+        let vp = view_proj(observer, aspect);
+        let light = light_dir(vis);
+        let mut bytes = [0u8; 80];
+        for (i, v) in vp.iter().enumerate() {
+            bytes[i * 4..i * 4 + 4].copy_from_slice(&v.to_le_bytes());
+        }
+        bytes[64..68].copy_from_slice(&light[0].to_le_bytes());
+        bytes[68..72].copy_from_slice(&light[1].to_le_bytes());
+        bytes[72..76].copy_from_slice(&light[2].to_le_bytes());
+        self.queue.write_buffer(&self.frame_buf, 0, &bytes);
+    }
+}
+
+fn light_dir(vis: &VisualManifest) -> [f32; 3] {
+    for l in &vis.lights {
+        if let LightKind::Point { .. } = l.kind {
+            let x = l.pos.x as f32;
+            let y = l.pos.y as f32;
+            let z = l.pos.z as f32;
+            let n = (x * x + y * y + z * z).sqrt().max(1.0);
+            return [x / n, y / n, z / n];
+        }
+    }
+    [0.35, 0.8, 0.45]
+}
+
+fn make_color(
+    device: &wgpu::Device,
+    width: u32,
+    height: u32,
+    format: wgpu::TextureFormat,
+    offscreen: bool,
+) -> (Option<wgpu::Texture>, wgpu::TextureView) {
+    let t = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("color"),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let view = t.create_view(&wgpu::TextureViewDescriptor::default());
+    if offscreen {
+        (Some(t), view)
+    } else {
+        (None, view)
+    }
+}
+
+fn make_depth(device: &wgpu::Device, width: u32, height: u32) -> wgpu::TextureView {
+    let t = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("depth"),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Depth24Plus,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        view_formats: &[],
+    });
+    t.create_view(&wgpu::TextureViewDescriptor::default())
+}
+
+impl Presenter for WgpuPresenter {
+    fn present(&mut self, vis: &VisualManifest, observer: Observer, budget: GpuBudget) {
+        let view = self.color.clone();
+        self.present_to(&view, vis, observer, budget);
     }
 }
 

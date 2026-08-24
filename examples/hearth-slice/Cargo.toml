@@ -5,17 +5,27 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Hearth headless goldens (PR 07b): lock / carry / burn / trade"
+description = "Hearth slice: headless goldens (PR 07b) and pixels (PR 12b)"
 publish = false
 
 [dependencies]
 klotho-canon.workspace = true
 klotho-commit.workspace = true
+klotho-compile.workspace = true
 klotho-core.workspace = true
 klotho-ir.workspace = true
+klotho-manifest.workspace = true
+klotho-render.workspace = true
 klotho-space.workspace = true
 klotho-trace.workspace = true
 klotho-world.workspace = true
+
+[dev-dependencies]
+winit = "0.30"
+
+[[example]]
+name = "pixels"
+path = "examples/pixels.rs"
 
 [lints]
 workspace = true

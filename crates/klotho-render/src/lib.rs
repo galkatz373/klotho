@@ -12,14 +12,18 @@
 mod extract;
 mod gpu;
 mod math;
+mod overlay;
 mod palette;
 mod presenter;
+mod surface;
 mod thread;
 
 pub use extract::{VisualBind, binds_from_cooked, extract_visual};
-pub use gpu::WgpuPresenter;
+pub use gpu::{GOLDEN_HEIGHT, GOLDEN_WIDTH, WgpuPresenter};
+pub use overlay::{overlay_hud, write_bmp};
 pub use palette::albedo;
 pub use presenter::{NullPresenter, Presenter, draw_list};
+pub use surface::WindowedPresenter;
 pub use thread::RenderThread;
 
 pub use klotho_manifest::{GpuBudget, Observer, VisualManifest};

@@ -31,7 +31,8 @@ PR 10 — `klotho-space` (stateless 2.5D admission, golden 8).
 PR 11a — `klotho-manifest` (Visual/Sonic/Ui, `tables` pub(crate)).
 PR 11b — `klotho-compile` + closed kitbash (retrieval; missing tag = cook error).
 PR 12 — `klotho-render` wgpu presenter + `klotho-platform` (Look, render thread).
-Next: PR 12b Hearth pixels.
+PR 12b — Hearth pixels (door / barrel / fire / HUD goldens).
+Next: PR 13 motion.
 
 ## Build
 
@@ -41,7 +42,10 @@ Rust 1.85+ (edition 2024). `rustup` reads `rust-toolchain.toml`.
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
+cargo run -p hearth-slice --example pixels   # window: keys 1–4 switch scenes
 ```
+
+Pixel goldens (open in Preview): `examples/hearth-slice/fixtures/pixels/*.bmp`.
 
 ## Layout
 

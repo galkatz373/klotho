@@ -1,9 +1,13 @@
-//! Hearth headless slice (PR 07b). Appendix A Canon, recorded `PlayerIntent`s.
+//! Hearth slice: Appendix A Canon, headless goldens (PR 07b), pixels (PR 12b).
 //!
-//! No GPU. Golden 8 (idle locked door sweep) is PR 10.
+//! Gameplay does not import Manifest SoA columns (K2).
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
+
+mod visual;
+
+pub use visual::{PixelScene, VisualHearth, boot_visual, golden_camera, stage, write_scene_bmp};
 
 use std::sync::Arc;
 
@@ -143,7 +147,7 @@ fn hearth_seed() -> Vec<SeedFact> {
     seed
 }
 
-fn apply_seed(k: &mut CommitKernel, doc: &IntentDoc) {
+pub(crate) fn apply_seed(k: &mut CommitKernel, doc: &IntentDoc) {
     for fact in &doc.seed {
         match fact {
             SeedFact::Locus { name, kind } => {

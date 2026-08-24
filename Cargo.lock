@@ -665,11 +665,15 @@ version = "0.1.0"
 dependencies = [
  "klotho-canon",
  "klotho-commit",
+ "klotho-compile",
  "klotho-core",
  "klotho-ir",
+ "klotho-manifest",
+ "klotho-render",
  "klotho-space",
  "klotho-trace",
  "klotho-world",
+ "winit",
 ]
 
 [[package]]
@@ -888,6 +892,7 @@ dependencies = [
  "klotho-world",
  "pollster",
  "wgpu",
+ "winit",
 ]
 
 [[package]]

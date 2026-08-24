@@ -73,6 +73,17 @@ impl MeshInfo {
     }
 }
 
+/// Quantized clustered mesh after header validation.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct DecodedMesh {
+    /// Counts.
+    pub info: MeshInfo,
+    /// `i16` millimetre verts. Presenters may promote to float.
+    pub verts: Vec<[i16; 3]>,
+    /// Triangle indices.
+    pub indices: Vec<u32>,
+}
+
 /// Validate a clustered-mesh blob. Caps: `MAX_TRIS`, quantized `i16` verts.
 pub fn validate_mesh(bytes: &[u8]) -> Result<MeshInfo, CompileError> {
     let rest = peek(bytes, ArtifactKind::ClusteredMesh)?;
@@ -107,6 +118,36 @@ pub fn validate_mesh(bytes: &[u8]) -> Result<MeshInfo, CompileError> {
         }
     }
     Ok(MeshInfo { verts, indices })
+}
+
+/// Validate then copy verts/indices. Call this before GPU upload (PR 12).
+pub fn decode_mesh(bytes: &[u8]) -> Result<DecodedMesh, CompileError> {
+    let info = validate_mesh(bytes)?;
+    let rest = &bytes[PREFIX..];
+    let mut verts = Vec::with_capacity(info.verts as usize);
+    let mut off = 8usize;
+    for _ in 0..info.verts {
+        let x = i16::from_le_bytes([rest[off], rest[off + 1]]);
+        let y = i16::from_le_bytes([rest[off + 2], rest[off + 3]]);
+        let z = i16::from_le_bytes([rest[off + 4], rest[off + 5]]);
+        verts.push([x, y, z]);
+        off += 6;
+    }
+    let mut indices = Vec::with_capacity(info.indices as usize);
+    for _ in 0..info.indices {
+        indices.push(u32::from_le_bytes([
+            rest[off],
+            rest[off + 1],
+            rest[off + 2],
+            rest[off + 3],
+        ]));
+        off += 4;
+    }
+    Ok(DecodedMesh {
+        info,
+        verts,
+        indices,
+    })
 }
 
 /// Validate a hull blob. Six `i32` millimetre extents.

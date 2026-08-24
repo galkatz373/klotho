@@ -1,0 +1,27 @@
+[package]
+name = "klotho-platform"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Klotho platform: window, OS events, Look accumulation (no world mutation)"
+readme = false
+publish = false
+
+[dependencies]
+klotho-core.workspace = true
+klotho-input.workspace = true
+klotho-ir.workspace = true
+klotho-manifest.workspace = true
+winit = "0.30"
+
+[lints.rust]
+unsafe_code = "allow"
+missing_docs = "warn"
+
+[lints.clippy]
+dbg_macro = "deny"
+disallowed_methods = "deny"
+todo = "warn"
+unimplemented = "warn"

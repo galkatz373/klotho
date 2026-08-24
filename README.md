@@ -30,7 +30,8 @@ PR 09 — `klotho-input` (device → PlayerIntent, bind table).
 PR 10 — `klotho-space` (stateless 2.5D admission, golden 8).
 PR 11a — `klotho-manifest` (Visual/Sonic/Ui, `tables` pub(crate)).
 PR 11b — `klotho-compile` + closed kitbash (retrieval; missing tag = cook error).
-Next: PR 12 wgpu presenter.
+PR 12 — `klotho-render` wgpu presenter + `klotho-platform` (Look, render thread).
+Next: PR 12b Hearth pixels.
 
 ## Build
 
@@ -58,6 +59,8 @@ klotho/
   crates/klotho-space/    # 2.5D AABB / swept-capsule SyncProposer
   crates/klotho-manifest/ # Visual/Sonic/Ui manifests; tables pub(crate)
   crates/klotho-compile/  # kitbash retrieval cook → CAS
+  crates/klotho-platform/ # window, OS events, Look accum (no world mutation)
+  crates/klotho-render/   # wgpu clustered meshes, Presenter, render thread
   crates/klotho-runtime/  # headless Intent-script player
   examples/hearth-slice/  # Appendix A goldens (PR 07b)
   examples/ash-slice/     # Appendix B goldens (PR 07c)

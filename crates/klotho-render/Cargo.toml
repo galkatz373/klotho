@@ -1,0 +1,34 @@
+[package]
+name = "klotho-render"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Klotho wgpu presenter: clustered static meshes, one shader family, render thread"
+readme = false
+publish = false
+
+[dependencies]
+klotho-compile.workspace = true
+klotho-core.workspace = true
+klotho-manifest.workspace = true
+klotho-prove.workspace = true
+klotho-world.workspace = true
+pollster = "0.4"
+wgpu = "27.0"
+
+[dev-dependencies]
+klotho-canon.workspace = true
+klotho-compile.workspace = true
+klotho-ir.workspace = true
+
+[lints.rust]
+unsafe_code = "allow"
+missing_docs = "warn"
+
+[lints.clippy]
+dbg_macro = "deny"
+disallowed_methods = "deny"
+todo = "warn"
+unimplemented = "warn"

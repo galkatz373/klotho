@@ -20,8 +20,8 @@ mod kit;
 pub use cook::{Binding, COMPILER_VERSION, Cooked, blob_of, cook_doc, cook_with, digest_of};
 pub use error::CompileError;
 pub use header::{
-    GRAIN_HZ, GrainInfo, MAGIC, MAX_TRIS, MeshInfo, PREFIX, VERSION, validate_grain, validate_hull,
-    validate_mesh, validate_rite,
+    DecodedMesh, GRAIN_HZ, GrainInfo, MAGIC, MAX_TRIS, MeshInfo, PREFIX, VERSION, decode_mesh,
+    validate_grain, validate_hull, validate_mesh, validate_rite,
 };
 pub use kit::{KitEntry, Kitbash};
 pub use klotho_manifest::MaterialTag;

@@ -76,9 +76,11 @@ fn wrap_player(pi: PlayerIntent) -> Proposal {
 
 #[cfg(test)]
 mod tests {
-    use klotho_core::{PlayerId, Tick};
+    use klotho_core::{Mm, PlayerId, PoseMm, Tick, YawMd};
     use klotho_input::{DeviceSample, InputMapper};
-    use klotho_ir::Verb;
+    use klotho_ir::{Analog, Verb};
+    use klotho_manifest::{EYE_HEIGHT_MM, Observer};
+    use klotho_platform::LookAccum;
 
     use super::*;
 
@@ -94,5 +96,20 @@ mod tests {
             }
             other => panic!("expected Player, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn observer_is_built_from_look_not_renderer() {
+        let mut look = LookAccum::new();
+        look.apply_analog(Analog {
+            look_yaw: YawMd(15_000),
+            look_pitch: -5_000,
+            ..Analog::default()
+        });
+        let ground = PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd::ZERO);
+        let o: Observer = look.observer(ground);
+        assert_eq!(o.eye.y, EYE_HEIGHT_MM);
+        assert_eq!(o.eye.yaw, YawMd(15_000));
+        assert_eq!(o.pitch_md, -5_000);
     }
 }

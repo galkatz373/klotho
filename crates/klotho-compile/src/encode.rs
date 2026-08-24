@@ -193,7 +193,7 @@ mod tests {
     use klotho_prove::hash_bytes;
 
     use super::*;
-    use crate::header::{validate_grain, validate_hull, validate_mesh};
+    use crate::header::{decode_mesh, validate_grain, validate_hull, validate_mesh};
 
     #[test]
     fn box_mesh_is_i16_le_and_validates() {
@@ -211,6 +211,9 @@ mod tests {
         assert_eq!(info.tris(), 12);
         // First vert x = -100i16 LE at offset 16.
         assert_eq!(&bytes[16..18], &(-100i16).to_le_bytes());
+        let decoded = decode_mesh(&bytes).unwrap();
+        assert_eq!(decoded.verts[0], [-100, 0, -50]);
+        assert_eq!(decoded.indices.len(), 36);
         assert_eq!(
             hash_bytes(&bytes).to_string(),
             "4e7855dd1e522cf6b80781aa577a6a0c6a0cc0fe0e94d4e39509e649073fa4c7"

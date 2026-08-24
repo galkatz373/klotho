@@ -19,6 +19,8 @@ klotho-commit.workspace = true
 klotho-core.workspace = true
 klotho-input.workspace = true
 klotho-ir.workspace = true
+klotho-manifest.workspace = true
+klotho-platform.workspace = true
 klotho-sim.workspace = true
 klotho-space.workspace = true
 

@@ -13,6 +13,8 @@ members = [
     "crates/klotho-space",
     "crates/klotho-manifest",
     "crates/klotho-compile",
+    "crates/klotho-platform",
+    "crates/klotho-render",
     "crates/klotho-runtime",
     "examples/hearth-slice",
     "examples/ash-slice",
@@ -40,6 +42,8 @@ klotho-input = { path = "crates/klotho-input" }
 klotho-space = { path = "crates/klotho-space" }
 klotho-manifest = { path = "crates/klotho-manifest" }
 klotho-compile = { path = "crates/klotho-compile" }
+klotho-platform = { path = "crates/klotho-platform" }
+klotho-render = { path = "crates/klotho-render" }
 ron = "0.11.0"
 serde = { version = "1.0.228", features = ["derive"] }
 

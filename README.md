@@ -25,7 +25,8 @@ PR 06 — `klotho-world` (projection, `space_ix`, snapshot, feature `mutate`).
 PR 07 — `klotho-commit` (K21 speculate, rite VM, Laws on post-state).
 PR 07b — Hearth headless goldens (lock / carry / burn / trade).
 PR 07c — Ash headless goldens (same `klotho-commit` binary, K26).
-Next: PR 08 frame loop (`klotho-sim`, headless `klotho-runtime`).
+PR 08 — `klotho-sim` phase loop and headless `klotho-runtime`.
+Next: PR 09 input, PR 10 space.
 
 ## Build
 
@@ -48,6 +49,8 @@ klotho/
   crates/klotho-trace/    # TraceEvent, TraceLog prefix hash, TraceDelta
   crates/klotho-world/    # Private World, Projection, space_ix, snapshot
   crates/klotho-commit/   # CommitKernel, Proposal, AdmitBuf, rite VM
+  crates/klotho-sim/      # phase loop, budget timers, profile hook
+  crates/klotho-runtime/  # headless Intent-script player
   examples/hearth-slice/  # Appendix A goldens (PR 07b)
   examples/ash-slice/     # Appendix B goldens (PR 07c)
   docs/hld.md             # High-level design (rev 5)

@@ -8,6 +8,8 @@ members = [
     "crates/klotho-trace",
     "crates/klotho-world",
     "crates/klotho-commit",
+    "crates/klotho-sim",
+    "crates/klotho-runtime",
     "examples/hearth-slice",
     "examples/ash-slice",
 ]
@@ -29,6 +31,7 @@ klotho-canon = { path = "crates/klotho-canon" }
 klotho-trace = { path = "crates/klotho-trace" }
 klotho-world = { path = "crates/klotho-world" }
 klotho-commit = { path = "crates/klotho-commit" }
+klotho-sim = { path = "crates/klotho-sim" }
 ron = "0.11.0"
 serde = { version = "1.0.228", features = ["derive"] }
 

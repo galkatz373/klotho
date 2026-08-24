@@ -143,6 +143,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "klotho-runtime"
+version = "0.1.0"
+dependencies = [
+ "hearth-slice",
+ "klotho-commit",
+ "klotho-core",
+ "klotho-ir",
+ "klotho-sim",
+]
+
+[[package]]
+name = "klotho-sim"
+version = "0.1.0"
+dependencies = [
+ "klotho-canon",
+ "klotho-commit",
+ "klotho-core",
+ "klotho-ir",
+ "klotho-trace",
+ "klotho-world",
+]
+
+[[package]]
 name = "klotho-trace"
 version = "0.1.0"
 dependencies = [

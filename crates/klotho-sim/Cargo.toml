@@ -1,0 +1,28 @@
+[package]
+name = "klotho-sim"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Klotho sim thread: phase loop, budget timers, headless step"
+readme = false
+publish = false
+
+[features]
+default = []
+# puffin / Tracy scopes attach when this feature is on (PR 08 hook).
+profile = []
+
+[dependencies]
+klotho-commit.workspace = true
+klotho-core.workspace = true
+klotho-trace.workspace = true
+klotho-world.workspace = true
+
+[dev-dependencies]
+klotho-canon.workspace = true
+klotho-ir.workspace = true
+
+[lints]
+workspace = true

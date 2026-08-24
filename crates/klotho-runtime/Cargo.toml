@@ -1,0 +1,24 @@
+[package]
+name = "klotho-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Klotho headless runtime: plays an Intent script through klotho-sim"
+readme = false
+publish = false
+
+[[bin]]
+name = "klotho-runtime"
+path = "src/main.rs"
+
+[dependencies]
+hearth-slice = { path = "../../examples/hearth-slice" }
+klotho-commit.workspace = true
+klotho-core.workspace = true
+klotho-ir.workspace = true
+klotho-sim.workspace = true
+
+[lints]
+workspace = true

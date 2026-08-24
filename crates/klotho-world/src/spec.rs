@@ -21,7 +21,7 @@ impl SpecDelta {
     /// Read the would-be post-state.
     #[must_use]
     pub fn view(&self) -> WorldView<'_> {
-        WorldView::of(&self.proj)
+        WorldView::at(&self.proj, self.tick)
     }
 
     /// Tick these events are stamped with.

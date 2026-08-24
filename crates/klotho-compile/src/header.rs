@@ -218,6 +218,102 @@ pub fn validate_rite(bytes: &[u8]) -> Result<(), CompileError> {
     Ok(())
 }
 
+/// v1 cap: clips in one ClipSet.
+pub const MAX_CLIPS: u16 = 64;
+/// v1 cap: samples per clip.
+pub const MAX_CLIP_SAMPLES: u16 = 256;
+
+/// Parsed ClipSet header.
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct ClipSetInfo {
+    /// Clip count.
+    pub clips: u16,
+}
+
+/// One decoded clip after header validation.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct DecodedClip {
+    /// [`klotho_ir::Verb`] discriminant.
+    pub verb: u8,
+    /// Grounded selector.
+    pub grounded: bool,
+    /// Loop vs one-shot.
+    pub looping: bool,
+    /// Table index.
+    pub id: u16,
+    /// Per-tick root, millimetres, clip-local.
+    pub samples: Vec<IVec3>,
+}
+
+/// Validate a ClipSet blob. Caps: [`MAX_CLIPS`], [`MAX_CLIP_SAMPLES`].
+pub fn validate_clipset(bytes: &[u8]) -> Result<ClipSetInfo, CompileError> {
+    decode_clipset(bytes).map(|c| ClipSetInfo {
+        clips: u16::try_from(c.len()).unwrap_or(u16::MAX),
+    })
+}
+
+/// Validate then copy clips. Call this before Motion upload / CAS bind.
+pub fn decode_clipset(bytes: &[u8]) -> Result<Vec<DecodedClip>, CompileError> {
+    let rest = peek(bytes, ArtifactKind::ClipSet)?;
+    if rest.len() < 2 {
+        return Err(CompileError::Header("truncated clipset".into()));
+    }
+    let n = u16::from_le_bytes([rest[0], rest[1]]);
+    if n > MAX_CLIPS {
+        return Err(CompileError::Header(format!("clips {n} > {MAX_CLIPS}")));
+    }
+    let mut off = 2usize;
+    let mut out = Vec::with_capacity(n as usize);
+    for _ in 0..n {
+        let verb = *rest
+            .get(off)
+            .ok_or_else(|| CompileError::Header("truncated clip verb".into()))?;
+        let grounded = *rest
+            .get(off + 1)
+            .ok_or_else(|| CompileError::Header("truncated clip grounded".into()))?;
+        let looping = *rest
+            .get(off + 2)
+            .ok_or_else(|| CompileError::Header("truncated clip looping".into()))?;
+        let id = u16::from_le_bytes(
+            rest.get(off + 4..off + 6)
+                .ok_or_else(|| CompileError::Header("truncated clip id".into()))?
+                .try_into()
+                .expect("2"),
+        );
+        let ns = u16::from_le_bytes(
+            rest.get(off + 6..off + 8)
+                .ok_or_else(|| CompileError::Header("truncated clip samples".into()))?
+                .try_into()
+                .expect("2"),
+        );
+        if ns > MAX_CLIP_SAMPLES {
+            return Err(CompileError::Header(format!(
+                "samples {ns} > {MAX_CLIP_SAMPLES}"
+            )));
+        }
+        off += 8;
+        let mut samples = Vec::with_capacity(ns as usize);
+        for _ in 0..ns {
+            let x = i32_le(rest, off)?;
+            let y = i32_le(rest, off + 4)?;
+            let z = i32_le(rest, off + 8)?;
+            samples.push(IVec3 { x, y, z });
+            off += 12;
+        }
+        out.push(DecodedClip {
+            verb,
+            grounded: grounded != 0,
+            looping: looping != 0,
+            id,
+            samples,
+        });
+    }
+    if off != rest.len() {
+        return Err(CompileError::Header("clipset payload size".into()));
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

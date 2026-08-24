@@ -16,7 +16,7 @@ klotho-core.workspace = true
 klotho-ir.workspace = true
 klotho-manifest.workspace = true
 klotho-render.workspace = true
-klotho-space.workspace = true
+klotho-motion.workspace = true
 klotho-trace.workspace = true
 klotho-world.workspace = true
 

@@ -10,9 +10,13 @@ use klotho_prove::{
     Activity, Agent, ArtifactKind, Cas, ProvenanceDag, ProvenanceKind, blob_id_of, hash_bytes,
 };
 
-use crate::encode::{encode_grain, encode_hull, encode_mesh, encode_rite};
+use crate::encode::{
+    encode_clipset, encode_grain, encode_hull, encode_mesh, encode_rite, hearth_biped_clips,
+};
 use crate::error::CompileError;
-use crate::header::{validate_grain, validate_hull, validate_mesh, validate_rite};
+use crate::header::{
+    validate_clipset, validate_grain, validate_hull, validate_mesh, validate_rite,
+};
 use crate::kit::Kitbash;
 
 /// Mixed into every cook hash. Bump invalidates CAS keys.
@@ -50,6 +54,8 @@ pub struct Cooked {
     pub bindings: Vec<Binding>,
     /// Grain tag → blob.
     pub grains: BTreeMap<String, klotho_core::BlobId>,
+    /// ClipSet tag → blob (`biped` is the v1 Hearth table).
+    pub clips: BTreeMap<String, klotho_core::BlobId>,
 }
 
 /// Cook `doc` against the workspace kitbash.
@@ -160,6 +166,22 @@ pub fn cook_with(doc: &IntentDoc, kit: &Kitbash) -> Result<Cooked, CompileError>
         kit_blobs.push(id);
     }
 
+    let mut clip_ids = BTreeMap::new();
+    {
+        let bytes = encode_clipset(&hearth_biped_clips())?;
+        validate_clipset(&bytes)?;
+        let id = cas.put(&bytes).map_err(CompileError::prove)?;
+        put_artifact(
+            &mut dag,
+            id,
+            ArtifactKind::ClipSet,
+            license.clone(),
+            &[cook_act, kit_agent],
+        )?;
+        clip_ids.insert("biped".into(), id);
+        kit_blobs.push(id);
+    }
+
     for rite in &canon.rites {
         let bytes = encode_rite(&rite.chunk)?;
         validate_rite(&bytes)?;
@@ -205,6 +227,7 @@ pub fn cook_with(doc: &IntentDoc, kit: &Kitbash) -> Result<Cooked, CompileError>
         dag,
         bindings,
         grains: grain_ids,
+        clips: clip_ids,
     })
 }
 
@@ -308,9 +331,10 @@ mod tests {
                 .any(|b| b.locus.as_str() == "oak_door" && b.tag.as_str() == "door.oak.lockable")
         );
         assert!(a.canon.rites.is_empty());
-        // 12 meshes + 12 hulls + 3 grains.
-        assert!(a.cas.len() >= 27);
+        // 12 meshes + 12 hulls + 3 grains + 1 biped ClipSet.
+        assert!(a.cas.len() >= 28);
         assert_eq!(a.grains.len(), 3);
+        assert_eq!(a.clips.len(), 1);
     }
 
     #[test]

@@ -32,7 +32,8 @@ PR 11a — `klotho-manifest` (Visual/Sonic/Ui, `tables` pub(crate)).
 PR 11b — `klotho-compile` + closed kitbash (retrieval; missing tag = cook error).
 PR 12 — `klotho-render` wgpu presenter + `klotho-platform` (Look, render thread).
 PR 12b — Hearth pixels (door / barrel / fire / HUD goldens).
-Next: PR 13 motion.
+PR 13 — `klotho-motion` (verb→clip + root motion, debug T-pose).
+Next: PR 14 audio.
 
 ## Build
 
@@ -60,7 +61,8 @@ klotho/
   crates/klotho-commit/   # CommitKernel, Proposal, AdmitBuf, rite VM
   crates/klotho-sim/      # phase loop, budget timers, profile hook
   crates/klotho-input/    # device sample → PlayerIntent
-  crates/klotho-space/    # 2.5D AABB / swept-capsule SyncProposer
+  crates/klotho-space/    # 2.5D AABB / swept-capsule SyncProposer (non-Actor)
+  crates/klotho-motion/   # verb→clip + root-motion SyncProposer (Actors)
   crates/klotho-manifest/ # Visual/Sonic/Ui manifests; tables pub(crate)
   crates/klotho-compile/  # kitbash retrieval cook → CAS
   crates/klotho-platform/ # window, OS events, Look accum (no world mutation)

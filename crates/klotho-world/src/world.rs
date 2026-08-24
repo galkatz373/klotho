@@ -60,7 +60,7 @@ impl World {
     /// Live read view. Same query API as [`WorldSnapshot::view`].
     #[must_use]
     pub fn view(&self) -> WorldView<'_> {
-        WorldView { proj: &self.view }
+        WorldView::at(&self.view, self.tick)
     }
 
     /// Frozen Canon.
@@ -148,7 +148,7 @@ impl WorldSnapshot {
     /// Same query API as [`World::view`].
     #[must_use]
     pub fn view(&self) -> WorldView<'_> {
-        WorldView { proj: &self.blob }
+        WorldView::at(&self.blob, self.tick)
     }
 
     /// Conservative heap size of the projection blob. Cap is [`SNAPSHOT_CAP`].

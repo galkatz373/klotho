@@ -1,7 +1,7 @@
 //! Read path. Same API from live `World` and `WorldSnapshot`.
 
 use klotho_canon::{PredStore, RiteId};
-use klotho_core::{AabbMm, AffordanceId, PoseMm, ResourceId, Sigil, VelFx};
+use klotho_core::{AabbMm, AffordanceId, PoseMm, ResourceId, Sigil, Tick, VelFx};
 use klotho_ir::{Channel, Rel};
 
 use crate::proj::Projection;
@@ -10,13 +10,26 @@ use crate::proj::Projection;
 #[derive(Copy, Clone, Debug)]
 pub struct WorldView<'a> {
     pub(crate) proj: &'a Projection,
+    pub(crate) tick: Tick,
 }
 
 impl WorldView<'_> {
-    /// Wrap a projection (speculative or live).
+    /// Wrap a projection at tick 0 (tests). Prefer [`Self::at`].
     #[must_use]
     pub fn of(proj: &Projection) -> WorldView<'_> {
-        WorldView { proj }
+        Self::at(proj, Tick::ZERO)
+    }
+
+    /// Wrap a projection at `tick`. Motion derives clip time from this (K22).
+    #[must_use]
+    pub fn at(proj: &Projection, tick: Tick) -> WorldView<'_> {
+        WorldView { proj, tick }
+    }
+
+    /// World tick this view was taken at.
+    #[must_use]
+    pub fn tick(self) -> Tick {
+        self.tick
     }
 
     /// Loci that currently hold `a`.

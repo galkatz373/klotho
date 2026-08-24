@@ -11,6 +11,7 @@ members = [
     "crates/klotho-sim",
     "crates/klotho-input",
     "crates/klotho-space",
+    "crates/klotho-motion",
     "crates/klotho-manifest",
     "crates/klotho-compile",
     "crates/klotho-platform",
@@ -40,6 +41,7 @@ klotho-commit = { path = "crates/klotho-commit" }
 klotho-sim = { path = "crates/klotho-sim" }
 klotho-input = { path = "crates/klotho-input" }
 klotho-space = { path = "crates/klotho-space" }
+klotho-motion = { path = "crates/klotho-motion" }
 klotho-manifest = { path = "crates/klotho-manifest" }
 klotho-compile = { path = "crates/klotho-compile" }
 klotho-platform = { path = "crates/klotho-platform" }

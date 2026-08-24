@@ -6,7 +6,7 @@ use klotho_ir::to_ron;
 use klotho_prove::ArtifactKind;
 
 use crate::error::CompileError;
-use crate::header::{GRAIN_HZ, write_prefix};
+use crate::header::{DecodedClip, GRAIN_HZ, MAX_CLIP_SAMPLES, MAX_CLIPS, write_prefix};
 use crate::kit::{GrainKind, MeshRecipe};
 
 /// Quantize a millimetre extent to `i16`. Overflow is a cook error, not wrap.
@@ -188,12 +188,75 @@ pub(crate) fn encode_rite(chunk: &RiteChunk) -> Result<Vec<u8>, CompileError> {
     Ok(b)
 }
 
+/// ClipSet blob: prefix + `u16` count + packed clips. Integer millimetre samples.
+pub(crate) fn encode_clipset(clips: &[DecodedClip]) -> Result<Vec<u8>, CompileError> {
+    if clips.len() > MAX_CLIPS as usize {
+        return Err(CompileError::Header(format!(
+            "clips {} > {MAX_CLIPS}",
+            clips.len()
+        )));
+    }
+    let mut b = Vec::new();
+    write_prefix(&mut b, ArtifactKind::ClipSet);
+    b.extend_from_slice(&(clips.len() as u16).to_le_bytes());
+    for c in clips {
+        if c.samples.len() > MAX_CLIP_SAMPLES as usize {
+            return Err(CompileError::Header(format!(
+                "samples {} > {MAX_CLIP_SAMPLES}",
+                c.samples.len()
+            )));
+        }
+        b.push(c.verb);
+        b.push(u8::from(c.grounded));
+        b.push(u8::from(c.looping));
+        b.push(0);
+        b.extend_from_slice(&c.id.to_le_bytes());
+        b.extend_from_slice(&(c.samples.len() as u16).to_le_bytes());
+        for s in &c.samples {
+            b.extend_from_slice(&s.x.to_le_bytes());
+            b.extend_from_slice(&s.y.to_le_bytes());
+            b.extend_from_slice(&s.z.to_le_bytes());
+        }
+    }
+    Ok(b)
+}
+
+/// Hearth biped T-pose idle + +Z walk. Same numbers as `klotho-motion::ClipSet::hearth`.
+pub(crate) fn hearth_biped_clips() -> Vec<DecodedClip> {
+    use klotho_ir::Verb;
+    vec![
+        DecodedClip {
+            verb: Verb::Look.as_u8(),
+            grounded: true,
+            looping: true,
+            id: 0,
+            samples: vec![IVec3::ZERO],
+        },
+        DecodedClip {
+            verb: Verb::Move.as_u8(),
+            grounded: true,
+            looping: true,
+            id: 1,
+            samples: vec![IVec3 { x: 0, y: 0, z: 20 }],
+        },
+        DecodedClip {
+            verb: Verb::Use.as_u8(),
+            grounded: true,
+            looping: false,
+            id: 2,
+            samples: vec![IVec3::ZERO],
+        },
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use klotho_prove::hash_bytes;
 
     use super::*;
-    use crate::header::{decode_mesh, validate_grain, validate_hull, validate_mesh};
+    use crate::header::{
+        decode_clipset, decode_mesh, validate_clipset, validate_grain, validate_hull, validate_mesh,
+    };
 
     #[test]
     fn box_mesh_is_i16_le_and_validates() {
@@ -254,5 +317,29 @@ mod tests {
         })
         .unwrap_err();
         assert_eq!(e, CompileError::QuantizeOverflow);
+    }
+
+    #[test]
+    fn clipset_roundtrip_and_caps() {
+        let bytes = encode_clipset(&hearth_biped_clips()).unwrap();
+        assert_eq!(&bytes[..4], b"KLTH");
+        assert_eq!(bytes[5], ArtifactKind::ClipSet as u8);
+        let info = validate_clipset(&bytes).unwrap();
+        assert_eq!(info.clips, 3);
+        let decoded = decode_clipset(&bytes).unwrap();
+        assert_eq!(decoded[1].samples[0].z, 20);
+        let mut over = hearth_biped_clips();
+        over.extend(std::iter::repeat_n(
+            DecodedClip {
+                verb: 0,
+                grounded: true,
+                looping: true,
+                id: 9,
+                samples: vec![IVec3::ZERO],
+            },
+            MAX_CLIPS as usize,
+        ));
+        let e = encode_clipset(&over).unwrap_err();
+        assert!(matches!(e, CompileError::Header(s) if s.contains("clips")));
     }
 }

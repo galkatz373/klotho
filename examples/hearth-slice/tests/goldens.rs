@@ -6,7 +6,7 @@ use klotho_core::{
     AabbMm, BlobId, Budget, IVec3, LocusKind, Mm, PoseMm, RejectReason, Tick, VelFx, YawMd,
 };
 use klotho_ir::{FactId, InferIntent, IntentTarget, ModelId, Name, Rel, Verb, from_ron};
-use klotho_space::Space;
+use klotho_motion::{ClipSet, Motion};
 
 fn intents(src: &str) -> Vec<klotho_ir::PlayerIntent> {
     from_ron(src).expect("PlayerIntent RON")
@@ -219,8 +219,8 @@ fn golden_08_idle_locked_door_blocks_then_unlock_admits() {
     let door = pin(&k, "oak_door");
     plant_walk_into_door(&mut k);
     assert!(k.world().view().opaque_closed(door));
-    let mut space = Space;
-    let blocked = k.step(Tick(1), Budget::HEARTH, &mut [&mut space]).unwrap();
+    let mut motion = Motion::with_clips(ClipSet::walk_mm(500));
+    let blocked = k.step(Tick(1), Budget::HEARTH, &mut [&mut motion]).unwrap();
     assert!(
         blocked
             .rejects
@@ -236,8 +236,8 @@ fn golden_08_idle_locked_door_blocks_then_unlock_admits() {
     );
     assert!(!k.world().view().has_rel(door, Rel::LockedBy, door));
     plant_walk_into_door(&mut k);
-    let mut space = Space;
-    let open = k.step(Tick(1), Budget::HEARTH, &mut [&mut space]).unwrap();
+    let mut motion = Motion::with_clips(ClipSet::walk_mm(500));
+    let open = k.step(Tick(1), Budget::HEARTH, &mut [&mut motion]).unwrap();
     assert!(open.rejects.is_empty(), "{open:?}");
     assert_eq!(k.world().view().pose(player).unwrap().z, Mm(1900));
 }

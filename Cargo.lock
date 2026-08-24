@@ -669,8 +669,8 @@ dependencies = [
  "klotho-core",
  "klotho-ir",
  "klotho-manifest",
+ "klotho-motion",
  "klotho-render",
- "klotho-space",
  "klotho-trace",
  "klotho-world",
  "winit",
@@ -860,6 +860,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "klotho-motion"
+version = "0.1.0"
+dependencies = [
+ "klotho-canon",
+ "klotho-commit",
+ "klotho-core",
+ "klotho-ir",
+ "klotho-world",
+ "ron",
+ "serde",
+]
+
+[[package]]
 name = "klotho-platform"
 version = "0.1.0"
 dependencies = [
@@ -905,6 +918,7 @@ dependencies = [
  "klotho-input",
  "klotho-ir",
  "klotho-manifest",
+ "klotho-motion",
  "klotho-platform",
  "klotho-sim",
  "klotho-space",

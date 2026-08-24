@@ -11,6 +11,8 @@ members = [
     "crates/klotho-sim",
     "crates/klotho-input",
     "crates/klotho-space",
+    "crates/klotho-manifest",
+    "crates/klotho-compile",
     "crates/klotho-runtime",
     "examples/hearth-slice",
     "examples/ash-slice",
@@ -36,6 +38,8 @@ klotho-commit = { path = "crates/klotho-commit" }
 klotho-sim = { path = "crates/klotho-sim" }
 klotho-input = { path = "crates/klotho-input" }
 klotho-space = { path = "crates/klotho-space" }
+klotho-manifest = { path = "crates/klotho-manifest" }
+klotho-compile = { path = "crates/klotho-compile" }
 ron = "0.11.0"
 serde = { version = "1.0.228", features = ["derive"] }
 

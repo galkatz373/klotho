@@ -34,7 +34,28 @@ pub fn boot() -> CommitKernel {
 pub fn hearth_doc() -> IntentDoc {
     let canon_diffs: Vec<CanonDiff> = from_ron(HEARTH_DIFFS).expect("Appendix A diffs");
     IntentDoc {
-        style: StyleIntent::default(),
+        style: StyleIntent {
+            notes: "chunky readable silhouettes".into(),
+            palettes: vec![
+                Name::from("stone"),
+                Name::from("metal"),
+                Name::from("organic"),
+            ],
+            kitbash_tags: vec![
+                Name::from("place.hearth.interior"),
+                Name::from("door.oak.lockable"),
+                Name::from("barrel.oak.portable.flammable"),
+                Name::from("npc.human.biped"),
+                Name::from("relic.hammer"),
+                Name::from("relic.key"),
+                Name::from("relic.lockpick"),
+                Name::from("relic.bucket"),
+                Name::from("relic.ingot"),
+                Name::from("prop.anvil"),
+                Name::from("prop.forge"),
+                Name::from("prop.stool"),
+            ],
+        },
         canon_diffs,
         seed: hearth_seed(),
         minds: Vec::new(),

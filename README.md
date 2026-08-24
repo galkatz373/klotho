@@ -28,7 +28,9 @@ PR 07c — Ash headless goldens (same `klotho-commit` binary, K26).
 PR 08 — `klotho-sim` phase loop and headless `klotho-runtime`.
 PR 09 — `klotho-input` (device → PlayerIntent, bind table).
 PR 10 — `klotho-space` (stateless 2.5D admission, golden 8).
-Next: PR 11a manifest, PR 11b compile/kitbash.
+PR 11a — `klotho-manifest` (Visual/Sonic/Ui, `tables` pub(crate)).
+PR 11b — `klotho-compile` + closed kitbash (retrieval; missing tag = cook error).
+Next: PR 12 wgpu presenter.
 
 ## Build
 
@@ -54,9 +56,12 @@ klotho/
   crates/klotho-sim/      # phase loop, budget timers, profile hook
   crates/klotho-input/    # device sample → PlayerIntent
   crates/klotho-space/    # 2.5D AABB / swept-capsule SyncProposer
+  crates/klotho-manifest/ # Visual/Sonic/Ui manifests; tables pub(crate)
+  crates/klotho-compile/  # kitbash retrieval cook → CAS
   crates/klotho-runtime/  # headless Intent-script player
   examples/hearth-slice/  # Appendix A goldens (PR 07b)
   examples/ash-slice/     # Appendix B goldens (PR 07c)
+  data/kitbash/           # hashed, licensed, affordance-tagged library
   docs/hld.md             # High-level design (rev 5)
   docs/pred-lang.md       # Predicate / Rite RFC (PR 04a)
 ```

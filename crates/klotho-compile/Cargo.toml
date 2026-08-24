@@ -1,0 +1,25 @@
+[package]
+name = "klotho-compile"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Klotho cook: closed kitbash retrieval into CAS (hull, clustered mesh, rite chunk)"
+readme = false
+publish = false
+
+[dependencies]
+klotho-canon.workspace = true
+klotho-core.workspace = true
+klotho-ir.workspace = true
+klotho-manifest.workspace = true
+klotho-prove.workspace = true
+ron.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+hearth-slice = { path = "../../examples/hearth-slice" }
+
+[lints]
+workspace = true

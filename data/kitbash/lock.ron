@@ -1,0 +1,6 @@
+Lockfile(
+    files: [
+        ("LICENSE", "4c7aa109f593693911f75877e817355b7b2538d90f3033ed049df0d87f809eec"),
+        ("catalog.ron", "93e7db5c5d59b454aea33d1b102521d40ddaf0c2ad3cf5e6a7da8edd8fe3fe50"),
+    ],
+)

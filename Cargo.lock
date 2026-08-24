@@ -118,6 +118,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "klotho-compile"
+version = "0.1.0"
+dependencies = [
+ "hearth-slice",
+ "klotho-canon",
+ "klotho-core",
+ "klotho-ir",
+ "klotho-manifest",
+ "klotho-prove",
+ "ron",
+ "serde",
+]
+
+[[package]]
 name = "klotho-core"
 version = "0.1.0"
 dependencies = [
@@ -140,6 +154,13 @@ dependencies = [
  "klotho-prove",
  "ron",
  "serde",
+]
+
+[[package]]
+name = "klotho-manifest"
+version = "0.1.0"
+dependencies = [
+ "klotho-core",
 ]
 
 [[package]]

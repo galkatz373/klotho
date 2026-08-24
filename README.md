@@ -23,7 +23,9 @@ PR 04b — `klotho-canon` eval (pred compiler, tables, tiny-fragment contradicti
 PR 05 — `klotho-trace` (TraceEvent, prefix hash, replay equality).
 PR 06 — `klotho-world` (projection, `space_ix`, snapshot, feature `mutate`).
 PR 07 — `klotho-commit` (K21 speculate, rite VM, Laws on post-state).
-Next: PR 07b Hearth headless goldens.
+PR 07b — Hearth headless goldens (lock / carry / burn / trade).
+PR 07c — Ash headless goldens (same `klotho-commit` binary, K26).
+Next: PR 08 frame loop (`klotho-sim`, headless `klotho-runtime`).
 
 ## Build
 
@@ -46,6 +48,8 @@ klotho/
   crates/klotho-trace/    # TraceEvent, TraceLog prefix hash, TraceDelta
   crates/klotho-world/    # Private World, Projection, space_ix, snapshot
   crates/klotho-commit/   # CommitKernel, Proposal, AdmitBuf, rite VM
+  examples/hearth-slice/  # Appendix A goldens (PR 07b)
+  examples/ash-slice/     # Appendix B goldens (PR 07c)
   docs/hld.md             # High-level design (rev 5)
   docs/pred-lang.md       # Predicate / Rite RFC (PR 04a)
 ```

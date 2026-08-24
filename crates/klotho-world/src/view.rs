@@ -24,6 +24,23 @@ impl WorldView<'_> {
         self.proj.with_affordance(a)
     }
 
+    /// Every packed locus, slot order (dense, deterministic).
+    pub fn loci(&self) -> impl Iterator<Item = Sigil> + '_ {
+        (0..self.proj.len() as u16).filter_map(|i| self.proj.sigil(i))
+    }
+
+    /// Affordance bit.
+    #[must_use]
+    pub fn has_affordance(&self, s: Sigil, a: AffordanceId) -> bool {
+        self.proj.has_affordance(s, a)
+    }
+
+    /// Relation triple.
+    #[must_use]
+    pub fn has_rel(&self, a: Sigil, r: Rel, b: Sigil) -> bool {
+        self.proj.has_rel(a, r, b)
+    }
+
     /// Neighbors of `a` along `r`.
     pub fn related(&self, a: Sigil, r: Rel) -> impl Iterator<Item = Sigil> + '_ {
         self.proj.related_slice(a, r).iter().copied()

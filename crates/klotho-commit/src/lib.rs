@@ -161,4 +161,89 @@ mod tests {
         assert!(d.rejects.is_empty(), "{d:?}");
         assert!(k.world().view().first_rite(s).is_none());
     }
+
+    #[test]
+    fn carry_does_not_start_lockpick() {
+        let src = r#"[
+            AddRite(RiteGraph(id: "lockpick", cap_steps: 8, cap_ticks: 8, entry: 0, nodes: [
+                Wait(45, Some(Timing)),
+                Complete(Success),
+            ])),
+            AddRite(RiteGraph(id: "carry.pick", cap_steps: 8, cap_ticks: 8, entry: 0, nodes: [
+                RelAdd(Target, WieldedBy, Self),
+                Complete(Success),
+            ])),
+        ]"#;
+        let (mut k, s, _) = kernel_with(src, 0);
+        let barrel = actor(2);
+        k.world_mut()
+            .insert_locus(barrel, LocusKind::Relic)
+            .unwrap();
+        let mut p = player_use();
+        p.verb = Verb::Carry;
+        p.target = IntentTarget::Sigil(barrel);
+        k.ingest(Proposal::Player(p));
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(d.rejects.is_empty(), "{d:?}");
+        assert!(k.world().view().first_rite(s).is_none());
+        assert!(
+            k.world()
+                .view()
+                .has_rel(barrel, klotho_ir::Rel::WieldedBy, s)
+        );
+    }
+
+    #[test]
+    fn cap_rejects_ninth_marked_locus() {
+        let src = r#"[
+            AddLaw(Law(id: "fire.bound", when: EqVerb(Use),
+                body: Cap(mark: Qty(Self, "heat", Ge, 400), n: 1, require_rel: None))),
+            AddRite(RiteGraph(id: "ignite", cap_steps: 8, cap_ticks: 8, entry: 0, nodes: [
+                Bind(Target),
+                Setq(Target, "heat", 400),
+                Complete(Success),
+            ])),
+        ]"#;
+        let (mut k, _, _) = kernel_with(src, 0);
+        let a = actor(2);
+        let b = actor(3);
+        k.world_mut().insert_locus(a, LocusKind::Relic).unwrap();
+        k.world_mut().insert_locus(b, LocusKind::Relic).unwrap();
+        let mut p = player_use();
+        p.target = IntentTarget::Sigil(a);
+        k.ingest(Proposal::Player(p.clone()));
+        let d1 = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(d1.rejects.is_empty(), "{d1:?}");
+        p.target = IntentTarget::Sigil(b);
+        k.ingest(Proposal::Player(p));
+        let d2 = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(
+            d2.rejects
+                .iter()
+                .any(|(_, r)| matches!(r, RejectReason::Law(_))),
+            "{d2:?}"
+        );
+    }
+
+    #[test]
+    fn player_without_channel_may_resume_wait() {
+        let src = r#"[
+            AddRite(RiteGraph(id: "trade.offer", cap_steps: 8, cap_ticks: 8, entry: 0, nodes: [
+                { pc: 0, op: Wait(12, Some(DialogueChoice)) },
+                { pc: 1, op: Guard(AgencyClaimed(DialogueChoice), fail: 3) },
+                { pc: 2, op: Complete(Success) },
+                { pc: 3, op: Complete(Fail) },
+            ])),
+        ]"#;
+        let (mut k, s, _) = kernel_with(src, 0);
+        let mut talk = player_use();
+        talk.verb = Verb::Talk;
+        k.ingest(Proposal::Player(talk.clone()));
+        k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(k.world().view().first_rite(s).is_some());
+        k.ingest(Proposal::Player(talk));
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(d.rejects.is_empty(), "{d:?}");
+        assert!(k.world().view().first_rite(s).is_none());
+    }
 }

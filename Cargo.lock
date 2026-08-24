@@ -9,6 +9,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
 
 [[package]]
+name = "ash-slice"
+version = "0.1.0"
+dependencies = [
+ "klotho-canon",
+ "klotho-commit",
+ "klotho-core",
+ "klotho-ir",
+ "klotho-trace",
+ "klotho-world",
+]
+
+[[package]]
 name = "base64"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -72,6 +84,18 @@ name = "find-msvc-tools"
 version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d45db016d36b838f563236e9193d0ee6ce38f3f68b6c94e914b4929c96bbb890"
+
+[[package]]
+name = "hearth-slice"
+version = "0.1.0"
+dependencies = [
+ "klotho-canon",
+ "klotho-commit",
+ "klotho-core",
+ "klotho-ir",
+ "klotho-trace",
+ "klotho-world",
+]
 
 [[package]]
 name = "klotho-canon"

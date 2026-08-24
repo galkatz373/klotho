@@ -8,6 +8,8 @@ members = [
     "crates/klotho-trace",
     "crates/klotho-world",
     "crates/klotho-commit",
+    "examples/hearth-slice",
+    "examples/ash-slice",
 ]
 
 [workspace.package]

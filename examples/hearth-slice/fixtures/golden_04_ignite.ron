@@ -1,0 +1,11 @@
+[
+    PlayerIntent(player: PlayerId(0), at: Tick(0), verb: Use, target: Name("barrel_0"), analog: Analog(phase: 0, stick_x: 0, stick_z: 0, look_yaw: YawMd(0), look_pitch: 0), agency: Agency(claimed: [], assist: None)),
+    PlayerIntent(player: PlayerId(0), at: Tick(0), verb: Use, target: Name("barrel_1"), analog: Analog(phase: 0, stick_x: 0, stick_z: 0, look_yaw: YawMd(0), look_pitch: 0), agency: Agency(claimed: [], assist: None)),
+    PlayerIntent(player: PlayerId(0), at: Tick(0), verb: Use, target: Name("barrel_2"), analog: Analog(phase: 0, stick_x: 0, stick_z: 0, look_yaw: YawMd(0), look_pitch: 0), agency: Agency(claimed: [], assist: None)),
+    PlayerIntent(player: PlayerId(0), at: Tick(0), verb: Use, target: Name("barrel_3"), analog: Analog(phase: 0, stick_x: 0, stick_z: 0, look_yaw: YawMd(0), look_pitch: 0), agency: Agency(claimed: [], assist: None)),
+    PlayerIntent(player: PlayerId(0), at: Tick(0), verb: Use, target: Name("barrel_4"), analog: Analog(phase: 0, stick_x: 0, stick_z: 0, look_yaw: YawMd(0), look_pitch: 0), agency: Agency(claimed: [], assist: None)),
+    PlayerIntent(player: PlayerId(0), at: Tick(0), verb: Use, target: Name("barrel_5"), analog: Analog(phase: 0, stick_x: 0, stick_z: 0, look_yaw: YawMd(0), look_pitch: 0), agency: Agency(claimed: [], assist: None)),
+    PlayerIntent(player: PlayerId(0), at: Tick(0), verb: Use, target: Name("barrel_6"), analog: Analog(phase: 0, stick_x: 0, stick_z: 0, look_yaw: YawMd(0), look_pitch: 0), agency: Agency(claimed: [], assist: None)),
+    PlayerIntent(player: PlayerId(0), at: Tick(0), verb: Use, target: Name("barrel_7"), analog: Analog(phase: 0, stick_x: 0, stick_z: 0, look_yaw: YawMd(0), look_pitch: 0), agency: Agency(claimed: [], assist: None)),
+    PlayerIntent(player: PlayerId(0), at: Tick(0), verb: Use, target: Name("barrel_8"), analog: Analog(phase: 0, stick_x: 0, stick_z: 0, look_yaw: YawMd(0), look_pitch: 0), agency: Agency(claimed: [], assist: None)),
+]

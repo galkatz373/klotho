@@ -1,0 +1,18 @@
+[
+    PlayerIntent(
+        player: PlayerId(0),
+        at: Tick(0),
+        verb: Talk,
+        target: Name("ingot"),
+        analog: Analog(phase: 0, stick_x: 0, stick_z: 0, look_yaw: YawMd(0), look_pitch: 0),
+        agency: Agency(claimed: [], assist: None),
+    ),
+    PlayerIntent(
+        player: PlayerId(0),
+        at: Tick(0),
+        verb: Talk,
+        target: Name("ingot"),
+        analog: Analog(phase: 0, stick_x: 0, stick_z: 0, look_yaw: YawMd(0), look_pitch: 0),
+        agency: Agency(claimed: [], assist: None),
+    ),
+]

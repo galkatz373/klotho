@@ -1,0 +1,20 @@
+[package]
+name = "ash-slice"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Ash headless goldens (PR 07c): same klotho-commit binary as Hearth"
+publish = false
+
+[dependencies]
+klotho-canon.workspace = true
+klotho-commit.workspace = true
+klotho-core.workspace = true
+klotho-ir.workspace = true
+klotho-trace.workspace = true
+klotho-world.workspace = true
+
+[lints]
+workspace = true

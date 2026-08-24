@@ -1,6 +1,7 @@
 [
     AddAffordance(Affordance(id: "Hittable", requires: [], grants: [], conflicts: [])),
     AddAffordance(Affordance(id: "Solid", requires: [], grants: [], conflicts: [])),
+    AddAffordance(Affordance(id: "Projectile", requires: [], grants: [], conflicts: [])),
     AddAffordance(Affordance(
         id: "Armed",
         requires: [],
@@ -30,14 +31,14 @@
     AddLaw(Law(
         id: "projectile.cap",
         when: EqVerb(Fire),
-        body: Cap(mark: Affordance(Other, "Hittable"), n: 100, require_rel: None),
+        body: Cap(mark: Affordance(Self, "Projectile"), n: 100, require_rel: None),
     )),
     AddRite(RiteGraph(id: "apply_hit", cap_steps: 8, cap_ticks: 4, entry: 0, nodes: [
-        { pc: 0, op: Bind(Target) },
-        { pc: 1, op: Setq(Target, "health", -25) },
-        { pc: 2, op: Branch(Qty(Target, "health", Le, 0), 3, 5) },
-        { pc: 3, op: RelAdd(Target, Dead, Target) },
-        { pc: 4, op: Awake(Target) },
+        { pc: 0, op: Spend("health", 25, 2) },
+        { pc: 1, op: Branch(Qty(Self, "health", Le, 0), 2, 5) },
+        { pc: 2, op: RelAdd(Self, Dead, Self) },
+        { pc: 3, op: Setq(Self, "health", 0) },
+        { pc: 4, op: Awake(Self) },
         { pc: 5, op: Complete(Success) },
     ])),
     AddRite(RiteGraph(id: "respawn", cap_steps: 8, cap_ticks: 90, entry: 0, nodes: [

@@ -1,0 +1,25 @@
+[package]
+name = "klotho-author"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Distaff: RON/kdown authoring, cook-time Pin, CLI cook/preview"
+readme = false
+publish = false
+
+[[bin]]
+name = "distaff"
+path = "src/main.rs"
+
+[dependencies]
+# Crate graph: Distaff → compile + commit. Pin itself is cook-time.
+klotho-commit.workspace = true
+klotho-compile.workspace = true
+klotho-core.workspace = true
+klotho-ir.workspace = true
+serde.workspace = true
+
+[lints]
+workspace = true

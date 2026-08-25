@@ -1,7 +1,9 @@
 //! Intent IR: the author-facing AST and the runtime intent packets.
 //!
-//! v1 canonical syntax is **RON**. kdown sugar (same AST) is PR 16. There is
-//! no natural-language compiler in v1 (Q3).
+//! v1 canonical syntax is **RON**. kdown sugar (same AST) is owned by Distaff
+//! (`klotho-author`). There is no natural-language compiler in v1 (Q3).
+//!
+//! [`from_ron`] is the canonical parser. Distaff desugars `*.kdown` into this AST.
 //!
 //! This crate does **not** execute Laws or Rites. Cook/eval lives in
 //! `klotho-canon`. The types here are what Appendix A / B will parse as.

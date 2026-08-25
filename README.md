@@ -35,7 +35,8 @@ PR 12b — Hearth pixels (door / barrel / fire / HUD goldens).
 PR 13 — `klotho-motion` (verb→clip + root motion, debug T-pose).
 PR 14 — `klotho-audio` (grains from Trace, one bed, header caps).
 PR 15 — `klotho-ui` (attention from snapshot, denied facts, pause save).
-Next: PR 16 Distaff.
+PR 16 — Distaff (`klotho-author`: RON + kdown, CLI cook/preview, cook-time Pin).
+Next: PR 17 Minds + infer isolator.
 
 ## Build
 
@@ -71,6 +72,7 @@ klotho/
   crates/klotho-render/   # wgpu clustered meshes, Presenter, render thread
   crates/klotho-audio/    # grains from Trace, one bed, integer mix
   crates/klotho-ui/       # attention IR from snapshot, pause save (K17/K19)
+  crates/klotho-author/   # Distaff: RON/kdown, cook-time Pin, CLI cook/preview
   crates/klotho-runtime/  # headless Intent-script player
   examples/hearth-slice/  # Appendix A goldens (PR 07b)
   examples/ash-slice/     # Appendix B goldens (PR 07c)

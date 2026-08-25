@@ -805,6 +805,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "klotho-author"
+version = "0.1.0"
+dependencies = [
+ "klotho-commit",
+ "klotho-compile",
+ "klotho-core",
+ "klotho-ir",
+ "serde",
+]
+
+[[package]]
 name = "klotho-canon"
 version = "0.1.0"
 dependencies = [

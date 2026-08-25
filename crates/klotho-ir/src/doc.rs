@@ -1,4 +1,4 @@
-//! The Intent document: one AST for RON and (later) kdown.
+//! The Intent document: one AST for RON and kdown.
 
 use serde::{Deserialize, Serialize};
 

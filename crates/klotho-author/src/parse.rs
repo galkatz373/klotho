@@ -1,7 +1,16 @@
 //! RON canonical + kdown desugar → the same [`IntentDoc`] AST.
 //!
+//! kdown sugars document structure (`style`, `law`, `affordance`, `retract`,
+//! `seed`). Rites, beats, minds, and provenance stay canonical RON.
 //! Inner `when:` / `body:` (and affordance lists) are **RON fragments** of the
-//! existing Pred / LawBody syntax. kdown only sugars document structure.
+//! existing Pred / LawBody syntax.
+//!
+//! Comments are full-line `#` only (optional ` #` tails on statement lines,
+//! not inside quotes). They are not RON payload.
+//!
+//! `seed pose <name> x y z yaw` uses [`PoseMm::new`] order (Y is height), not
+//! the struct field order `x, z, y, yaw`. Repeated `style notes` last-wins;
+//! `style palette` / `style tag` append.
 //!
 //! ```text
 //! # comment
@@ -19,7 +28,7 @@
 //!   conflicts: []
 //!
 //! seed locus chair Relic
-//! seed pose chair 0 0 0 0
+//! seed pose chair 1 2 3 4
 //! ```
 //!
 //! `law lock.use:` becomes [`CanonDiff::AddLaw`] with id `"lock.use"`.
@@ -113,9 +122,13 @@ fn preprocess(src: &str) -> Result<Vec<Line>, IrError> {
     let mut out = Vec::new();
     for (i, raw) in src.lines().enumerate() {
         let no = i + 1;
+        let trimmed = raw.trim_start_matches([' ', '\t']);
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
         let (indent, rest) = indent_of(raw, no)?;
-        let text = rest.trim_end();
-        if text.is_empty() || text.starts_with('#') {
+        let text = strip_trailing_comment(rest.trim_end());
+        if text.is_empty() {
             continue;
         }
         out.push(Line {
@@ -173,24 +186,33 @@ fn parse_notes(no: usize, rest: &str) -> Result<String, IrError> {
 
 fn parse_law(lines: &[Line], pos: usize) -> Result<(Law, usize), IrError> {
     let line = &lines[pos];
-    let (_, rest) = split_first(&line.text).expect("law");
+    let rest = match split_first(&line.text) {
+        Some(("law", rest)) => rest,
+        _ => return Err(parse_err(line.no, "expected law")),
+    };
     let id = parse_block_id(line.no, rest)?;
-    let (fields, next) = take_fields(lines, pos + 1, line.indent)?;
+    let (fields, next) = take_fields(lines, pos + 1, line.indent, &["when", "body"])?;
     let when = field_ron::<Pred>(line.no, &fields, "when")?;
     let body = field_ron::<LawBody>(line.no, &fields, "body")?;
-    reject_unknown(line.no, &fields, &["when", "body"])?;
     Ok((Law { id, when, body }, next))
 }
 
 fn parse_affordance(lines: &[Line], pos: usize) -> Result<(Affordance, usize), IrError> {
     let line = &lines[pos];
-    let (_, rest) = split_first(&line.text).expect("affordance");
+    let rest = match split_first(&line.text) {
+        Some(("affordance", rest)) => rest,
+        _ => return Err(parse_err(line.no, "expected affordance")),
+    };
     let id = parse_block_id(line.no, rest)?;
-    let (fields, next) = take_fields(lines, pos + 1, line.indent)?;
+    let (fields, next) = take_fields(
+        lines,
+        pos + 1,
+        line.indent,
+        &["requires", "grants", "conflicts"],
+    )?;
     let requires = field_ron::<Vec<Pred>>(line.no, &fields, "requires")?;
     let grants = field_ron::<Vec<Name>>(line.no, &fields, "grants")?;
     let conflicts = field_ron::<Vec<Name>>(line.no, &fields, "conflicts")?;
-    reject_unknown(line.no, &fields, &["requires", "grants", "conflicts"])?;
     Ok((
         Affordance {
             id,
@@ -291,29 +313,63 @@ fn take_fields(
     lines: &[Line],
     mut pos: usize,
     parent_indent: usize,
+    allowed: &[&str],
 ) -> Result<(Vec<Field>, usize), IrError> {
-    let mut fields = Vec::new();
-    while pos < lines.len() && lines[pos].indent > parent_indent {
+    if pos >= lines.len() || lines[pos].indent <= parent_indent {
+        return Ok((Vec::new(), pos));
+    }
+    let field_indent = lines[pos].indent;
+    let mut fields: Vec<Field> = Vec::new();
+    while pos < lines.len() {
         let line = &lines[pos];
-        let Some((key, rest)) = split_colon(&line.text) else {
+        if line.indent <= parent_indent {
+            break;
+        }
+        if line.indent != field_indent {
+            return Err(parse_err(line.no, "mixed field indent"));
+        }
+        let Some(key) = ident_key(&line.text) else {
             return Err(parse_err(line.no, "expected field key: value"));
         };
+        if !allowed.contains(&key) {
+            return Err(parse_err(line.no, &format!("unknown field '{key}'")));
+        }
+        let key = key.to_string();
+        if fields.iter().any(|f| f.key == key) {
+            return Err(parse_err(line.no, &format!("duplicate field '{key}'")));
+        }
+        let rest = split_colon(&line.text).map(|(_, r)| r).unwrap_or("");
         let mut buf = rest.trim().to_string();
+        let field_no = line.no;
         pos += 1;
-        while pos < lines.len() && lines[pos].indent > line.indent {
+        while pos < lines.len() {
+            let cont = &lines[pos];
+            if cont.indent <= parent_indent {
+                break;
+            }
+            if cont.indent < field_indent {
+                return Err(parse_err(cont.no, "mixed field indent"));
+            }
+            if cont.indent == field_indent {
+                if ident_key(&cont.text).is_some_and(|k| allowed.contains(&k)) {
+                    break;
+                }
+            } else if ident_key(&cont.text).is_some_and(|k| allowed.contains(&k)) {
+                return Err(parse_err(cont.no, "mixed field indent"));
+            }
             if !buf.is_empty() {
                 buf.push('\n');
             }
-            buf.push_str(&lines[pos].text);
+            buf.push_str(&cont.text);
             pos += 1;
         }
         if buf.trim().is_empty() {
-            return Err(parse_err(line.no, &format!("empty value for '{key}'")));
+            return Err(parse_err(field_no, &format!("empty value for '{key}'")));
         }
         fields.push(Field {
-            key: key.to_string(),
+            key,
             value: buf,
-            no: line.no,
+            no: field_no,
         });
     }
     Ok((fields, pos))
@@ -330,15 +386,6 @@ fn field_ron<T: DeserializeOwned>(no: usize, fields: &[Field], key: &str) -> Res
     })
 }
 
-fn reject_unknown(no: usize, fields: &[Field], allowed: &[&str]) -> Result<(), IrError> {
-    for f in fields {
-        if !allowed.contains(&f.key.as_str()) {
-            return Err(parse_err(no, &format!("unknown field '{}'", f.key)));
-        }
-    }
-    Ok(())
-}
-
 fn parse_kind(no: usize, s: &str) -> Result<LocusKind, IrError> {
     match s {
         "Actor" => Ok(LocusKind::Actor),
@@ -353,20 +400,7 @@ fn parse_kind(no: usize, s: &str) -> Result<LocusKind, IrError> {
 }
 
 fn parse_rel(no: usize, s: &str) -> Result<Rel, IrError> {
-    match s {
-        "In" => Ok(Rel::In),
-        "OwnedBy" => Ok(Rel::OwnedBy),
-        "WieldedBy" => Ok(Rel::WieldedBy),
-        "KeyedBy" => Ok(Rel::KeyedBy),
-        "Knows" => Ok(Rel::Knows),
-        "Owes" => Ok(Rel::Owes),
-        "Fears" => Ok(Rel::Fears),
-        "PartOf" => Ok(Rel::PartOf),
-        "DerivedFrom" => Ok(Rel::DerivedFrom),
-        "LockedBy" => Ok(Rel::LockedBy),
-        "Dead" => Ok(Rel::Dead),
-        other => Err(parse_err(no, &format!("unknown Rel '{other}'"))),
-    }
+    Rel::from_name(s).ok_or_else(|| parse_err(no, &format!("unknown Rel '{s}'")))
 }
 
 fn parse_name_token(no: usize, s: &str) -> Result<(Name, &str), IrError> {
@@ -412,6 +446,37 @@ fn split_colon(s: &str) -> Option<(&str, &str)> {
     Some((s[..i].trim(), s[i + 1..].trim()))
 }
 
+fn ident_key(text: &str) -> Option<&str> {
+    let (key, _) = split_colon(text)?;
+    is_ident(key).then_some(key)
+}
+
+fn is_ident(s: &str) -> bool {
+    let mut chars = s.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    (first.is_ascii_alphabetic() || first == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+fn strip_trailing_comment(s: &str) -> &str {
+    let mut in_quote = false;
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'"' => in_quote = !in_quote,
+            b'#' if !in_quote && (i == 0 || bytes[i - 1].is_ascii_whitespace()) => {
+                return s[..i].trim_end();
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    s
+}
+
 fn expect_empty(no: usize, s: &str) -> Result<(), IrError> {
     if s.trim().is_empty() {
         Ok(())
@@ -446,7 +511,7 @@ affordance Lockable:
   conflicts: []
 
 seed locus chair Relic
-seed pose chair 0 0 0 0
+seed pose chair 1 2 3 4
 "#;
 
     const CHAIR_RON: &str = r#"
@@ -471,7 +536,7 @@ IntentDoc(
     ],
     seed: [
         Locus(name: "chair", kind: Relic),
-        Pose(of: "chair", pose: PoseMm(x: Mm(0), z: Mm(0), y: Mm(0), yaw: YawMd(0))),
+        Pose(of: "chair", pose: PoseMm(x: Mm(1), z: Mm(3), y: Mm(2), yaw: YawMd(4))),
     ],
     minds: [],
     provenance: ProvenanceId("0000000000000000000000000000000000000000000000000000000000000000"),
@@ -508,7 +573,7 @@ IntentDoc(
                 },
                 SeedFact::Pose {
                     of: Name::from("chair"),
-                    pose: PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)),
+                    pose: PoseMm::new(Mm(1), Mm(2), Mm(3), YawMd(4)),
                 },
             ],
             minds: Vec::new(),
@@ -589,5 +654,132 @@ seed qty chair mass_g 12
                 value: 12,
             }
         );
+    }
+
+    #[test]
+    fn hanging_ron_closers_are_continuations() {
+        let doc = parse_kdown(
+            r#"
+law lock.use:
+  when: Or(
+    EqVerb(Use),
+    EqVerb(Talk)
+  )
+  body: Pred(
+    must: EqVerb(Use),
+    ought: None
+  )
+
+affordance Lockable:
+  requires: [
+    EqVerb(Use)
+  ]
+  grants: []
+  conflicts: []
+"#,
+        )
+        .unwrap();
+        match &doc.canon_diffs[0] {
+            CanonDiff::AddLaw(law) => match &law.when {
+                Pred::Or(a, b) => {
+                    assert_eq!(**a, Pred::EqVerb(Verb::Use));
+                    assert_eq!(**b, Pred::EqVerb(Verb::Talk));
+                }
+                other => panic!("{other:?}"),
+            },
+            other => panic!("{other:?}"),
+        }
+        match &doc.canon_diffs[1] {
+            CanonDiff::AddAffordance(a) => {
+                assert_eq!(a.requires, vec![Pred::EqVerb(Verb::Use)]);
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn mixed_sibling_indent_is_an_error() {
+        let err = parse_kdown(
+            r#"
+law lock.use:
+  when: EqVerb(Use)
+    body: Pred(must: EqVerb(Use), ought: None)
+"#,
+        )
+        .unwrap_err();
+        match err {
+            IrError::Parse(s) => assert!(s.contains("mixed field indent"), "{s}"),
+            other => panic!("{other}"),
+        }
+    }
+
+    #[test]
+    fn tabs_in_indent_are_an_error() {
+        let err = parse_kdown("law lock.use:\n\twhen: EqVerb(Use)\n").unwrap_err();
+        match err {
+            IrError::Parse(s) => assert!(s.contains("tabs in indent"), "{s}"),
+            other => panic!("{other}"),
+        }
+    }
+
+    #[test]
+    fn tab_on_comment_line_is_skipped() {
+        let doc = parse_kdown("\t# comment\nseed locus chair Relic\n").unwrap();
+        assert_eq!(doc.seed.len(), 1);
+    }
+
+    #[test]
+    fn duplicate_block_field_is_an_error() {
+        let err = parse_kdown(
+            r#"
+law lock.use:
+  when: EqVerb(Use)
+  when: EqVerb(Talk)
+  body: Pred(must: EqVerb(Use), ought: None)
+"#,
+        )
+        .unwrap_err();
+        match err {
+            IrError::Parse(s) => assert!(s.contains("duplicate field 'when'"), "{s}"),
+            other => panic!("{other}"),
+        }
+    }
+
+    #[test]
+    fn style_notes_last_wins_tags_append() {
+        let doc = parse_kdown(
+            r#"
+style notes "first"
+style notes "second"
+style tag prop.stool
+style tag prop.stool
+style palette stone
+style palette metal
+"#,
+        )
+        .unwrap();
+        assert_eq!(doc.style.notes, "second");
+        assert_eq!(
+            doc.style.kitbash_tags,
+            vec![Name::from("prop.stool"), Name::from("prop.stool")]
+        );
+        assert_eq!(
+            doc.style.palettes,
+            vec![Name::from("stone"), Name::from("metal")]
+        );
+    }
+
+    #[test]
+    fn trailing_hash_comment_is_stripped() {
+        let doc = parse_kdown("seed locus chair Relic # oak\n").unwrap();
+        assert_eq!(
+            doc.seed[0],
+            SeedFact::Locus {
+                name: Name::from("chair"),
+                kind: LocusKind::Relic,
+            }
+        );
+        let notes = parse_kdown(r#"style notes "keep # hash""#).unwrap();
+        assert_eq!(notes.style.notes, "keep # hash");
     }
 }

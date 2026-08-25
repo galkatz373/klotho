@@ -24,7 +24,13 @@ fn main() -> ExitCode {
 fn run() -> Result<String, String> {
     let mut args = env::args().skip(1);
     let cmd = args.next().ok_or_else(usage)?;
+    if cmd != "cook" && cmd != "preview" {
+        return Err(usage());
+    }
     let path = args.next().ok_or_else(usage)?;
+    if args.next().is_some() {
+        return Err(usage());
+    }
     let doc = load_file(Path::new(&path)).map_err(|e| e.to_string())?;
     let cooked = cook_validated(&doc).map_err(|e| e.to_string())?;
     match cmd.as_str() {

@@ -14,7 +14,6 @@ name = "distaff"
 path = "src/main.rs"
 
 [dependencies]
-# Crate graph: Distaff → compile + commit. Pin itself is cook-time.
 klotho-commit.workspace = true
 klotho-compile.workspace = true
 klotho-core.workspace = true

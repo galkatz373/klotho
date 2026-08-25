@@ -3,12 +3,15 @@
 //! Pin is cook-time: freeze a preview fact into Canon or seed Trace.
 //! Nothing is real until Pin.
 //!
-//! Author-facing nouns: Locus, Canon, Intent, Trace, Manifest, Rite, Law, Pin.
+//! Author-facing nouns: Locus, Canon, Intent, Trace, Rite, Law, Pin.
 //!
 //! `#![forbid(unsafe_code)]`.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
+
+// HLD crate graph: Distaff → klotho-commit. Pin is cook-time and does not construct a kernel.
+use klotho_commit as _;
 
 mod error;
 mod parse;

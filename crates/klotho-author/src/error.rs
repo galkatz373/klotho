@@ -5,7 +5,7 @@ use core::fmt;
 use klotho_compile::CompileError;
 use klotho_ir::IrError;
 
-/// Load / Pin / cook failure. None of these are `KernelFault`.
+/// Load / Pin / cook failure.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum AuthorError {
     /// RON / kdown parse or structural validation.

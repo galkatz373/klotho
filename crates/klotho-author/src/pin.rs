@@ -7,9 +7,9 @@ use crate::error::AuthorError;
 /// Cook-time Pin. Nothing is real until Pin.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum Pin {
-    /// Apply a [`CanonDiff`] (Add* / RetractLaw). `RetractLaw` is cook-time only.
+    /// Apply a [`CanonDiff`] onto [`IntentDoc::canon_diffs`].
     ToCanon {
-        /// Diff written onto [`IntentDoc::canon_diffs`].
+        /// Diff appended (trailing same-variant+id is replaced so pin-twice is stable).
         diff: CanonDiff,
         /// Non-empty author justification.
         reason: String,
@@ -30,8 +30,10 @@ pub enum Pin {
     },
 }
 
-/// Apply `pin` to `doc`. Same locus/pose/rel/qty identity replaces in place
-/// so pinning twice yields the same seed RON.
+/// Apply `pin` to `doc`. Seed facts replace matching identity in place so
+/// pinning twice yields the same seed RON. Canon diffs append; a trailing
+/// same-variant+id is replaced so pin-twice is stable without rewriting an
+/// earlier ledger entry.
 pub fn apply_pin(doc: &mut IntentDoc, pin: Pin) -> Result<(), AuthorError> {
     match pin {
         Pin::ToCanon { diff, reason } => {
@@ -52,7 +54,7 @@ pub fn apply_pin(doc: &mut IntentDoc, pin: Pin) -> Result<(), AuthorError> {
 }
 
 fn require_reason(reason: &str) -> Result<(), AuthorError> {
-    if reason.is_empty() {
+    if reason.trim().is_empty() {
         Err(AuthorError::EmptyPinReason)
     } else {
         Ok(())
@@ -96,11 +98,13 @@ fn seed_identity(a: &SeedFact, b: &SeedFact) -> bool {
 }
 
 fn upsert_canon(diffs: &mut Vec<CanonDiff>, diff: CanonDiff) {
-    if let Some(slot) = diffs.iter_mut().find(|d| canon_identity(d, &diff)) {
-        *slot = diff;
-    } else {
-        diffs.push(diff);
+    if let Some(last) = diffs.last_mut() {
+        if canon_identity(last, &diff) {
+            *last = diff;
+            return;
+        }
     }
+    diffs.push(diff);
 }
 
 fn canon_identity(a: &CanonDiff, b: &CanonDiff) -> bool {
@@ -244,6 +248,18 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(err, AuthorError::EmptyPinReason);
+        let err = apply_pin(
+            &mut doc,
+            Pin::ToSeedTrace {
+                fact: SeedFact::Locus {
+                    name: Name::from("chair"),
+                    kind: LocusKind::Relic,
+                },
+                reason: "   ".into(),
+            },
+        )
+        .unwrap_err();
+        assert_eq!(err, AuthorError::EmptyPinReason);
         assert!(doc.seed.is_empty());
     }
 
@@ -281,5 +297,107 @@ mod tests {
             [CanonDiff::AddLaw(_), CanonDiff::RetractLaw { id, .. }]
                 if id.as_str() == "lock.use"
         ));
+        assert!(
+            cook_validated(&doc)
+                .unwrap()
+                .canon
+                .law_id("lock.use")
+                .is_none()
+        );
+    }
+
+    fn lock_use(body: Pred) -> CanonDiff {
+        CanonDiff::AddLaw(Law {
+            id: Name::from("lock.use"),
+            when: Pred::EqVerb(Verb::Use),
+            body: LawBody::Pred {
+                must: body,
+                ought: None,
+            },
+        })
+    }
+
+    #[test]
+    fn add_retract_add_leaves_law_in_force() {
+        let mut doc = blank_stool();
+        apply_pin(
+            &mut doc,
+            Pin::ToCanon {
+                diff: lock_use(Pred::EqVerb(Verb::Use)),
+                reason: "admit Use".into(),
+            },
+        )
+        .unwrap();
+        apply_pin(
+            &mut doc,
+            Pin::ToCanon {
+                diff: CanonDiff::RetractLaw {
+                    id: Name::from("lock.use"),
+                    reason: "not in this slice".into(),
+                },
+                reason: "drop lock.use".into(),
+            },
+        )
+        .unwrap();
+        apply_pin(
+            &mut doc,
+            Pin::ToCanon {
+                diff: lock_use(Pred::EqVerb(Verb::Talk)),
+                reason: "bring it back".into(),
+            },
+        )
+        .unwrap();
+        assert!(matches!(
+            &doc.canon_diffs[..],
+            [
+                CanonDiff::AddLaw(_),
+                CanonDiff::RetractLaw { .. },
+                CanonDiff::AddLaw(law)
+            ] if law.body == LawBody::Pred {
+                must: Pred::EqVerb(Verb::Talk),
+                ought: None,
+            }
+        ));
+        assert!(
+            cook_validated(&doc)
+                .unwrap()
+                .canon
+                .law_id("lock.use")
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn pin_same_add_law_twice_replaces_trailing() {
+        let mut doc = blank_stool();
+        apply_pin(
+            &mut doc,
+            Pin::ToCanon {
+                diff: lock_use(Pred::EqVerb(Verb::Use)),
+                reason: "first".into(),
+            },
+        )
+        .unwrap();
+        apply_pin(
+            &mut doc,
+            Pin::ToCanon {
+                diff: lock_use(Pred::EqVerb(Verb::Talk)),
+                reason: "second".into(),
+            },
+        )
+        .unwrap();
+        assert_eq!(doc.canon_diffs.len(), 1);
+        match &doc.canon_diffs[0] {
+            CanonDiff::AddLaw(law) => {
+                assert_eq!(
+                    law.body,
+                    LawBody::Pred {
+                        must: Pred::EqVerb(Verb::Talk),
+                        ought: None,
+                    }
+                );
+            }
+            other => panic!("{other:?}"),
+        }
     }
 }

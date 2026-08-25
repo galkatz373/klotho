@@ -351,7 +351,7 @@ fn take_fields(
                 return Err(parse_err(cont.no, "mixed field indent"));
             }
             if cont.indent == field_indent {
-                if ident_key(&cont.text).is_some_and(|k| allowed.contains(&k)) {
+                if ident_key(&cont.text).is_some() {
                     break;
                 }
             } else if ident_key(&cont.text).is_some_and(|k| allowed.contains(&k)) {
@@ -726,6 +726,23 @@ law lock.use:
     fn tab_on_comment_line_is_skipped() {
         let doc = parse_kdown("\t# comment\nseed locus chair Relic\n").unwrap();
         assert_eq!(doc.seed.len(), 1);
+    }
+
+    #[test]
+    fn unknown_field_at_indent_is_not_swallowed() {
+        let err = parse_kdown(
+            r#"
+law lock.use:
+  when: EqVerb(Use)
+  ought: None
+  body: Pred(must: EqVerb(Use), ought: None)
+"#,
+        )
+        .unwrap_err();
+        match err {
+            IrError::Parse(s) => assert!(s.contains("unknown field 'ought'"), "{s}"),
+            other => panic!("{other}"),
+        }
     }
 
     #[test]

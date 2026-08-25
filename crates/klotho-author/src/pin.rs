@@ -9,7 +9,8 @@ use crate::error::AuthorError;
 pub enum Pin {
     /// Apply a [`CanonDiff`] onto [`IntentDoc::canon_diffs`].
     ToCanon {
-        /// Diff appended (trailing same-variant+id is replaced so pin-twice is stable).
+        /// Diff appended. An earlier same-variant+id is moved to the end unless a
+        /// later opposite (AddLaw ↔ RetractLaw) still applies.
         diff: CanonDiff,
         /// Non-empty author justification.
         reason: String,
@@ -31,9 +32,9 @@ pub enum Pin {
 }
 
 /// Apply `pin` to `doc`. Seed facts replace matching identity in place so
-/// pinning twice yields the same seed RON. Canon diffs append; a trailing
-/// same-variant+id is replaced so pin-twice is stable without rewriting an
-/// earlier ledger entry.
+/// pinning twice yields the same seed RON. Canon diffs last-pin-wins: an
+/// earlier same-variant+id is removed and the new diff is appended, unless a
+/// later opposite on that id (AddLaw ↔ RetractLaw) must stay in the ledger.
 pub fn apply_pin(doc: &mut IntentDoc, pin: Pin) -> Result<(), AuthorError> {
     match pin {
         Pin::ToCanon { diff, reason } => {
@@ -98,10 +99,10 @@ fn seed_identity(a: &SeedFact, b: &SeedFact) -> bool {
 }
 
 fn upsert_canon(diffs: &mut Vec<CanonDiff>, diff: CanonDiff) {
-    if let Some(last) = diffs.last_mut() {
-        if canon_identity(last, &diff) {
-            *last = diff;
-            return;
+    if let Some(i) = diffs.iter().rposition(|d| canon_identity(d, &diff)) {
+        let blocked = diffs[i + 1..].iter().any(|d| canon_opposite(d, &diff));
+        if !blocked {
+            diffs.remove(i);
         }
     }
     diffs.push(diff);
@@ -118,12 +119,20 @@ fn canon_identity(a: &CanonDiff, b: &CanonDiff) -> bool {
     }
 }
 
+fn canon_opposite(a: &CanonDiff, b: &CanonDiff) -> bool {
+    match (a, b) {
+        (CanonDiff::AddLaw(x), CanonDiff::RetractLaw { id: y, .. }) => x.id == *y,
+        (CanonDiff::RetractLaw { id: x, .. }, CanonDiff::AddLaw(y)) => *x == y.id,
+        _ => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use klotho_core::{Hash, LocusKind, Mm, PoseMm, YawMd};
     use klotho_ir::{
-        CanonDiff, IntentDoc, Law, LawBody, Name, Pred, ProvenanceId, SeedFact, StyleIntent, Verb,
-        to_ron, validate_doc,
+        Affordance, CanonDiff, IntentDoc, Law, LawBody, Name, Pred, ProvenanceId, SeedFact,
+        StyleIntent, Verb, to_ron, validate_doc,
     };
 
     use super::*;
@@ -399,5 +408,50 @@ mod tests {
             }
             other => panic!("{other:?}"),
         }
+    }
+
+    #[test]
+    fn add_law_after_affordance_rewrites_earlier_slot() {
+        let mut doc = blank_stool();
+        apply_pin(
+            &mut doc,
+            Pin::ToCanon {
+                diff: lock_use(Pred::EqVerb(Verb::Use)),
+                reason: "admit Use".into(),
+            },
+        )
+        .unwrap();
+        apply_pin(
+            &mut doc,
+            Pin::ToCanon {
+                diff: CanonDiff::AddAffordance(Affordance {
+                    id: Name::from("Sittable"),
+                    requires: vec![],
+                    grants: vec![],
+                    conflicts: vec![],
+                }),
+                reason: "stool sits".into(),
+            },
+        )
+        .unwrap();
+        apply_pin(
+            &mut doc,
+            Pin::ToCanon {
+                diff: lock_use(Pred::EqVerb(Verb::Talk)),
+                reason: "rewrite law".into(),
+            },
+        )
+        .unwrap();
+        assert!(matches!(
+            &doc.canon_diffs[..],
+            [CanonDiff::AddAffordance(_), CanonDiff::AddLaw(law)]
+                if law.body == LawBody::Pred {
+                    must: Pred::EqVerb(Verb::Talk),
+                    ought: None,
+                }
+        ));
+        let cooked = cook_validated(&doc).unwrap();
+        assert!(cooked.canon.law_id("lock.use").is_some());
+        assert!(cooked.canon.affordance_id("Sittable").is_some());
     }
 }

@@ -255,7 +255,8 @@ mod tests {
 
     use super::*;
     use crate::header::{
-        decode_clipset, decode_mesh, validate_clipset, validate_grain, validate_hull, validate_mesh,
+        decode_clipset, decode_grain, decode_mesh, validate_clipset, validate_grain, validate_hull,
+        validate_mesh,
     };
 
     #[test]
@@ -294,6 +295,9 @@ mod tests {
         assert_eq!(info.hz, GRAIN_HZ);
         assert_eq!(info.frames, 4800);
         assert_eq!(info.channels, 1);
+        let decoded = decode_grain(&g).unwrap();
+        assert_eq!(decoded.pcm.len(), 4800);
+        assert_eq!(decoded.pcm[0], 12_000);
     }
 
     #[test]

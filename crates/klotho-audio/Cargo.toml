@@ -1,0 +1,26 @@
+[package]
+name = "klotho-audio"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Klotho audio presenter: grains from Trace, one bed, header caps"
+readme = false
+publish = false
+
+[dependencies]
+klotho-compile.workspace = true
+klotho-core.workspace = true
+klotho-manifest.workspace = true
+klotho-trace.workspace = true
+
+[lints.rust]
+unsafe_code = "allow"
+missing_docs = "warn"
+
+[lints.clippy]
+dbg_macro = "deny"
+disallowed_methods = "deny"
+todo = "warn"
+unimplemented = "warn"

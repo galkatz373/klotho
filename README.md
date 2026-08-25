@@ -33,7 +33,8 @@ PR 11b — `klotho-compile` + closed kitbash (retrieval; missing tag = cook erro
 PR 12 — `klotho-render` wgpu presenter + `klotho-platform` (Look, render thread).
 PR 12b — Hearth pixels (door / barrel / fire / HUD goldens).
 PR 13 — `klotho-motion` (verb→clip + root motion, debug T-pose).
-Next: PR 14 audio.
+PR 14 — `klotho-audio` (grains from Trace, one bed, header caps).
+Next: PR 15 Attention UI.
 
 ## Build
 
@@ -67,6 +68,7 @@ klotho/
   crates/klotho-compile/  # kitbash retrieval cook → CAS
   crates/klotho-platform/ # window, OS events, Look accum (no world mutation)
   crates/klotho-render/   # wgpu clustered meshes, Presenter, render thread
+  crates/klotho-audio/    # grains from Trace, one bed, integer mix
   crates/klotho-runtime/  # headless Intent-script player
   examples/hearth-slice/  # Appendix A goldens (PR 07b)
   examples/ash-slice/     # Appendix B goldens (PR 07c)

@@ -209,6 +209,28 @@ pub fn validate_grain(bytes: &[u8]) -> Result<GrainInfo, CompileError> {
     })
 }
 
+/// Mono PCM after header validation.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct DecodedGrain {
+    /// Counts and rate.
+    pub info: GrainInfo,
+    /// Mono `i16` LE PCM at [`GRAIN_HZ`].
+    pub pcm: Vec<i16>,
+}
+
+/// Validate then copy PCM. Call this before mix (PR 14).
+pub fn decode_grain(bytes: &[u8]) -> Result<DecodedGrain, CompileError> {
+    let info = validate_grain(bytes)?;
+    let rest = &bytes[PREFIX..];
+    let mut pcm = Vec::with_capacity(info.frames as usize);
+    let mut off = 12usize;
+    for _ in 0..info.frames {
+        pcm.push(i16::from_le_bytes([rest[off], rest[off + 1]]));
+        off += 2;
+    }
+    Ok(DecodedGrain { info, pcm })
+}
+
 /// Validate a rite-chunk blob (header only; ISA is `klotho-commit`).
 pub fn validate_rite(bytes: &[u8]) -> Result<(), CompileError> {
     let rest = peek(bytes, ArtifactKind::RiteChunk)?;
@@ -338,5 +360,50 @@ mod tests {
         b.extend_from_slice(&(MAX_TRIS.saturating_add(1).saturating_mul(3)).to_le_bytes());
         let e = validate_mesh(&b).unwrap_err();
         assert!(matches!(e, CompileError::Header(s) if s.contains("tris")));
+    }
+
+    fn grain_blob(hz: u32, channels: u8, pcm: &[i16]) -> Vec<u8> {
+        let mut b = Vec::new();
+        write_prefix(&mut b, ArtifactKind::Grain);
+        b.extend_from_slice(&hz.to_le_bytes());
+        b.push(channels);
+        b.extend_from_slice(&[0, 0, 0]);
+        b.extend_from_slice(&(pcm.len() as u32).to_le_bytes());
+        for s in pcm {
+            b.extend_from_slice(&s.to_le_bytes());
+        }
+        b
+    }
+
+    #[test]
+    fn decode_grain_copies_pcm_after_validate() {
+        let pcm = [1i16, -2, 3, 0];
+        let b = grain_blob(GRAIN_HZ, 1, &pcm);
+        let d = decode_grain(&b).unwrap();
+        assert_eq!(d.info.hz, GRAIN_HZ);
+        assert_eq!(d.info.channels, 1);
+        assert_eq!(d.info.frames, 4);
+        assert_eq!(d.pcm, pcm);
+    }
+
+    #[test]
+    fn decode_grain_rejects_bad_magic_hz_channels_truncated() {
+        assert!(matches!(
+            decode_grain(b"XXXX"),
+            Err(CompileError::Header(_))
+        ));
+        let bad_hz = grain_blob(44_100, 1, &[1]);
+        assert!(matches!(
+            decode_grain(&bad_hz),
+            Err(CompileError::Header(s)) if s.contains("hz")
+        ));
+        let bad_ch = grain_blob(GRAIN_HZ, 2, &[1, 2]);
+        assert!(matches!(
+            decode_grain(&bad_ch),
+            Err(CompileError::Header(s)) if s.contains("channels")
+        ));
+        let mut trunc = grain_blob(GRAIN_HZ, 1, &[1, 2, 3]);
+        trunc.pop();
+        assert!(matches!(decode_grain(&trunc), Err(CompileError::Header(_))));
     }
 }

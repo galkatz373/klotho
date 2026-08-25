@@ -66,7 +66,7 @@ impl MixFrame {
     }
 }
 
-/// wgpu / null / future mixers share this trait.
+/// [`IntegerMixer`] and [`NullMixer`] share this trait.
 pub trait Mixer: Send {
     /// Mix `sonic` at `now`. Grain bytes are mixer-owned.
     fn mix(
@@ -78,7 +78,7 @@ pub trait Mixer: Send {
     ) -> MixFrame;
 }
 
-/// Integer mixer. Grain PCM cache is a rebuildable presentation cache.
+/// Integer mixer. Holds raw grain bytes; headers are validated at mix.
 #[derive(Clone, Debug, Default)]
 pub struct IntegerMixer {
     raw: BTreeMap<BlobId, Vec<u8>>,
@@ -96,7 +96,7 @@ impl IntegerMixer {
         self.raw.insert(id, bytes.to_vec());
     }
 
-    /// Mix `ticks` quanta starting at `now`.
+    /// Mix `ticks` quanta covering `[now, now + ticks)`.
     #[must_use]
     pub fn mix_n(
         &self,
@@ -178,7 +178,7 @@ pub fn mix(
     mix_n(sonic, observer, now, budget, 1, bytes)
 }
 
-/// Mix `ticks` quanta of stereo PCM.
+/// Mix `ticks` quanta of stereo PCM covering `[now, now + ticks)`.
 #[must_use]
 pub fn mix_n(
     sonic: &SonicManifest,
@@ -205,6 +205,7 @@ pub fn mix_n(
         decode_into(&mut decoded, bed.blob, bytes);
     }
 
+    let window_end = now.0.saturating_add(u64::from(ticks));
     let mut voices = 0u16;
     for g in &sonic.grains {
         if voices >= budget.max_voices {
@@ -216,10 +217,17 @@ pub fn mix_n(
         if grain.info.frames == 0 || grain.info.frames > budget.max_grain_frames {
             continue;
         }
-        if now.0 < g.at.0 {
+        if g.at.0 >= window_end {
             continue;
         }
-        let playhead = (now.0 - g.at.0).saturating_mul(u64::from(SAMPLES_PER_TICK));
+        let dest =
+            g.at.0
+                .saturating_sub(now.0)
+                .saturating_mul(u64::from(SAMPLES_PER_TICK));
+        let playhead = now
+            .0
+            .saturating_sub(g.at.0)
+            .saturating_mul(u64::from(SAMPLES_PER_TICK));
         if playhead >= u64::from(grain.info.frames) {
             continue;
         }
@@ -227,6 +235,7 @@ pub fn mix_n(
         mix_oneshot(
             &mut acc,
             &grain.pcm,
+            dest as usize,
             playhead as usize,
             g.gain_milli,
             left,
@@ -288,10 +297,21 @@ fn pan_milli(pos: Option<IVec3>, observer: Observer) -> (i32, i32) {
     (1000 - pan.max(0), 1000 + pan.min(0))
 }
 
-fn mix_oneshot(acc: &mut [i32], pcm: &[i16], playhead: usize, gain: u16, left: i32, right: i32) {
+fn mix_oneshot(
+    acc: &mut [i32],
+    pcm: &[i16],
+    dest: usize,
+    playhead: usize,
+    gain: u16,
+    left: i32,
+    right: i32,
+) {
     let n_frames = acc.len() / 2;
-    for i in 0..n_frames {
-        let src = playhead.saturating_add(i);
+    if dest >= n_frames {
+        return;
+    }
+    for i in dest..n_frames {
+        let src = playhead.saturating_add(i - dest);
         if src >= pcm.len() {
             break;
         }
@@ -555,9 +575,38 @@ mod tests {
         assert_eq!(frame.pcm[3], 0);
         assert_eq!(frame.pcm[4], 2_000);
         let later = mix_map(&sonic, Tick(1), MixBudget::HEARTH, &bytes);
-        // playhead = 800 % 2 = 0, same phase as tick 0.
         assert_eq!(later.pcm[0], 2_000);
         assert_eq!(later.pcm[2], 0);
+    }
+
+    #[test]
+    fn future_oneshot_is_silent_this_tick() {
+        let id = blob(1);
+        let sonic = SonicManifest::from_voices(Epoch::ZERO, [voice(id, Tick(1), None)], None);
+        let bytes = bytes_map(id, valid_pcm(&[9_000; 8]));
+        let frame = mix_map(&sonic, Tick(0), MixBudget::HEARTH, &bytes);
+        assert!(frame.is_silence());
+        assert_eq!(frame.voices, 0);
+    }
+
+    #[test]
+    fn mix_n_places_oneshot_inside_window() {
+        let id = blob(1);
+        let sonic = SonicManifest::from_voices(Epoch::ZERO, [voice(id, Tick(1), None)], None);
+        let bytes = bytes_map(id, valid_pcm(&[5_000; 4]));
+        let frame = mix_n(
+            &sonic,
+            Observer::origin(),
+            Tick(0),
+            MixBudget::HEARTH,
+            2,
+            &bytes,
+        );
+        assert_eq!(frame.pcm.len(), 3200);
+        assert_eq!(frame.voices, 1);
+        assert!(frame.pcm[..1600].iter().all(|&s| s == 0));
+        assert_eq!(frame.pcm[1600], 5_000);
+        assert_eq!(frame.pcm[1601], 5_000);
     }
 
     #[test]

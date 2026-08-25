@@ -75,7 +75,7 @@ fn cue(body: &TraceBody) -> Option<(&'static str, CuePos)> {
 #[cfg(test)]
 mod tests {
     use klotho_core::{LocusKind, Mm, ResourceId, Tick, YawMd};
-    use klotho_trace::{PoseReason, RelTag, RiteEnd, TraceBody, TraceEvent};
+    use klotho_trace::{IslandSnap, PoseReason, RelTag, RiteEnd, TraceBody, TraceEvent};
 
     use super::*;
 
@@ -267,6 +267,21 @@ mod tests {
                     rel: RelTag::IN,
                     b: a,
                 },
+            ),
+            TraceEvent::new(
+                Tick(1),
+                TraceBody::PoseCommitted {
+                    s: a,
+                    xz: (Mm(0), Mm(0)),
+                    yaw: YawMd::ZERO,
+                    reason: PoseReason::Interact,
+                },
+            ),
+            TraceEvent::new(
+                Tick(1),
+                TraceBody::IslandSnap(
+                    IslandSnap::new(0, vec![], vec![], vec![], vec![], vec![]).unwrap(),
+                ),
             ),
         ];
         let s = extract(&events, None);

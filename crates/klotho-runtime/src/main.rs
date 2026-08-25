@@ -101,6 +101,32 @@ mod tests {
     }
 
     #[test]
+    fn pause_menu_save_goes_through_save_from_snapshot() {
+        use std::sync::Arc;
+
+        use klotho_core::Hash;
+        use klotho_ui::{LoadError, Session, check_load, save_from_snapshot};
+
+        let mut kernel = boot();
+        let snap = kernel.snapshot();
+        let mut session = Session::new();
+        session.publish(Arc::clone(&snap));
+        session.set_paused(true);
+        let pi = InputMapper::hearth().map(&DeviceSample::new(PlayerId(0), Tick(0)));
+        assert!(session.accept_player(pi).is_none());
+        assert!(!session.should_step());
+        let quad = save_from_snapshot(&snap);
+        assert_eq!(quad.canon_hash, snap.canon_hash);
+        assert_eq!(quad.trace_prefix_hash, snap.trace_prefix_hash);
+        assert_eq!(quad.trace_from_tick, snap.tick);
+        assert_eq!(
+            check_load(&quad, Hash::ZERO),
+            Err(LoadError::PrefixMismatch)
+        );
+        assert_eq!(check_load(&quad, snap.trace_prefix_hash), Ok(()));
+    }
+
+    #[test]
     fn observer_is_built_from_look_not_renderer() {
         let mut look = LookAccum::new();
         look.apply_analog(Analog {

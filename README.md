@@ -34,7 +34,8 @@ PR 12 — `klotho-render` wgpu presenter + `klotho-platform` (Look, render threa
 PR 12b — Hearth pixels (door / barrel / fire / HUD goldens).
 PR 13 — `klotho-motion` (verb→clip + root motion, debug T-pose).
 PR 14 — `klotho-audio` (grains from Trace, one bed, header caps).
-Next: PR 15 Attention UI.
+PR 15 — `klotho-ui` (attention from snapshot, denied facts, pause save).
+Next: PR 16 Distaff.
 
 ## Build
 
@@ -69,6 +70,7 @@ klotho/
   crates/klotho-platform/ # window, OS events, Look accum (no world mutation)
   crates/klotho-render/   # wgpu clustered meshes, Presenter, render thread
   crates/klotho-audio/    # grains from Trace, one bed, integer mix
+  crates/klotho-ui/       # attention IR from snapshot, pause save (K17/K19)
   crates/klotho-runtime/  # headless Intent-script player
   examples/hearth-slice/  # Appendix A goldens (PR 07b)
   examples/ash-slice/     # Appendix B goldens (PR 07c)

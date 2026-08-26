@@ -22,12 +22,19 @@ pub fn load_cooked_warp_capped(path: &Path, cap: usize) -> Result<Cooked, String
 }
 
 /// Boot a [`CommitKernel`] from a `.warp` file.
+///
+/// Applies packed Canon and seed facts only. Hearth projection affordances
+/// (`Opaque`/`Lockable` on the door, `Portable`/`Flammable` on barrels) are
+/// written by `hearth_slice::boot` after seed and are not in the package; this
+/// is not a substitute for that path.
 pub fn load_warp(path: &Path) -> Result<CommitKernel, String> {
     let cooked = load_cooked_warp(path)?;
     kernel_from_cooked(&cooked)
 }
 
 /// Seed loci from the packed IntentDoc and bind player 0 when a `player` pin exists.
+///
+/// Canon + seed only — not `hearth_slice::boot()`.
 pub fn kernel_from_cooked(cooked: &Cooked) -> Result<CommitKernel, String> {
     let mut k = CommitKernel::new(World::new(
         Arc::new(cooked.canon.clone()),

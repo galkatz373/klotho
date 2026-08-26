@@ -247,7 +247,7 @@ fn put_artifact(
 }
 
 /// blake3 of canonical LE `(compiler version, canon RON, style, seed, kitbash ids)`.
-fn cook_digest(doc: &IntentDoc, kit_blobs: &[klotho_core::BlobId]) -> Hash {
+pub(crate) fn cook_digest(doc: &IntentDoc, kit_blobs: &[klotho_core::BlobId]) -> Hash {
     let mut buf = Vec::new();
     buf.extend_from_slice(&COMPILER_VERSION.to_le_bytes());
     let canon = to_ron(&doc.canon_diffs).unwrap_or_default();

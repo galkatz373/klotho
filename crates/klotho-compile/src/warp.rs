@@ -14,9 +14,9 @@ use klotho_prove::{
 };
 
 use crate::Binding;
-use crate::cook::{COMPILER_VERSION, Cooked};
+use crate::cook::{COMPILER_VERSION, Cooked, cook_digest};
 use crate::error::CompileError;
-use crate::header::validate_blob;
+use crate::header::{peek_kind, validate_blob};
 
 /// Container magic. Distinct from CAS `KLTH` so a blob is not a warp.
 pub const WARP_MAGIC: [u8; 4] = *b"KWRP";
@@ -70,7 +70,10 @@ pub fn unpack_warp(bytes: &[u8]) -> Result<Cooked, CompileError> {
     if version != WARP_VERSION {
         return Err(warp_err(format!("bad version {version}")));
     }
-    let _pad = take(&mut rest, 3)?;
+    let pad = take(&mut rest, 3)?;
+    if pad != [0, 0, 0] {
+        return Err(warp_err("bad pad"));
+    }
     let compiler = take_u32(&mut rest)?;
     if compiler != COMPILER_VERSION {
         return Err(warp_err(format!("compiler version {compiler}")));
@@ -110,8 +113,8 @@ pub fn unpack_warp(bytes: &[u8]) -> Result<Cooked, CompileError> {
     dag.exportable().map_err(CompileError::prove)?;
     dag.blobs_present(&cas).map_err(CompileError::prove)?;
 
-    let n_bind = take_u32(&mut rest)? as usize;
-    let mut bindings = Vec::with_capacity(n_bind);
+    let n_bind = take_capped_count(&mut rest, WARP_MAX_LOCI, "bindings")?;
+    let mut bindings = Vec::new();
     for _ in 0..n_bind {
         let locus = Name::from(take_str(&mut rest)?);
         let tag = Name::from(take_str(&mut rest)?);
@@ -136,6 +139,10 @@ pub fn unpack_warp(bytes: &[u8]) -> Result<Cooked, CompileError> {
     }
 
     let canon = cook_canon(&doc).map_err(CompileError::canon)?;
+    let digest = cook_digest(&doc, &kit_blobs_from_cas(&cas));
+    if digest != cook_hash || digest != canon_hash {
+        return Err(warp_err("canon hash mismatch"));
+    }
     Ok(Cooked {
         doc,
         canon,
@@ -200,8 +207,8 @@ fn encode_named_ids(buf: &mut Vec<u8>, map: &BTreeMap<String, BlobId>) -> Result
 }
 
 fn decode_named_ids(rest: &mut &[u8]) -> Result<BTreeMap<String, BlobId>, CompileError> {
-    let n = take_u32(rest)? as usize;
-    let mut out = std::collections::BTreeMap::new();
+    let n = take_capped_count(rest, MAX_BLOBS, "named ids")?;
+    let mut out = BTreeMap::new();
     for _ in 0..n {
         let tag = take_str(rest)?.to_string();
         let id = take_blob(rest)?;
@@ -244,14 +251,20 @@ fn encode_node(n: &ProvenanceNode, buf: &mut Vec<u8>) -> Result<(), CompileError
 }
 
 fn decode_dag(rest: &mut &[u8]) -> Result<ProvenanceDag, CompileError> {
-    let n = take_u32(rest)? as usize;
+    let n = take_capped_count(rest, MAX_BLOBS.saturating_mul(4), "dag nodes")?;
     let mut dag = ProvenanceDag::new();
     for _ in 0..n {
         let id = ProvenanceId(take_hash(rest)?);
         let kind = decode_kind(rest)?;
         let license = decode_license(rest)?;
         let np = take_u32(rest)? as usize;
-        let mut parents = Vec::with_capacity(np);
+        let need = np
+            .checked_mul(32)
+            .ok_or_else(|| warp_err("parent count overflow"))?;
+        if rest.len() < need {
+            return Err(warp_err("truncated"));
+        }
+        let mut parents = Vec::new();
         for _ in 0..np {
             parents.push(ProvenanceId(take_hash(rest)?));
         }
@@ -374,6 +387,30 @@ fn decode_license(rest: &mut &[u8]) -> Result<LicenseSpan, CompileError> {
         }
         t => Err(warp_err(format!("license {t}"))),
     }
+}
+
+fn kit_blobs_from_cas(cas: &Cas) -> Vec<BlobId> {
+    let mut ids = Vec::new();
+    for (id, bytes) in cas.iter() {
+        if let Ok(
+            ArtifactKind::ClusteredMesh
+            | ArtifactKind::Hull
+            | ArtifactKind::Grain
+            | ArtifactKind::ClipSet,
+        ) = peek_kind(bytes)
+        {
+            ids.push(id);
+        }
+    }
+    ids
+}
+
+fn take_capped_count(rest: &mut &[u8], max: usize, what: &str) -> Result<usize, CompileError> {
+    let n = take_u32(rest)? as usize;
+    if n > max {
+        return Err(warp_err(format!("{what} {n} > {max}")));
+    }
+    Ok(n)
 }
 
 fn check_seed_loci(doc: &IntentDoc) -> Result<(), CompileError> {
@@ -577,6 +614,87 @@ mod tests {
         let e = unpack_warp(b"KLTH").unwrap_err();
         assert!(
             matches!(e, CompileError::Warp(ref s) if s.contains("magic")),
+            "{e}"
+        );
+    }
+
+    #[test]
+    fn unpack_refuses_nonzero_pad() {
+        let mut bytes = pack_warp(&hearth()).unwrap();
+        bytes[5] = 1;
+        let e = unpack_warp(&bytes).unwrap_err();
+        assert!(
+            matches!(e, CompileError::Warp(ref s) if s.contains("pad")),
+            "{e}"
+        );
+    }
+
+    #[test]
+    fn unpack_refuses_flipped_header_hash() {
+        let mut bytes = pack_warp(&hearth()).unwrap();
+        bytes[12] ^= 1;
+        let e = unpack_warp(&bytes).unwrap_err();
+        assert!(
+            matches!(e, CompileError::Warp(ref s) if s.contains("hash")),
+            "{e}"
+        );
+    }
+
+    #[test]
+    fn unpack_refuses_spliced_intent_doc() {
+        let mut cooked = hearth();
+        cooked.doc.style.notes = "tampered notes".into();
+        let bytes = encode_warp(&cooked).unwrap();
+        let e = unpack_warp(&bytes).unwrap_err();
+        assert!(
+            matches!(e, CompileError::Warp(ref s) if s.contains("hash")),
+            "{e}"
+        );
+    }
+
+    #[test]
+    fn unpack_refuses_huge_binding_count() {
+        let mut cooked = hearth();
+        cooked.bindings.clear();
+        cooked.grains.clear();
+        cooked.clips.clear();
+        let mut bytes = encode_warp(&cooked).unwrap();
+        let i = bytes.len() - 12;
+        bytes[i..i + 4].copy_from_slice(&u32::MAX.to_le_bytes());
+        let e = unpack_warp(&bytes).unwrap_err();
+        assert!(
+            matches!(e, CompileError::Warp(ref s) if s.contains("bindings")),
+            "{e}"
+        );
+    }
+
+    #[test]
+    fn seed_loci_over_cap_fails_pack_and_unpack() {
+        use klotho_core::LocusKind;
+
+        let mut cooked = hearth();
+        let extra = WARP_MAX_LOCI + 1
+            - cooked
+                .doc
+                .seed
+                .iter()
+                .filter(|f| matches!(f, SeedFact::Locus { .. }))
+                .count();
+        for i in 0..extra {
+            cooked.doc.seed.push(SeedFact::Locus {
+                name: Name::from(format!("cap_locus_{i}").as_str()),
+                kind: LocusKind::Relic,
+            });
+        }
+        let e = pack_warp(&cooked).unwrap_err();
+        assert!(
+            matches!(e, CompileError::Warp(ref s) if s.contains("seed loci")),
+            "{e}"
+        );
+        let bytes = encode_warp(&cooked).unwrap();
+        let e = unpack_warp(&bytes).unwrap_err();
+        assert!(
+            matches!(e, CompileError::Warp(ref s) if s.contains("seed loci")),
             "{e}"
         );
     }

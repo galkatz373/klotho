@@ -268,7 +268,10 @@ pub fn validate_rite(bytes: &[u8]) -> Result<(), CompileError> {
         return Err(CompileError::Header("truncated rite chunk".into()));
     }
     let cap_steps = u16::from_le_bytes([rest[2], rest[3]]);
-    if cap_steps == 0 || cap_steps > MAX_RITE_STEPS {
+    if cap_steps == 0 {
+        return Err(CompileError::Header("cap_steps 0".into()));
+    }
+    if cap_steps > MAX_RITE_STEPS {
         return Err(CompileError::Header(format!(
             "cap_steps {cap_steps} > {MAX_RITE_STEPS}"
         )));
@@ -398,8 +401,26 @@ mod tests {
         b.extend_from_slice(&8u16.to_le_bytes());
         b.extend_from_slice(&0u16.to_le_bytes());
         let e = validate_rite(&b).unwrap_err();
-        assert!(matches!(e, CompileError::Header(s) if s.contains("cap_steps")));
+        assert!(
+            matches!(e, CompileError::Header(ref s) if s.contains("cap_steps") && s.contains('>')),
+            "{e}"
+        );
         assert!(matches!(validate_blob(&b), Err(CompileError::Header(_))));
+    }
+
+    #[test]
+    fn rite_cap_steps_zero_is_distinct() {
+        let mut b = Vec::new();
+        write_prefix(&mut b, ArtifactKind::RiteChunk);
+        b.extend_from_slice(&0u16.to_le_bytes());
+        b.extend_from_slice(&0u16.to_le_bytes());
+        b.extend_from_slice(&8u16.to_le_bytes());
+        b.extend_from_slice(&0u16.to_le_bytes());
+        let e = validate_rite(&b).unwrap_err();
+        assert!(
+            matches!(e, CompileError::Header(ref s) if s == "cap_steps 0"),
+            "{e}"
+        );
     }
 
     #[test]

@@ -11,6 +11,8 @@ pub const MAGIC: [u8; 4] = *b"KLTH";
 pub const VERSION: u8 = 1;
 /// HLD §4: index count / 3 ≤ this.
 pub const MAX_TRIS: u32 = 200_000;
+/// HLD §4: rite `cap_steps` ≤ this.
+pub const MAX_RITE_STEPS: u16 = 64;
 /// PCM sample rate for v1 grains.
 pub const GRAIN_HZ: u32 = 48_000;
 
@@ -27,6 +29,14 @@ pub(crate) fn write_prefix(buf: &mut Vec<u8>, kind: ArtifactKind) {
 }
 
 fn peek(bytes: &[u8], kind: ArtifactKind) -> Result<&[u8], CompileError> {
+    if peek_kind(bytes)? != kind {
+        return Err(CompileError::Header("wrong kind".into()));
+    }
+    Ok(&bytes[PREFIX..])
+}
+
+/// Kind from a `KLTH` prefix. Does not validate the payload.
+pub fn peek_kind(bytes: &[u8]) -> Result<ArtifactKind, CompileError> {
     if bytes.len() < PREFIX {
         return Err(CompileError::Header("truncated prefix".into()));
     }
@@ -36,10 +46,30 @@ fn peek(bytes: &[u8], kind: ArtifactKind) -> Result<&[u8], CompileError> {
     if bytes[4] != VERSION {
         return Err(CompileError::Header("bad version".into()));
     }
-    if bytes[5] != kind as u8 {
-        return Err(CompileError::Header("wrong kind".into()));
+    ArtifactKind::from_u8(bytes[5]).ok_or_else(|| CompileError::Header("unknown kind".into()))
+}
+
+/// Validate a CAS blob by its `KLTH` kind. Mesh/grain/hull/rite/clip before use.
+pub fn validate_blob(bytes: &[u8]) -> Result<(), CompileError> {
+    match peek_kind(bytes)? {
+        ArtifactKind::ClusteredMesh => {
+            validate_mesh(bytes)?;
+        }
+        ArtifactKind::Hull => {
+            validate_hull(bytes)?;
+        }
+        ArtifactKind::Grain => {
+            validate_grain(bytes)?;
+        }
+        ArtifactKind::ClipSet => {
+            validate_clipset(bytes)?;
+        }
+        ArtifactKind::RiteChunk => {
+            validate_rite(bytes)?;
+        }
+        ArtifactKind::Texture | ArtifactKind::AffordanceGraph | ArtifactKind::Embedding => {}
     }
-    Ok(&bytes[PREFIX..])
+    Ok(())
 }
 
 fn u32_le(b: &[u8], off: usize) -> Result<u32, CompileError> {
@@ -237,6 +267,12 @@ pub fn validate_rite(bytes: &[u8]) -> Result<(), CompileError> {
     if rest.len() < 8 {
         return Err(CompileError::Header("truncated rite chunk".into()));
     }
+    let cap_steps = u16::from_le_bytes([rest[2], rest[3]]);
+    if cap_steps == 0 || cap_steps > MAX_RITE_STEPS {
+        return Err(CompileError::Header(format!(
+            "cap_steps {cap_steps} > {MAX_RITE_STEPS}"
+        )));
+    }
     Ok(())
 }
 
@@ -349,7 +385,21 @@ mod tests {
     #[test]
     fn max_tris_is_hld() {
         assert_eq!(MAX_TRIS, 200_000);
+        assert_eq!(MAX_RITE_STEPS, 64);
         assert_eq!(MAGIC, *b"KLTH");
+    }
+
+    #[test]
+    fn rite_cap_steps_rejected() {
+        let mut b = Vec::new();
+        write_prefix(&mut b, ArtifactKind::RiteChunk);
+        b.extend_from_slice(&0u16.to_le_bytes());
+        b.extend_from_slice(&(MAX_RITE_STEPS.saturating_add(1)).to_le_bytes());
+        b.extend_from_slice(&8u16.to_le_bytes());
+        b.extend_from_slice(&0u16.to_le_bytes());
+        let e = validate_rite(&b).unwrap_err();
+        assert!(matches!(e, CompileError::Header(s) if s.contains("cap_steps")));
+        assert!(matches!(validate_blob(&b), Err(CompileError::Header(_))));
     }
 
     #[test]

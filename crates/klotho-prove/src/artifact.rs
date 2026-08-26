@@ -26,6 +26,22 @@ pub enum ArtifactKind {
 }
 
 impl ArtifactKind {
+    /// Decode a packed kind byte. `None` for unknown future values.
+    #[must_use]
+    pub const fn from_u8(v: u8) -> Option<Self> {
+        match v {
+            0 => Some(Self::ClusteredMesh),
+            1 => Some(Self::Hull),
+            2 => Some(Self::Texture),
+            3 => Some(Self::Grain),
+            4 => Some(Self::ClipSet),
+            5 => Some(Self::RiteChunk),
+            6 => Some(Self::AffordanceGraph),
+            7 => Some(Self::Embedding),
+            _ => None,
+        }
+    }
+
     pub(crate) fn encode(self, buf: &mut CanonBuf) {
         buf.u8(self as u8);
     }
@@ -39,5 +55,7 @@ mod tests {
     fn discriminants_are_stable() {
         assert_eq!(ArtifactKind::ClusteredMesh as u8, 0);
         assert_eq!(ArtifactKind::Embedding as u8, 7);
+        assert_eq!(ArtifactKind::from_u8(3), Some(ArtifactKind::Grain));
+        assert_eq!(ArtifactKind::from_u8(8), None);
     }
 }

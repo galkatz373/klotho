@@ -38,7 +38,8 @@ PR 15 — `klotho-ui` (attention from snapshot, denied facts, pause save).
 PR 16 — Distaff (`klotho-author`: RON + kdown, CLI cook/preview, cook-time Pin).
 PR 17 — Minds + infer isolator (`klotho-mind` GOAP, `klotho-infer` stub).
 PR 18 — Debug + determinism CI (`klotho-debug` Trace player, replay.yml).
-Next: PR 19 `.warp` packaging.
+PR 19 — `.warp` packaging (`klotho-compile` pack, `klotho-runtime` load, caps + license gate).
+Next: PR 20 net listen-server (optional).
 
 ## Build
 
@@ -71,14 +72,14 @@ klotho/
   crates/klotho-mind/     # GOAP SyncProposer (MindIntent, no Agency)
   crates/klotho-infer/    # InferHost stub; returns InferIntent (no &mut World)
   crates/klotho-manifest/ # Visual/Sonic/Ui manifests; tables pub(crate)
-  crates/klotho-compile/  # kitbash retrieval cook → CAS
+  crates/klotho-compile/  # kitbash retrieval cook → CAS → .warp
   crates/klotho-platform/ # window, OS events, Look accum (no world mutation)
   crates/klotho-render/   # wgpu clustered meshes, Presenter, render thread
   crates/klotho-audio/    # grains from Trace, one bed, integer mix
   crates/klotho-ui/       # attention IR from snapshot, pause save (K17/K19)
   crates/klotho-author/   # Distaff: RON/kdown, cook-time Pin, CLI cook/preview
   crates/klotho-debug/    # Trace player, reject inspector, 4 ms budget gate
-  crates/klotho-runtime/  # headless Intent-script player
+  crates/klotho-runtime/  # headless Intent-script / .warp player
   examples/hearth-slice/  # Appendix A goldens (PR 07b)
   examples/ash-slice/     # Appendix B goldens (PR 07c)
   data/kitbash/           # hashed, licensed, affordance-tagged library

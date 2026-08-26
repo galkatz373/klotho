@@ -37,9 +37,11 @@ pub struct Binding {
     pub material: MaterialTag,
 }
 
-/// Cooked warp contents (`.warp` packing is PR 19).
+/// Cooked warp contents: Canon, seed Intent, CAS, provenance.
 #[derive(Debug)]
 pub struct Cooked {
+    /// Authoring document this cook came from (seed facts + diffs).
+    pub doc: IntentDoc,
     /// Packed Canon.
     pub canon: Canon,
     /// Digest of the cook inputs (not a Trace prefix).
@@ -220,6 +222,7 @@ pub fn cook_with(doc: &IntentDoc, kit: &Kitbash) -> Result<Cooked, CompileError>
 
     let cook_hash = cook_digest(doc, &kit_blobs);
     Ok(Cooked {
+        doc: doc.clone(),
         canon,
         cook_hash,
         canon_hash: cook_hash,

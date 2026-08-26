@@ -33,8 +33,7 @@ impl Default for WindowSpec {
     }
 }
 
-/// Read a file, refusing anything larger than `max` bytes (`.warp` bomb gate
-/// lives in PR 19; this is the platform primitive).
+/// Read a file, refusing anything larger than `max` bytes before `fs::read`.
 pub fn read_capped(path: &Path, max: usize) -> Result<Vec<u8>, std::io::Error> {
     let meta = fs::metadata(path)?;
     let len = meta.len() as usize;

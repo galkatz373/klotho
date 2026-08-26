@@ -972,6 +972,7 @@ version = "0.1.0"
 dependencies = [
  "hearth-slice",
  "klotho-commit",
+ "klotho-compile",
  "klotho-core",
  "klotho-infer",
  "klotho-input",
@@ -983,6 +984,7 @@ dependencies = [
  "klotho-sim",
  "klotho-space",
  "klotho-ui",
+ "klotho-world",
 ]
 
 [[package]]

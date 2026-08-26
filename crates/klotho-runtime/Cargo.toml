@@ -5,9 +5,13 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Klotho headless runtime: plays an Intent script through klotho-sim"
+description = "Klotho headless runtime: plays an Intent script or .warp through klotho-sim"
 readme = false
 publish = false
+
+[lib]
+name = "klotho_runtime"
+path = "src/lib.rs"
 
 [[bin]]
 name = "klotho-runtime"
@@ -16,12 +20,14 @@ path = "src/main.rs"
 [dependencies]
 hearth-slice = { path = "../../examples/hearth-slice" }
 klotho-commit.workspace = true
+klotho-compile.workspace = true
 klotho-core.workspace = true
 klotho-input.workspace = true
 klotho-ir.workspace = true
 klotho-manifest.workspace = true
 klotho-platform.workspace = true
 klotho-sim.workspace = true
+klotho-world.workspace = true
 klotho-space.workspace = true
 klotho-motion.workspace = true
 klotho-mind.workspace = true

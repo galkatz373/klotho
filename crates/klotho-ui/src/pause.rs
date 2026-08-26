@@ -98,14 +98,14 @@ impl Session {
     }
 }
 
-/// K19 checkpoint: hashes + snapshot blob + tick. Packed as `.warp` in PR 19.
+/// K19 checkpoint: hashes + snapshot blob + tick.
 #[derive(Clone, Debug)]
 pub struct SaveQuad {
     /// Frozen Canon hash from the snapshot.
     pub canon_hash: Hash,
     /// Trace prefix ancestry of this checkpoint.
     pub trace_prefix_hash: Hash,
-    /// Projection blob (until `.warp` packing).
+    /// Projection blob.
     pub snapshot: Arc<WorldSnapshot>,
     /// Snapshot tick (`trace_from_tick`).
     pub trace_from_tick: Tick,

@@ -1,23 +1,26 @@
 //! Headless runtime. Plays a recorded `PlayerIntent` script through [`klotho_sim`].
 //!
 //! Owns [`klotho_infer::InferHost`]. Sync proposers register as space, then
-//! motion, then mind (K18/K25).
+//! motion, then mind (K18/K25). Optional first arg: a `.warp` cooked package.
 
 #![forbid(unsafe_code)]
 
 use std::env;
 use std::fs;
+use std::path::Path;
 use std::process::ExitCode;
 
 use hearth_slice::{boot, hearth_doc};
 use klotho_commit::Proposal;
 use klotho_core::Tick;
 use klotho_infer::{InferHost, InferJob};
-use klotho_ir::{InferIntent, PlayerIntent, from_ron};
+use klotho_ir::{InferIntent, MindSpec, PlayerIntent, from_ron};
 use klotho_mind::Mind;
 use klotho_motion::Motion;
 use klotho_sim::{METRIC_PROJ_US, METRIC_SNAP_BYTES, Sim};
 use klotho_space::Space;
+
+use klotho_runtime::{kernel_from_cooked, load_cooked_warp};
 
 fn main() -> ExitCode {
     match run() {
@@ -30,19 +33,19 @@ fn main() -> ExitCode {
 }
 
 fn run() -> Result<(), String> {
-    let script = env::args().nth(1);
-    let kernel = boot();
-    let mut mind = hearth_mind(&kernel);
-    let intents: Vec<PlayerIntent> = match script.as_deref() {
-        Some(path) => {
-            let src = fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
-            from_ron(&src).map_err(|e| format!("parse {path}: {e}"))?
+    let mut args = env::args().skip(1);
+    let first = args.next();
+    let (kernel, minds, script) = match first.as_deref() {
+        Some(path) if path.ends_with(".warp") => {
+            let cooked = load_cooked_warp(Path::new(path))?;
+            let minds = cooked.doc.minds.clone();
+            let kernel = kernel_from_cooked(&cooked)?;
+            (kernel, minds, args.next())
         }
-        None => from_ron(include_str!(
-            "../../../examples/hearth-slice/fixtures/golden_03_carry.ron"
-        ))
-        .map_err(|e| format!("default script: {e}"))?,
+        other => (boot(), hearth_doc().minds, other.map(str::to_string)),
     };
+    let mut mind = bind_mind(&kernel, minds);
+    let intents: Vec<PlayerIntent> = load_intents(script.as_deref())?;
 
     let n = intents.len();
     let mut sim = Sim::new(kernel);
@@ -81,12 +84,30 @@ fn run() -> Result<(), String> {
     Ok(())
 }
 
-fn hearth_mind(kernel: &klotho_commit::CommitKernel) -> Mind {
+fn load_intents(script: Option<&str>) -> Result<Vec<PlayerIntent>, String> {
+    match script {
+        Some(path) => {
+            let src = fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
+            from_ron(&src).map_err(|e| format!("parse {path}: {e}"))
+        }
+        None => from_ron(include_str!(
+            "../../../examples/hearth-slice/fixtures/golden_03_carry.ron"
+        ))
+        .map_err(|e| format!("default script: {e}")),
+    }
+}
+
+fn bind_mind(kernel: &klotho_commit::CommitKernel, minds: Vec<MindSpec>) -> Mind {
     Mind::bind(
-        hearth_doc().minds,
+        minds,
         |n| kernel.canon().pin(n),
         kernel.canon().resource_id("heat"),
     )
+}
+
+#[cfg(test)]
+fn hearth_mind(kernel: &klotho_commit::CommitKernel) -> Mind {
+    bind_mind(kernel, hearth_doc().minds)
 }
 
 fn ingest_infer(host: &InferHost, sim: &mut Sim) {

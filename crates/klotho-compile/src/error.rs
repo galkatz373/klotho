@@ -33,6 +33,8 @@ pub enum CompileError {
     QuantizeOverflow,
     /// Filesystem read failed.
     Io(String),
+    /// `.warp` container is truncated, oversize, or has a bad magic/version.
+    Warp(String),
 }
 
 impl CompileError {
@@ -61,6 +63,7 @@ impl fmt::Display for CompileError {
             Self::Header(s) => write!(f, "Header({s})"),
             Self::QuantizeOverflow => write!(f, "QuantizeOverflow"),
             Self::Io(s) => write!(f, "Io({s})"),
+            Self::Warp(s) => write!(f, "Warp({s})"),
         }
     }
 }

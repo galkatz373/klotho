@@ -16,6 +16,7 @@ klotho-world.workspace = true
 
 [dev-dependencies]
 klotho-canon.workspace = true
+klotho-debug.workspace = true
 klotho-ir.workspace = true
 
 [lints]

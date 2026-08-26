@@ -37,7 +37,8 @@ PR 14 — `klotho-audio` (grains from Trace, one bed, header caps).
 PR 15 — `klotho-ui` (attention from snapshot, denied facts, pause save).
 PR 16 — Distaff (`klotho-author`: RON + kdown, CLI cook/preview, cook-time Pin).
 PR 17 — Minds + infer isolator (`klotho-mind` GOAP, `klotho-infer` stub).
-Next: PR 18 Debug + determinism CI.
+PR 18 — Debug + determinism CI (`klotho-debug` Trace player, replay.yml).
+Next: PR 19 `.warp` packaging.
 
 ## Build
 
@@ -76,6 +77,7 @@ klotho/
   crates/klotho-audio/    # grains from Trace, one bed, integer mix
   crates/klotho-ui/       # attention IR from snapshot, pause save (K17/K19)
   crates/klotho-author/   # Distaff: RON/kdown, cook-time Pin, CLI cook/preview
+  crates/klotho-debug/    # Trace player, reject inspector, 4 ms budget gate
   crates/klotho-runtime/  # headless Intent-script player
   examples/hearth-slice/  # Appendix A goldens (PR 07b)
   examples/ash-slice/     # Appendix B goldens (PR 07c)

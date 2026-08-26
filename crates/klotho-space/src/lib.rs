@@ -281,16 +281,7 @@ mod tests {
         let d = k.step(Tick(1), Budget::HEARTH, &mut [&mut space]).unwrap();
         let us = t0.elapsed().as_micros();
         assert!(d.rejects.is_empty(), "{d:?}");
-        // Debug is not the gate (PR 18: warn vs fail configurable). Release
-        // must stay under the 4 ms Hearth budget.
-        let cap = if cfg!(debug_assertions) {
-            50_000
-        } else {
-            4_000
-        };
-        assert!(
-            us < cap,
-            "64-awake step is the budget gate, took {us} us (cap {cap})"
-        );
+        // Warn in local debug so a slow host does not flake; CI/release fails.
+        klotho_debug::BudgetMode::from_env().enforce(us);
     }
 }

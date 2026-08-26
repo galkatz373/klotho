@@ -856,6 +856,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "klotho-debug"
+version = "0.1.0"
+dependencies = [
+ "ash-slice",
+ "hearth-slice",
+ "klotho-canon",
+ "klotho-commit",
+ "klotho-core",
+ "klotho-ir",
+ "klotho-space",
+ "klotho-trace",
+ "klotho-ui",
+ "klotho-world",
+]
+
+[[package]]
 name = "klotho-infer"
 version = "0.1.0"
 dependencies = [
@@ -988,6 +1004,7 @@ dependencies = [
  "klotho-canon",
  "klotho-commit",
  "klotho-core",
+ "klotho-debug",
  "klotho-ir",
  "klotho-world",
 ]

@@ -1,0 +1,30 @@
+name: replay
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  replay:
+    name: goldens · 4 ms gate
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.98.0
+      - name: golden Trace prefix hashes (P0)
+        run: cargo test -p klotho-debug
+      - name: 64-awake 4 ms gate (fail)
+        run: cargo test -p klotho-debug --release --test awake64
+        env:
+          KLOTHO_BUDGET_FAIL: "1"

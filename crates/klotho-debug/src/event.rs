@@ -4,11 +4,13 @@ use klotho_core::{LawId, RejectReason, Tick};
 use klotho_trace::{ProposalKind, TraceDelta, TraceEvent};
 
 /// Observed counters for one step. `us_sim` is wall time of `CommitKernel::step`.
+///
+/// `pred_ops` and `rite_steps` stay 0: `TraceDelta` does not carry those counters.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default)]
 pub struct BudgetUsed {
-    /// Predicate bytecode ops used this tick.
+    /// Unused placeholder. Always 0.
     pub pred_ops: u16,
-    /// Rite ISA steps used this tick.
+    /// Unused placeholder. Always 0.
     pub rite_steps: u16,
     /// Observed step wall time, microseconds.
     pub us_sim: u32,
@@ -23,7 +25,7 @@ pub struct DebugEvent {
     pub admitted: Vec<TraceEvent>,
     /// Legal rejects for this tick.
     pub rejected: Vec<(ProposalKind, RejectReason)>,
-    /// Laws that fired this tick.
+    /// Unused placeholder. Always empty: `TraceDelta` has no law-id list.
     pub laws_fired: Vec<LawId>,
     /// Observed budget use.
     pub budget: BudgetUsed,

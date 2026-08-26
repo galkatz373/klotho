@@ -1,4 +1,4 @@
-//! 4 ms kernel gate. Shared by space's 64-awake test and this crate's bench.
+//! 4 ms kernel gate. Shared by space's 64-awake test and `tests/awake64.rs`.
 
 use klotho_core::Budget;
 

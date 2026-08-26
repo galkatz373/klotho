@@ -6,8 +6,6 @@
 //! `KLOTHO_BUDGET_FAIL=1` panics when the step is ≥ 4 ms; `=0` prints a warning.
 //! Unset: warn in debug, fail in release.
 //!
-//! HashMap iteration on the commit path is a workspace clippy deny (K25).
-//!
 //! `#![forbid(unsafe_code)]`.
 
 #![forbid(unsafe_code)]

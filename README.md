@@ -36,7 +36,8 @@ PR 13 — `klotho-motion` (verb→clip + root motion, debug T-pose).
 PR 14 — `klotho-audio` (grains from Trace, one bed, header caps).
 PR 15 — `klotho-ui` (attention from snapshot, denied facts, pause save).
 PR 16 — Distaff (`klotho-author`: RON + kdown, CLI cook/preview, cook-time Pin).
-Next: PR 17 Minds + infer isolator.
+PR 17 — Minds + infer isolator (`klotho-mind` GOAP, `klotho-infer` stub).
+Next: PR 18 Debug + determinism CI.
 
 ## Build
 
@@ -66,6 +67,8 @@ klotho/
   crates/klotho-input/    # device sample → PlayerIntent
   crates/klotho-space/    # 2.5D AABB / swept-capsule SyncProposer (non-Actor)
   crates/klotho-motion/   # verb→clip + root-motion SyncProposer (Actors)
+  crates/klotho-mind/     # GOAP SyncProposer (MindIntent, no Agency)
+  crates/klotho-infer/    # InferHost stub; returns InferIntent (no &mut World)
   crates/klotho-manifest/ # Visual/Sonic/Ui manifests; tables pub(crate)
   crates/klotho-compile/  # kitbash retrieval cook → CAS
   crates/klotho-platform/ # window, OS events, Look accum (no world mutation)

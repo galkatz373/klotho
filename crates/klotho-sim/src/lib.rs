@@ -24,7 +24,8 @@ pub enum Phase {
     Ingest,
     /// `CommitKernel::step` (K21) then snapshot publish.
     Step,
-    /// Kick async infer against the **previous** snapshot. No-op until PR 17.
+    /// Kick async infer against the **previous** snapshot.
+    /// `InferHost` lives in `klotho-runtime`; this phase is a marker.
     InferKick,
     /// Listen-server flush. No-op until PR 20.
     NetFlush,

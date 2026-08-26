@@ -1,0 +1,28 @@
+[package]
+name = "klotho-infer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Klotho infer isolator: InferHost stub returns InferIntent (no &mut World)"
+readme = false
+publish = false
+
+[dependencies]
+klotho-core.workspace = true
+klotho-ir.workspace = true
+klotho-world.workspace = true
+
+[dev-dependencies]
+klotho-canon.workspace = true
+
+[lints.rust]
+unsafe_code = "allow"
+missing_docs = "warn"
+
+[lints.clippy]
+dbg_macro = "deny"
+disallowed_methods = "deny"
+todo = "warn"
+unimplemented = "warn"

@@ -1,0 +1,22 @@
+[package]
+name = "klotho-mind"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Klotho mind: GOAP SyncProposer over the affordance graph"
+readme = false
+publish = false
+
+[dependencies]
+klotho-commit.workspace = true
+klotho-core.workspace = true
+klotho-ir.workspace = true
+klotho-world.workspace = true
+
+[dev-dependencies]
+klotho-canon.workspace = true
+
+[lints]
+workspace = true

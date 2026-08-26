@@ -14,7 +14,9 @@ use std::sync::Arc;
 use klotho_canon::cook;
 use klotho_commit::{CommitKernel, Proposal};
 use klotho_core::{Budget, Hash, LocusKind, PlayerId, Tick};
-use klotho_ir::{CanonDiff, IntentDoc, Name, ProvenanceId, Rel, SeedFact, StyleIntent, from_ron};
+use klotho_ir::{
+    CanonDiff, IntentDoc, MindSpec, Name, ProvenanceId, Rel, SeedFact, StyleIntent, from_ron,
+};
 use klotho_world::World;
 
 /// Appendix A Canon diffs (parse-only fixture in `klotho-canon`).
@@ -62,9 +64,33 @@ pub fn hearth_doc() -> IntentDoc {
         },
         canon_diffs,
         seed: hearth_seed(),
-        minds: Vec::new(),
+        minds: hearth_minds(),
         provenance: ProvenanceId(Hash::ZERO),
     }
+}
+
+fn hearth_minds() -> Vec<MindSpec> {
+    vec![
+        MindSpec {
+            locus: Name::from("bran"),
+            goals: vec![Name::from("stay_near_forge"), Name::from("investigate")],
+            templates: vec!["{name} won't sell that.".into()],
+        },
+        MindSpec {
+            locus: Name::from("mira"),
+            goals: vec![
+                Name::from("fetch_bucket"),
+                Name::from("pump_bellows"),
+                Name::from("investigate"),
+            ],
+            templates: Vec::new(),
+        },
+        MindSpec {
+            locus: Name::from("kel"),
+            goals: vec![Name::from("evening_trade")],
+            templates: Vec::new(),
+        },
+    ]
 }
 
 /// Replay recorded player packets, one tick each. Stamps `at` to the live tick.

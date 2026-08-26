@@ -12,6 +12,8 @@ members = [
     "crates/klotho-input",
     "crates/klotho-space",
     "crates/klotho-motion",
+    "crates/klotho-mind",
+    "crates/klotho-infer",
     "crates/klotho-manifest",
     "crates/klotho-compile",
     "crates/klotho-platform",
@@ -45,6 +47,8 @@ klotho-sim = { path = "crates/klotho-sim" }
 klotho-input = { path = "crates/klotho-input" }
 klotho-space = { path = "crates/klotho-space" }
 klotho-motion = { path = "crates/klotho-motion" }
+klotho-mind = { path = "crates/klotho-mind" }
+klotho-infer = { path = "crates/klotho-infer" }
 klotho-manifest = { path = "crates/klotho-manifest" }
 klotho-compile = { path = "crates/klotho-compile" }
 klotho-platform = { path = "crates/klotho-platform" }

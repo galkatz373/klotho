@@ -1,8 +1,8 @@
 //! Headless runtime. Plays a recorded `PlayerIntent` script through [`klotho_sim`].
 //!
-//! PR 17 will construct and poll the isolator via `InferHost::new`,
-//! `InferHost::submit`, and `InferHost::poll`. This crate is the CI allowlist
-//! for those calls; PR 08 does not invoke them. No `klotho-caps` / InferToken.
+//! Owns [`klotho_infer::InferHost`]: constructs it with `InferHost::new`, copies
+//! out with `InferHost::poll`, and kicks with `InferHost::submit`. Sync proposers
+//! register as space, then motion, then mind (K18/K25). No `klotho-caps` / InferToken.
 
 #![forbid(unsafe_code)]
 
@@ -10,10 +10,12 @@ use std::env;
 use std::fs;
 use std::process::ExitCode;
 
-use hearth_slice::boot;
+use hearth_slice::{boot, hearth_doc};
 use klotho_commit::Proposal;
 use klotho_core::Tick;
-use klotho_ir::{PlayerIntent, from_ron};
+use klotho_infer::{InferHost, InferJob};
+use klotho_ir::{InferIntent, PlayerIntent, from_ron};
+use klotho_mind::Mind;
 use klotho_motion::Motion;
 use klotho_sim::{METRIC_PROJ_US, METRIC_SNAP_BYTES, Sim};
 use klotho_space::Space;
@@ -31,6 +33,7 @@ fn main() -> ExitCode {
 fn run() -> Result<(), String> {
     let script = env::args().nth(1);
     let kernel = boot();
+    let mut mind = hearth_mind(&kernel);
     let intents: Vec<PlayerIntent> = match script.as_deref() {
         Some(path) => {
             let src = fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
@@ -44,25 +47,33 @@ fn run() -> Result<(), String> {
 
     let n = intents.len();
     let mut sim = Sim::new(kernel);
+    let host = InferHost::new();
     let mut space = Space;
     let mut motion = Motion::hearth();
     let mut rejects = 0usize;
     let mut report = None;
     for mut pi in intents {
         pi.at = sim.kernel().world().tick();
+        ingest_infer(&host, &mut sim);
         // Devices emit PlayerIntent; the runtime wraps Proposal::Player.
         sim.ingest(wrap_player(pi));
         let r = sim
-            .tick(Tick(1), &mut [&mut space, &mut motion])
+            .tick(Tick(1), &mut [&mut space, &mut motion, &mut mind])
             .map_err(|e| format!("sim tick: {e:?}"))?;
         rejects += r.delta.rejects.len();
         report = Some(r);
+        kick_infer(&host, &mut sim);
     }
     let report = match report {
         Some(r) => r,
-        None => sim
-            .tick(Tick(1), &mut [&mut space, &mut motion])
-            .map_err(|e| format!("sim tick: {e:?}"))?,
+        None => {
+            ingest_infer(&host, &mut sim);
+            let r = sim
+                .tick(Tick(1), &mut [&mut space, &mut motion, &mut mind])
+                .map_err(|e| format!("sim tick: {e:?}"))?;
+            kick_infer(&host, &mut sim);
+            r
+        }
     };
     println!(
         "intents={n} rejects={rejects} {}={} {}={}",
@@ -71,14 +82,43 @@ fn run() -> Result<(), String> {
     Ok(())
 }
 
-/// Devices emit [`PlayerIntent`]; this is the only wrap site in the runtime.
+fn hearth_mind(kernel: &klotho_commit::CommitKernel) -> Mind {
+    Mind::bind(
+        hearth_doc().minds,
+        |n| kernel.canon().pin(n),
+        kernel.canon().resource_id("heat"),
+    )
+}
+
+fn ingest_infer(host: &InferHost, sim: &mut Sim) {
+    let now = sim.kernel().world().tick();
+    let slo = sim.budget().eval_slo_ticks;
+    let polled = InferHost::poll(host, now, slo);
+    for ii in polled.intents {
+        sim.ingest(wrap_infer(ii));
+    }
+}
+
+fn kick_infer(host: &InferHost, sim: &mut Sim) {
+    let snap = sim.kernel_mut().snapshot();
+    let tick = sim.kernel().world().tick();
+    let _ = InferHost::submit(host, InferJob { snap, tick });
+}
+
+/// Devices emit [`PlayerIntent`]; this is the only Player wrap site in the runtime.
 fn wrap_player(pi: PlayerIntent) -> Proposal {
     Proposal::Player(pi)
 }
 
+/// Isolator emits [`InferIntent`]; this is the only Infer wrap site in the runtime.
+fn wrap_infer(ii: InferIntent) -> Proposal {
+    Proposal::Infer(ii)
+}
+
 #[cfg(test)]
 mod tests {
-    use klotho_core::{Mm, PlayerId, PoseMm, Tick, YawMd};
+    use hearth_slice::pin;
+    use klotho_core::{Budget, Mm, PlayerId, PoseMm, RejectReason, Tick, YawMd};
     use klotho_input::{DeviceSample, InputMapper};
     use klotho_ir::{Analog, Verb};
     use klotho_manifest::{EYE_HEIGHT_MM, Observer};
@@ -98,6 +138,107 @@ mod tests {
             }
             other => panic!("expected Player, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn infer_intent_is_wrapped_as_infer_proposal() {
+        let ii = InferIntent {
+            model: klotho_ir::ModelId(klotho_ir::Name::from("stub")),
+            locus: None,
+            verb: Verb::Look,
+            target: klotho_ir::IntentTarget::None,
+            claimed_facts: Vec::new(),
+        };
+        match wrap_infer(ii) {
+            Proposal::Infer(p) => assert_eq!(p.verb, Verb::Look),
+            other => panic!("expected Infer, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn infer_off_npcs_act() {
+        let kernel = boot();
+        let mut mind = hearth_mind(&kernel);
+        let mut sim = Sim::new(kernel);
+        let host = InferHost::new();
+        let planned = mind.plan(&sim.kernel().world().view());
+        assert!(
+            !planned.is_empty(),
+            "GOAP must emit without infer jobs: {planned:?}"
+        );
+        let polled = InferHost::poll(
+            &host,
+            sim.kernel().world().tick(),
+            Budget::HEARTH.eval_slo_ticks,
+        );
+        assert!(polled.intents.is_empty(), "infer-off poll is empty");
+        let mut space = Space;
+        let mut motion = Motion::hearth();
+        let r = sim
+            .tick(Tick(1), &mut [&mut space, &mut motion, &mut mind])
+            .unwrap();
+        let kel = pin(sim.kernel(), "kel");
+        assert!(
+            !r.delta.events.is_empty() || planned.iter().any(|i| i.locus == kel),
+            "expected a Mind act from kel, got {r:?} plan={planned:?}"
+        );
+    }
+
+    #[test]
+    fn twelve_tick_old_infer_intent_is_ingested() {
+        let kernel = boot();
+        let mut mind = hearth_mind(&kernel);
+        let mut sim = Sim::new(kernel);
+        let host = InferHost::new();
+        let t0 = sim.kernel().world().tick();
+        kick_infer(&host, &mut sim);
+        let mut space = Space;
+        let mut motion = Motion::hearth();
+        for _ in 0..12 {
+            let _ = sim
+                .tick(Tick(1), &mut [&mut space, &mut motion, &mut mind])
+                .unwrap();
+        }
+        let now = sim.kernel().world().tick();
+        assert_eq!(now - t0, 12);
+        let polled = InferHost::poll(&host, now, Budget::HEARTH.eval_slo_ticks);
+        assert_eq!(polled.intents.len(), 1, "{polled:?}");
+        assert!(polled.stale.is_empty(), "{polled:?}");
+        sim.ingest(wrap_infer(polled.intents[0].clone()));
+        let r = sim
+            .tick(Tick(1), &mut [&mut space, &mut motion, &mut mind])
+            .unwrap();
+        assert!(
+            r.delta
+                .rejects
+                .iter()
+                .all(|(_, reason)| *reason != RejectReason::StaleEpoch),
+            "{r:?}"
+        );
+    }
+
+    #[test]
+    fn thirteen_tick_old_job_is_stale_epoch() {
+        let kernel = boot();
+        let mut mind = hearth_mind(&kernel);
+        let mut sim = Sim::new(kernel);
+        let host = InferHost::new();
+        kick_infer(&host, &mut sim);
+        let mut space = Space;
+        let mut motion = Motion::hearth();
+        for _ in 0..13 {
+            let _ = sim
+                .tick(Tick(1), &mut [&mut space, &mut motion, &mut mind])
+                .unwrap();
+        }
+        let now = sim.kernel().world().tick();
+        assert_eq!(now.0, 13);
+        let polled = InferHost::poll(&host, now, Budget::HEARTH.eval_slo_ticks);
+        assert!(polled.intents.is_empty(), "{polled:?}");
+        assert!(
+            polled.stale.contains(&RejectReason::StaleEpoch),
+            "{polled:?}"
+        );
     }
 
     #[test]

@@ -57,14 +57,7 @@ impl Mind {
     ) -> Self {
         let specs: Vec<MindSpec> = specs.into_iter().collect();
         let mut pins = BTreeMap::new();
-        for extra in [
-            "hearth",
-            "bucket",
-            "ingot",
-            "oak_door",
-            "player",
-            "fathers_hammer",
-        ] {
+        for extra in ["hearth", "bucket", "ingot"] {
             if let Some(s) = pin(extra) {
                 pins.insert(Name::from(extra), s);
             }
@@ -291,13 +284,10 @@ mod tests {
         let mut mind = Mind::bind(
             vec![spec("bran", &["investigate"])],
             |n| {
-                k.canon().pin(n).or_else(|| {
-                    // tests bind via closure over kernel pins + local map
-                    match n {
-                        "bran" => Some(actor(1)),
-                        "hearth" => Sigil::pack(LocusKind::Place, 0, 99),
-                        _ => None,
-                    }
+                k.canon().pin(n).or_else(|| match n {
+                    "bran" => Some(actor(1)),
+                    "hearth" => Sigil::pack(LocusKind::Place, 0, 99),
+                    _ => None,
                 })
             },
             None,

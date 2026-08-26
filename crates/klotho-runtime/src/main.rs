@@ -1,8 +1,7 @@
 //! Headless runtime. Plays a recorded `PlayerIntent` script through [`klotho_sim`].
 //!
-//! Owns [`klotho_infer::InferHost`]: constructs it with `InferHost::new`, copies
-//! out with `InferHost::poll`, and kicks with `InferHost::submit`. Sync proposers
-//! register as space, then motion, then mind (K18/K25). No `klotho-caps` / InferToken.
+//! Owns [`klotho_infer::InferHost`]. Sync proposers register as space, then
+//! motion, then mind (K18/K25).
 
 #![forbid(unsafe_code)]
 
@@ -117,7 +116,6 @@ fn wrap_infer(ii: InferIntent) -> Proposal {
 
 #[cfg(test)]
 mod tests {
-    use hearth_slice::pin;
     use klotho_core::{Budget, Mm, PlayerId, PoseMm, RejectReason, Tick, YawMd};
     use klotho_input::{DeviceSample, InputMapper};
     use klotho_ir::{Analog, Verb};
@@ -177,10 +175,9 @@ mod tests {
         let r = sim
             .tick(Tick(1), &mut [&mut space, &mut motion, &mut mind])
             .unwrap();
-        let kel = pin(sim.kernel(), "kel");
         assert!(
-            !r.delta.events.is_empty() || planned.iter().any(|i| i.locus == kel),
-            "expected a Mind act from kel, got {r:?} plan={planned:?}"
+            !r.delta.events.is_empty(),
+            "expected a committed Mind act, got {r:?}"
         );
     }
 

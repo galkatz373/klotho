@@ -1,9 +1,9 @@
 //! Inference isolator. Returns [`InferIntent`]; never `&mut World`.
 //!
 //! Only `klotho-runtime` constructs and polls this host (CI allowlist). v1 is a
-//! trusted-but-abortable in-process stub: default zero weights, no model load.
-//! Jobs older than `eval_slo_ticks` are dropped as [`RejectReason::StaleEpoch`].
-//! Age equal to the cap is still copied out. Unsafe is allowed for future FFI.
+//! safe in-process stub: default zero weights, no model load. Jobs older than
+//! `eval_slo_ticks` are dropped as [`RejectReason::StaleEpoch`]. Age equal to
+//! the cap is still copied out.
 
 #![allow(unsafe_code)]
 #![warn(missing_docs)]
@@ -167,10 +167,7 @@ mod tests {
         let _ = InferHost::submit(&host, job_at(Tick(0)));
         let p = InferHost::poll(&host, Tick(13), Budget::HEARTH.eval_slo_ticks);
         assert!(p.intents.is_empty(), "{p:?}");
-        assert!(
-            p.stale.contains(&RejectReason::StaleEpoch),
-            "{p:?}"
-        );
+        assert!(p.stale.contains(&RejectReason::StaleEpoch), "{p:?}");
     }
 
     #[test]

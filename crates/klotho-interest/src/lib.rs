@@ -7,7 +7,7 @@
 
 use std::collections::BTreeMap;
 
-use klotho_core::{LOD_PERIOD, LocusKind, PoseMm, Sigil, SimLod};
+use klotho_core::{LOD_PERIOD, LocusKind, NO_ISLAND, PoseMm, Sigil, SimLod};
 use klotho_world::WorldView;
 
 /// Radii for Full / Far rings, millimetres.
@@ -70,7 +70,9 @@ pub fn classify(view: &WorldView<'_>, cfg: &InterestConfig) -> Interest {
     for s in view.loci() {
         if lod.get(&s) == Some(&SimLod::Full) {
             if let Some((id, _)) = view.island(s) {
-                island_full.insert(id, true);
+                if id != NO_ISLAND {
+                    island_full.insert(id, true);
+                }
             }
         }
     }
@@ -78,6 +80,9 @@ pub fn classify(view: &WorldView<'_>, cfg: &InterestConfig) -> Interest {
         let Some((id, _)) = view.island(s) else {
             continue;
         };
+        if id == NO_ISLAND {
+            continue;
+        }
         if island_full.get(&id) == Some(&true) {
             if let Some(slot) = lod.get_mut(&s) {
                 *slot = SimLod::Full;
@@ -259,5 +264,22 @@ mod tests {
     #[test]
     fn lod_period_is_six() {
         assert_eq!(LOD_PERIOD, 6);
+    }
+
+    #[test]
+    fn no_island_does_not_wake_unrelated_scenery() {
+        let mut w = world();
+        let player = actor(1);
+        let wall = relic(2);
+        plant(&mut w, player, 0);
+        plant(&mut w, wall, 40_000);
+        {
+            let mut m = w.mutate();
+            m.set_island(player, NO_ISLAND, 0).unwrap();
+            m.set_island(wall, NO_ISLAND, 0).unwrap();
+        }
+        let out = classify(&w.view(), &InterestConfig::default());
+        assert_eq!(out.lod.get(&player), Some(&SimLod::Full));
+        assert_eq!(out.lod.get(&wall), Some(&SimLod::Far));
     }
 }

@@ -1,28 +1,59 @@
 //! This-tick island partition (K58). Pure `F(view)`; not last-tick memory.
+//!
+//! Occupancy (`space_ix`, including Dormant / OpaqueClosed) is for blocking.
+//! Island members are **phys bodies** only. Idle scenery and Place floors
+//! stay out of the contact graph so a city of touching walls is not one
+//! island. Oversize / too-many groups fail closed (omit, do not split).
 
 use std::collections::BTreeMap;
 
-use klotho_core::{MAX_ISLANDS, Sigil, Vel3};
+use klotho_core::{LocusKind, MAX_ISLAND_SIZE, MAX_ISLANDS, Sigil, SimLod, Vel3};
 use klotho_ir::Rel;
 use klotho_world::WorldView;
 
-/// Union-find on posed hulls this tick.
+/// Result of one K58 pass.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct Partition {
+    /// Dense-ranked contact groups, id `0..n`.
+    pub islands: Vec<(u16, Vec<Sigil>)>,
+    /// Groups omitted because `len > MAX_ISLAND_SIZE` (whole group, not split).
+    pub omitted_too_large: u32,
+    /// Groups omitted after [`MAX_ISLANDS`] (min-Sigil rank, fail closed).
+    pub omitted_too_many: u32,
+}
+
+/// Union-find on **phys-body** hulls this tick.
 ///
-/// Seed = Full-lod hulls (missing lod is Full) that are awake (`sleep_ticks == 0`)
+/// Seed = [`SimLod::Full`] phys bodies that are awake (`sleep_ticks == 0`)
 /// **or** have non-zero vel **or** `phys_req` **or** are `PilotedBy`/`AttachedTo`
-/// an awake locus. Flood-fill through overlapping hulls including sleepers.
-/// Island id = dense rank of min-Sigil. Extra components past [`MAX_ISLANDS`]
-/// are dropped (fail closed).
+/// an awake locus. Flood-fill through overlapping **phys-body** hulls
+/// including sleepers (crate piles), never through idle `OpaqueClosed`
+/// scenery or [`LocusKind::Place`] floors.
+///
+/// Island id = dense rank of min-Sigil. Oversize / extra groups are omitted
+/// (fail closed), not split and not silently truncated into a live island.
 #[must_use]
-pub fn partition_islands(view: &WorldView<'_>) -> Vec<(u16, Vec<Sigil>)> {
+pub fn partition_islands(view: &WorldView<'_>) -> Partition {
+    partition_with_caps(view, MAX_ISLANDS, MAX_ISLAND_SIZE)
+}
+
+#[must_use]
+pub(crate) fn partition_with_caps(
+    view: &WorldView<'_>,
+    max_islands: u16,
+    max_size: u16,
+) -> Partition {
     let mut hulls: Vec<(Sigil, klotho_core::AabbMm)> = Vec::new();
     for s in view.loci() {
+        if !is_phys_body(view, s) {
+            continue;
+        }
         if let Some(aabb) = view.posed_hull(s) {
             hulls.push((s, aabb));
         }
     }
     if hulls.is_empty() {
-        return Vec::new();
+        return Partition::default();
     }
 
     let mut ix_of: BTreeMap<Sigil, u32> = BTreeMap::new();
@@ -108,26 +139,80 @@ pub fn partition_islands(view: &WorldView<'_>) -> Vec<(u16, Vec<Sigil>)> {
         groups.entry(root).or_default().push(hulls[i].0);
     }
 
-    let mut ranked: Vec<(Sigil, Vec<Sigil>)> = groups
-        .into_values()
-        .map(|mut members| {
-            members.sort_unstable();
-            let min = members[0];
-            (min, members)
-        })
-        .collect();
-    ranked.sort_unstable_by_key(|(min, _)| *min);
+    let mut ok: Vec<(Sigil, Vec<Sigil>)> = Vec::new();
+    let mut omitted_too_large = 0u32;
+    let max_size_usize = usize::from(max_size);
+    for mut members in groups.into_values() {
+        members.sort_unstable();
+        let min = members[0];
+        if members.len() > max_size_usize {
+            omitted_too_large = omitted_too_large.saturating_add(1);
+            continue;
+        }
+        ok.push((min, members));
+    }
+    ok.sort_unstable_by_key(|(min, _)| *min);
 
-    ranked
-        .into_iter()
-        .take(usize::from(MAX_ISLANDS))
-        .enumerate()
-        .map(|(i, (_, members))| (i as u16, members))
-        .collect()
+    let cap = usize::from(max_islands);
+    let omitted_too_many = u32::try_from(ok.len().saturating_sub(cap)).unwrap_or(u32::MAX);
+    ok.truncate(cap);
+
+    Partition {
+        islands: ok
+            .into_iter()
+            .enumerate()
+            .map(|(i, (_, members))| (i as u16, members))
+            .collect(),
+        omitted_too_large,
+        omitted_too_many,
+    }
+}
+
+/// Actor, or a Relic that is not idle kinematic scenery.
+fn is_phys_body(view: &WorldView<'_>, s: Sigil) -> bool {
+    match s.kind() {
+        Some(LocusKind::Actor) => true,
+        Some(LocusKind::Relic) => !is_idle_scenery(view, s) || is_attach_node(view, s),
+        _ => false,
+    }
+}
+
+/// Idle `OpaqueClosed` relic: locked door / static wall. Occupancy only.
+fn is_idle_scenery(view: &WorldView<'_>, s: Sigil) -> bool {
+    if !view.opaque_closed(s) {
+        return false;
+    }
+    let sleep = view.island(s).map(|(_, t)| t).unwrap_or(0);
+    if sleep != 0 {
+        return false;
+    }
+    if view.phys_req(s).is_some() {
+        return false;
+    }
+    if let Some((vel, yaw_rate)) = view.vel(s) {
+        if vel != Vel3::ZERO || yaw_rate != 0 {
+            return false;
+        }
+    }
+    true
+}
+
+fn is_attach_node(view: &WorldView<'_>, s: Sigil) -> bool {
+    for rel in [Rel::PilotedBy, Rel::AttachedTo] {
+        if view.related(s, rel).next().is_some() {
+            return true;
+        }
+    }
+    false
 }
 
 fn is_seed(view: &WorldView<'_>, s: Sigil) -> bool {
-    // AAA-05 lod column is not here; missing lod is Full.
+    if view.sim_lod(s) != SimLod::Full {
+        return false;
+    }
+    if !is_phys_body(view, s) {
+        return false;
+    }
     let sleep = view.island(s).map(|(_, t)| t).unwrap_or(0);
     if sleep == 0 {
         return true;
@@ -161,7 +246,8 @@ mod tests {
 
     use klotho_canon::cook_diffs;
     use klotho_core::{
-        AabbMm, BlobId, Hash, IVec3, LocusKind, Mm, PhysRequest, PoseMm, Sigil, Vel3, VelFx, YawMd,
+        AabbMm, BlobId, Hash, IVec3, LocusKind, Mm, PhysRequest, PoseMm, Sigil, SimLod, Vel3,
+        VelFx, YawMd,
     };
     use klotho_ir::{CanonDiff, Rel, from_ron};
     use klotho_world::World;
@@ -170,6 +256,14 @@ mod tests {
 
     fn relic(id: u128) -> Sigil {
         Sigil::pack(LocusKind::Relic, 0, id).unwrap()
+    }
+
+    fn actor(id: u128) -> Sigil {
+        Sigil::pack(LocusKind::Actor, 0, id).unwrap()
+    }
+
+    fn place(id: u128) -> Sigil {
+        Sigil::pack(LocusKind::Place, 0, id).unwrap()
     }
 
     fn box_mm(half: i32) -> AabbMm {
@@ -192,9 +286,17 @@ mod tests {
         World::new(Arc::new(cook_diffs(&d).unwrap()), Hash::ZERO)
     }
 
+    fn opaque_world() -> World {
+        let d: Vec<CanonDiff> = from_ron(
+            r#"[AddAffordance(Affordance(id: "Opaque", requires: [], grants: [], conflicts: []))]"#,
+        )
+        .unwrap();
+        World::new(Arc::new(cook_diffs(&d).unwrap()), Hash::ZERO)
+    }
+
     fn plant(w: &mut World, s: Sigil, x: i32, sleep: u16) {
         let mut m = w.mutate();
-        m.insert_locus(s, LocusKind::Relic).unwrap();
+        m.insert_locus(s, s.kind().unwrap()).unwrap();
         m.set_hull(s, box_mm(100), BlobId::ZERO).unwrap();
         m.set_pose(s, PoseMm::new(Mm(x), Mm(0), Mm(0), YawMd(0)))
             .unwrap();
@@ -210,11 +312,13 @@ mod tests {
         plant(&mut w, a, 10_000, 0);
         plant(&mut w, b, 0, 0);
         plant(&mut w, c, 20_000, 0);
-        let islands = partition_islands(&w.view());
-        assert_eq!(islands.len(), 3);
-        assert_eq!(islands[0], (0, vec![b]));
-        assert_eq!(islands[1], (1, vec![c]));
-        assert_eq!(islands[2], (2, vec![a]));
+        let part = partition_islands(&w.view());
+        assert_eq!(part.omitted_too_large, 0);
+        assert_eq!(part.omitted_too_many, 0);
+        assert_eq!(part.islands.len(), 3);
+        assert_eq!(part.islands[0], (0, vec![b]));
+        assert_eq!(part.islands[1], (1, vec![c]));
+        assert_eq!(part.islands[2], (2, vec![a]));
     }
 
     #[test]
@@ -226,9 +330,9 @@ mod tests {
         plant(&mut w, awake, 0, 0);
         plant(&mut w, sleep_near, 150, 12);
         plant(&mut w, sleep_far, 50_000, 12);
-        let islands = partition_islands(&w.view());
-        assert_eq!(islands.len(), 1, "{islands:?}");
-        assert_eq!(islands[0].1, vec![awake, sleep_near]);
+        let part = partition_islands(&w.view());
+        assert_eq!(part.islands.len(), 1, "{part:?}");
+        assert_eq!(part.islands[0].1, vec![awake, sleep_near]);
     }
 
     #[test]
@@ -243,10 +347,10 @@ mod tests {
             m.set_island(a, 7, 0).unwrap();
             m.set_island(b, 7, 0).unwrap();
         }
-        let islands = partition_islands(&w.view());
-        assert_eq!(islands.len(), 2, "{islands:?}");
-        assert_eq!(islands[0].0, 0);
-        assert_eq!(islands[1].0, 1);
+        let part = partition_islands(&w.view());
+        assert_eq!(part.islands.len(), 2, "{part:?}");
+        assert_eq!(part.islands[0].0, 0);
+        assert_eq!(part.islands[1].0, 1);
     }
 
     #[test]
@@ -263,8 +367,8 @@ mod tests {
                 },
             )
             .unwrap();
-        let islands = partition_islands(&w.view());
-        assert_eq!(islands, vec![(0, vec![s])]);
+        let part = partition_islands(&w.view());
+        assert_eq!(part.islands, vec![(0, vec![s])]);
     }
 
     #[test]
@@ -279,8 +383,8 @@ mod tests {
                 0,
             )
             .unwrap();
-        let islands = partition_islands(&w.view());
-        assert_eq!(islands, vec![(0, vec![s])]);
+        let part = partition_islands(&w.view());
+        assert_eq!(part.islands, vec![(0, vec![s])]);
     }
 
     #[test]
@@ -291,9 +395,9 @@ mod tests {
         plant(&mut w, parent, 0, 0);
         plant(&mut w, child, 50_000, 12);
         w.mutate().add_rel(child, Rel::AttachedTo, parent).unwrap();
-        let islands = partition_islands(&w.view());
-        assert_eq!(islands.len(), 2, "{islands:?}");
-        assert!(islands.iter().any(|(_, m)| m == &vec![child]));
+        let part = partition_islands(&w.view());
+        assert_eq!(part.islands.len(), 2, "{part:?}");
+        assert!(part.islands.iter().any(|(_, m)| m == &vec![child]));
     }
 
     #[test]
@@ -301,7 +405,83 @@ mod tests {
         let mut w = world();
         let s = relic(1);
         plant(&mut w, s, 0, 12);
-        let islands = partition_islands(&w.view());
-        assert!(islands.is_empty(), "{islands:?}");
+        let part = partition_islands(&w.view());
+        assert!(part.islands.is_empty(), "{part:?}");
+    }
+
+    #[test]
+    fn dormant_idle_body_is_not_a_seed() {
+        let mut w = world();
+        let s = relic(1);
+        plant(&mut w, s, 0, 0);
+        w.mutate().set_sim_lod(s, SimLod::Dormant).unwrap();
+        let part = partition_islands(&w.view());
+        assert!(part.islands.is_empty(), "{part:?}");
+    }
+
+    #[test]
+    fn dormant_sleeper_still_joins_full_awake_overlap() {
+        let mut w = world();
+        let awake = relic(1);
+        let sleeper = relic(2);
+        plant(&mut w, awake, 0, 0);
+        plant(&mut w, sleeper, 150, 12);
+        w.mutate().set_sim_lod(sleeper, SimLod::Dormant).unwrap();
+        let part = partition_islands(&w.view());
+        assert_eq!(part.islands, vec![(0, vec![awake, sleeper])]);
+    }
+
+    #[test]
+    fn opaque_closed_wall_is_occupancy_not_island_member() {
+        let mut w = opaque_world();
+        let body = actor(1);
+        let wall = relic(2);
+        plant(&mut w, body, 0, 0);
+        plant(&mut w, wall, 150, 0);
+        let opaque = w.canon().affordance_id("Opaque").unwrap();
+        {
+            let mut m = w.mutate();
+            m.set_affordance(wall, opaque, true).unwrap();
+            m.add_rel(wall, Rel::LockedBy, wall).unwrap();
+        }
+        assert!(w.view().opaque_closed(wall));
+        let part = partition_islands(&w.view());
+        assert_eq!(part.islands, vec![(0, vec![body])], "{part:?}");
+    }
+
+    #[test]
+    fn place_floor_is_not_an_island_member() {
+        let mut w = world();
+        let body = actor(1);
+        let floor = place(2);
+        plant(&mut w, body, 0, 0);
+        plant(&mut w, floor, 0, 0);
+        let part = partition_islands(&w.view());
+        assert_eq!(part.islands, vec![(0, vec![body])], "{part:?}");
+    }
+
+    #[test]
+    fn oversize_group_is_omitted_not_split() {
+        let mut w = world();
+        for i in 0..3u128 {
+            plant(&mut w, relic(i + 1), (i as i32) * 150, 0);
+        }
+        let part = partition_with_caps(&w.view(), MAX_ISLANDS, 2);
+        assert!(part.islands.is_empty(), "{part:?}");
+        assert_eq!(part.omitted_too_large, 1);
+        assert_eq!(part.omitted_too_many, 0);
+    }
+
+    #[test]
+    fn extra_islands_fail_closed_not_truncated_into_live() {
+        let mut w = world();
+        plant(&mut w, relic(1), 0, 0);
+        plant(&mut w, relic(2), 50_000, 0);
+        plant(&mut w, relic(3), 100_000, 0);
+        let part = partition_with_caps(&w.view(), 1, MAX_ISLAND_SIZE);
+        assert_eq!(part.islands.len(), 1);
+        assert_eq!(part.islands[0].1, vec![relic(1)]);
+        assert_eq!(part.omitted_too_many, 2);
+        assert_eq!(part.omitted_too_large, 0);
     }
 }

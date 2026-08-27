@@ -226,8 +226,18 @@ pub type PackedIx = u32;
 pub const MAX_LOCI_PROCESS: usize = 200_000;
 /// Hearth / v1 packed-row cap.
 pub const MAX_LOCI_HEARTH: usize = 4_096;
-/// Island id is `u16`. Dense rank saturates; extra components are dropped.
+/// Island id is `u16`. Dense rank `0..n`. [`NO_ISLAND`] is not a member.
+///
+/// Usable ids are `0..=NO_ISLAND-1` (65_535 islands). Extra components
+/// fail closed ([`crate::RejectReason::TooManyIslands`]), they are not dropped
+/// into a live island.
 pub const MAX_ISLANDS: u16 = u16::MAX;
+/// Not a contact-group member this tick. Interest must not island-wake this id.
+pub const NO_ISLAND: u16 = u16::MAX;
+/// Fail-closed member cap per island. Do **not** split a contacting group
+/// (stacking would lie). Oversize → omit the whole island
+/// ([`crate::RejectReason::IslandTooLarge`]).
+pub const MAX_ISLAND_SIZE: u16 = 256;
 
 #[cfg(test)]
 mod tests {
@@ -268,6 +278,9 @@ mod tests {
     fn packed_ix_is_u32_not_u16() {
         assert_eq!(core::mem::size_of::<PackedIx>(), 4);
         assert_eq!(MAX_ISLANDS, u16::MAX);
+        assert_eq!(NO_ISLAND, u16::MAX);
+        assert_eq!(MAX_ISLAND_SIZE, 256);
+        assert!(u32::from(MAX_ISLANDS) > u32::from(MAX_ISLAND_SIZE));
         assert_eq!(MAX_LOCI_HEARTH, 4_096);
         assert_eq!(MAX_LOCI_PROCESS, 200_000);
         assert!(MAX_LOCI_PROCESS > usize::from(u16::MAX));

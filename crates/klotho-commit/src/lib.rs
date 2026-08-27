@@ -23,7 +23,7 @@ pub use admit::{AdmitBuf, IslandProposer, SyncProposer};
 pub use kernel::CommitKernel;
 pub use klotho_core::{KernelFault, RejectReason};
 pub use klotho_trace::TraceDelta;
-pub use partition::partition_islands;
+pub use partition::{Partition, partition_islands};
 pub use proposal::Proposal;
 
 #[cfg(test)]
@@ -32,8 +32,8 @@ mod tests {
 
     use klotho_canon::cook_diffs;
     use klotho_core::{
-        AabbMm, BlobId, Budget, Hash, HullWitness, IVec3, LocusKind, Mm, PlayerId, PoseMm,
-        ResourceId, Sigil, Tick, Vel3, YawMd,
+        AabbMm, BlobId, Budget, Hash, HullWitness, IVec3, LocusKind, Mm, NO_ISLAND, PlayerId,
+        PoseMm, ResourceId, Sigil, Tick, Vel3, YawMd,
     };
     use klotho_ir::{
         Agency, Analog, CanonDiff, Channel, IntentTarget, MindIntent, PlayerIntent, Verb, from_ron,
@@ -593,5 +593,30 @@ mod tests {
         assert_eq!(islands.len(), 2);
         assert_eq!(k.world().view().island(a), Some((0, 0)));
         assert_eq!(k.world().view().island(b), Some((1, 0)));
+    }
+
+    #[test]
+    fn partition_unassigned_is_no_island() {
+        let mut k = empty_kernel();
+        let awake = relic(1);
+        let sleeper = relic(2);
+        plant_mover(
+            &mut k,
+            awake,
+            PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)),
+            9,
+            0,
+        );
+        plant_mover(
+            &mut k,
+            sleeper,
+            PoseMm::new(Mm(50_000), Mm(0), Mm(0), YawMd(0)),
+            9,
+            12,
+        );
+        let islands = k.partition();
+        assert_eq!(islands, vec![(0, vec![awake])]);
+        assert_eq!(k.world().view().island(awake), Some((0, 0)));
+        assert_eq!(k.world().view().island(sleeper), Some((NO_ISLAND, 12)));
     }
 }

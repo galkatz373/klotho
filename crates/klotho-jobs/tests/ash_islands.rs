@@ -116,9 +116,9 @@ fn eight_workers_match_one_worker_ash_prefix() {
 #[test]
 fn default_ash_is_not_eight_islands() {
     let k = boot();
-    let islands = klotho_commit::partition_islands(&k.world().view());
+    let part = klotho_commit::partition_islands(&k.world().view());
     assert!(
-        islands.len() < 8,
-        "default Ash must not already have 8 islands (vacuous gate): {islands:?}"
+        part.islands.len() < 8,
+        "default Ash must not already have 8 islands (vacuous gate): {part:?}"
     );
 }

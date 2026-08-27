@@ -5,12 +5,12 @@
 | Document | Successor High-Level Design — Klotho at AAA production scale |
 | Author | Grok (for Gal Katz) |
 | Date | 2026-08-27 |
-| Status | Draft (rev 3, user Qs closed — Q8 probes+SSGI, Q13 OS-process infer, Q15 ClipSet-first) |
+| Status | Draft (rev 4 — partition seed+caps, pose rebuild matrix, phys FMA/residual, Place sizing; Q8–Q16 still closed) |
 | Supersedes | `docs/hld.md` rev 5 (2026-08-22) — v1 semantic kernel, Hearth/Ash slice |
 | Audience | Senior engine, tools, gameplay systems, and production engineers |
 | Language | Rust (edition 2024; 2021-compatible crates OK) |
 
-This is not a patch note on rev 5. It is the architecture for a studio that wants Klotho's programming model **and** a contemporary first-party quality bar. Rev 5 remains the law for landed crates until the PRs in this document merge.
+This is not a patch note on rev 5. It is the architecture for a studio that wants Klotho's programming model **and** a contemporary first-party quality bar. Rev 5 remains the law for crates that have not yet taken an AAA PR. **Landed on `main`:** AAA-01, AAA-02, AAA-03, AAA-04, AAA-05, AAA-08.1 (and the rev-4 K58 caps). Next unblocked work is AAA-06 ∥ AAA-08.
 
 ---
 
@@ -39,7 +39,7 @@ The workspace at `/Users/galkatz373/Documents/Projects/klotho` has landed PRs 01
 | Locus cap | `klotho_world::MAX_LOCI = 4_096`; insert fails `WorldError::LocusCap` | A streaming region wants 50k–200k rows, most asleep |
 | Snapshot | `SNAPSHOT_CAP = 16 MiB`; double-buffer `Arc<Projection>` clone | Full clone of 50k rows + `space_ix` will miss the memcpy budget |
 | Warp | `WARP_CAP_DESKTOP = 512 MiB`, `MAX_BLOBS = 16_384`, `MAX_BLOB_BYTES = 32 MiB` (`klotho-prove`, `klotho-compile/src/warp.rs`) | AAA cooked data is tens to hundreds of GB, sharded |
-| Kernel budget | `Budget::HEARTH.us_sim = 4_000` µs; **`CommitKernel::step` currently ignores it** (`let _ = budget.us_sim`); `klotho-debug` gates 64-awake | 4 ms for 4k loci is Hearth theater; AAA admit is 5–8 ms of a 30/60 Hz tick. `us_sim` must become a real gate (AAA-04), not a comment |
+| Kernel budget | `Budget::HEARTH.us_sim = 4_000` µs; **AAA-04 wired `us_sim` as an admit gate** (`RejectReason::Budget`); `klotho-debug` gates 64-awake | 4 ms for 4k loci is Hearth theater; AAA admit is 5–8 ms of a 30/60 Hz tick. Hearth 4 ms is **not** retired |
 | Space | `klotho-space::Space` is ZST; `propose` walks `view.loci()`; 2.5D AABB + swept capsule; Actors skipped | O(n) locus walk; no gravity, stacking, joints, 6DOF, destruction |
 | Motion | `klotho-motion`: verb→clip, debug T-pose, `WALK_MM_PER_TICK = 20`; clip time from `WorldView::tick` | Not skeletal, not motion matching, not hit-frame accurate |
 | Mind | `klotho-mind::Mind` GOAP over a **hardcoded** `match goal` (`stay_near_forge`, `fetch_bucket`, …) | 3 Hearth NPCs; not 200–2,000 agents |
@@ -48,10 +48,10 @@ The workspace at `/Users/galkatz373/Documents/Projects/klotho` has landed PRs 01
 | Audio | Integer mix to i16 stereo PCM; **no device output** | No spatial HRTF, no voices-at-scale, no middleware presenter |
 | Net | Listen-server, 20 Hz signed `PlayerIntent`, delay-interp overlay, **no `Predicted` on Trace** (`klotho-net`) | Hearth-adequate. Not shooter-adequate. Not 32–64 player |
 | Distaff | `klotho-author` CLI: RON + kdown, cook-time `Pin`, preview summary | Constraint cockpit without a production viewport, cook farm, or animation tools |
-| Trace | `TraceLog` is `Vec<TraceEvent>` + blake3 prefix fold | `CommitKernel::admit_one` currently appends `PoseCommitted` on **every** admitted `SpaceDelta`/`MotionDelta` — already a 60 Hz pose log, contra rev 5 §1 |
-| Spatial index | `GridIndex`, `CELL_MM = 1024`, XZ uniform, `BTreeMap<(i32,i32), BTreeMap<u16,bool>>`; packed index is **`u16`** (`Projection.by_sigil`, `WorldView::loci` as `0..len as u16`) | 65,536 wrap makes 200k loci a type error. AAA-03 is a `PackedIx = u32` PR (`klotho_ir::Slot` stays the pred-lang word) |
+| Trace | `TraceLog` is `Vec<TraceEvent>` + blake3 prefix fold; **AAA-01:** no per-admit `PoseCommitted`; coarse 2 Hz `IslandSnap` (`ISLAND_SNAP_PERIOD_TICKS = 30`) | Overlay still consumes leftover `IslandSnap` until AAA-18 `PoseDelta`. Pause/rewind must not pose-step from 2 Hz snaps (K53 rebuild matrix) |
+| Spatial index | **AAA-03 landed:** `PackedIx = u32`; `GridIndex` is `BTreeMap<(i32,i32), BTreeMap<PackedIx,bool>>`; `MAX_LOCI_PROCESS = 200_000`; Hearth tests keep `MAX_LOCI = 4_096`. CoW snapshot chunks. | Per-Place grids + coarse Place BVH still grow in AAA-06. `klotho_ir::Slot` stays the pred-lang word |
 | Rite ISA | 12 ops, DAG + `WAIT`, caps 64/rite/tick and 2,000/tick (`docs/pred-lang.md`) | Enough for lock/carry/trade. Tight for animation-driven melee graphs unless combat stays in Laws |
-| Unsafe | `#![forbid(unsafe_code)]` workspace-wide except infer, render, audio, platform | Physics SIMD, job steal, stream mmap will need an explicit allowlist, not a quiet leak |
+| Unsafe | `#![forbid(unsafe_code)]` workspace-wide except infer, render, audio, platform, **jobs** (steal queues landed). Phys and stream still to allowlist | K39: phys/jobs/stream. **Miri** on jobs/stream, **Loom** on the steal deque, before those PRs merge. Do not grow the allowlist without those gates |
 | Crate firewall | `klotho-sim` does not depend on space/motion/mind/infer/render; `klotho-world/mutate` only from commit; `scripts/ci/forbidden-imports.sh` | **Keep.** This is how simplicity survives a 100-person team |
 
 Hearth (`examples/hearth-slice`) seed is **~20 loci** (Place + 4 actors + door/key/tool/hammer/ingot/bucket + barrels; Appendix A furniture-to-~80 is a later pixel target, not the headless seed). Ash (`examples/ash-slice`) is a 20 m arena, hitscan, health, ammo, 100-projectile `Cap`. `klotho_core::Epoch` **already exists** and keys hulls `(Sigil, Epoch)`; K16 amends **policy** (live packs), not the struct. **Do not grow Hearth.** Ash remains the ontology leak detector (K26). AAA subsystems get **new slices**, not more Hearth props.
@@ -241,12 +241,12 @@ CI: same `.warp` + Intent file ⇒ same Trace prefix hash on linux/mac/windows f
 | **K36** | **Dedicated server + interest + overlay.** `Role::Server` runs the only CommitKernel. `Role::Host` is the K8 listen profile. `Role::Client` does **not** run the kernel for the replicated world. Clients send signed `PlayerIntent` at Hello `intent_hz`. Overlay (6DOF) is fed by **`Packet::PoseDelta`** (K53), never by thinned Trace, never by presenter bones. Correction: snap-hard on local pawn when server pose error > Canon `overlay_snap_mm`; else permille blend. Remote proxies interpolate PoseDelta only. No `Predicted` on Trace (`no_predicted_in_packets` stays). Lag-comp uses the rewind **ring**, windowed (K57). | Overlay today is filled from `PoseCommitted`/`IslandSnap` and zeros Y (`overlay.rs`). AAA-01 would starve it without K53. |
 | **K37** | **Animation: ClipSet first (Q15 closed).** Ember ships **verb→clip + root pose**. Hit frames = Rite `WAIT` + Laws, **never** clip notifies. Motion matching / `MotionDb` is **Era 2 research** (AAA-13 may land it; **AAA-09 does not depend on AAA-13**). Matching, if present, is `F(verb, vel, rates, clip, ticks_in_state, plant, rng)` on Projection / `MotionDelta`. Skeletal palettes, IK, look-at, additive, cloth = Manifest. Ember golden: swapping a ClipSet must not move a WAIT window. | Combat must not wait on motion matching. Hidden `ticks_in_state` in the proposer is still forbidden. |
 | **K38** | **Renderer consumes Manifest, period.** `VisualManifest` grows instance lists, skinned palettes, lights, **cook-baked irradiance probes**, decals, post settings. Clustered deferred or forward+ is an impl of `Presenter`. **GI = probes + SSGI (Q8)**; SSGI is presenter-only, not Trace. Gameplay crates and slices still must not import `klotho-manifest::tables`. | Scales pixels without leaking the programming model. No SDF volume. |
-| **K39** | **Unsafe allowlist: infer, render, audio, platform, phys, jobs, stream.** Phys Era 1: SIMD of the **scalar XPBD**, no solver FFI (Q9). FFI re-opens only after Ember stacking goldens exist. Jobs: steal queues. Stream: mmap after header validate. Stream/jobs/phys never enable `world/mutate`. | Forbidding SIMD is how you miss the budget. Optional Jolt FFI is how hashed truth sneaks back. |
+| **K39** | **Unsafe allowlist: infer, render, audio, platform, phys, jobs, stream.** Phys Era 1: SIMD of the **scalar XPBD**, no solver FFI (Q9). FFI re-opens only after Ember stacking goldens exist. Jobs: steal queues (**landed**; Miri + Loom on the deque are merge gates). Stream: mmap after header validate (Miri). Stream/jobs/phys never enable `world/mutate`. | Forbidding SIMD is how you miss the budget. Optional Jolt FFI is how hashed truth sneaks back. An allowlist without Miri/Loom is a quiet leak. |
 | **K40** | **Canon epochs for live ops.** Packs wait until AAA-25; Hello/save **plumb `epoch` earlier**. Halt protocol: stop `step`; in-flight `WAIT`s `RiteEnd::Evicted` or Canon-mapped resume; apply pack + `EpochMap`; resume. Hello-mismatch → download or disconnect. No runtime `AddLaw`. | K16's "frozen at cook" forked every client on hotfix. The `Epoch` struct already exists. |
 | **K41** | **Rite ISA may grow; hot loops are Laws.** AAA-08.1 RFC adds atoms `RayHits`, `SimLodIs`, `InPlace`; op `SPAWN template`; op `PHYS_REQ` writing a **`PhysRequest` Projection column** (not `Qty`). Combat tick is Laws (Ash hitscan). Designers never see `PhysRequest` in Distaff (author/engine split). Caps live in `Budget`. Verb adds (`Steer`, `Reload`) are IR enum extensions with frozen discriminants, scheduled in AAA-08.1. | `IMPULSE` as Qty is how `DamageComponent` returns. |
 | **K42** | **New slices, not a bigger Hearth.** Ember (combat fidelity), Drift (vehicles + streaming Place), Chorus (sim LOD crowds), Netlock (dedicated 8p + prediction). Each is an `examples/*-slice` with goldens on the same kernel. | K26 generalized. |
 | **K43** | **Distaff production UX is Pin-shaped.** Viewport, gizmos, outliner, sequencer (timeline of Intents/Pins), cook, profiler, retarget, lighting. Saving the viewport = Pin selected facts. Play-in-editor = `klotho-runtime` with `step` pausable (already `klotho-ui::Pause`). No hidden "editor world" that differs from cook. | Prevents the editor from becoming the ontology. |
-| **K44** | **Phys determinism law (Q9 closed).** (A) The **only** path that may emit `PhysDelta` is a **pinned scalar XPBD/SI** (one software ISA). Dedicated servers and CI use that path. Client-predicted phys is Overlay-only and never admitted. Quantize at admit (mm trunc −∞, vel 16.16). **Do not claim** linux/mac/windows Trace equality for slices that include `PhysDelta`; Ember/Drift phys goldens are **pinned-Linux**. Kinematic Hearth/Ash remain three-OS. No warm-start lambdas unless hashed in Projection. (B) — f32 stacking as Manifest — is rejected because it kills Drift/Ember. | Quantize-at-admit does not stop f32 from crossing millimetre bins. Rev 5 A5 still applies to hashed contacts. |
+| **K44** | **Phys determinism law (Q9 closed).** (A) The **only** path that may emit `PhysDelta` is a **pinned scalar XPBD/SI** (one software ISA). Dedicated servers and CI use that path. Client-predicted phys is Overlay-only and never admitted. Quantize at admit (mm trunc −∞, vel 16.16). **Do not claim** linux/mac/windows Trace equality for slices that include `PhysDelta`; Ember/Drift phys goldens are **pinned-Linux**. Kinematic Hearth/Ash remain three-OS. No warm-start lambdas unless hashed in Projection. (B) — f32 stacking as Manifest — is rejected because it kills Drift/Ember. **AAA-08 crate flags (not optional comments):** `rust-toolchain.toml` pin (already `1.98.0`); phys crate `RUSTFLAGS` / `.cargo/config.toml` **in that crate only**: no `fast-math`, `-C llvm-args=-ffp-contract=off`, do not enable FMA as an OS-varying target feature. Same binary on CI and every dedicated server. **Gate:** `klotho.phys.quant_residual_mm` — Ember stacking CI **fails** if p99 \|residual\| > 1 mm **or** any sample > 4 mm. | Quantize-at-admit does not stop f32 from crossing millimetre bins. Rev 5 A5 still applies to hashed contacts. A residual metric without a fail threshold is not a gate. |
 | **K45** | **Console path is `klotho-platform` + GPU HAL, not a kernel fork.** Era 4 spike: devkit bring-up, **HAL TBD** (GDK is D3D12, not wgpu-as-cert; Prospero is Gnm/AGC). Same `CommitKernel` semantics. Cert evidence = replay files. | Do not imply wgpu is the SKU. |
 | **K46** | **Job system is not a sim API.** `klotho-jobs` is engine-only: island propose, cook, stream decompress, parallel extract. Gameplay never schedules jobs. Registration order of proposers stays a static list in `klotho-runtime`. | Stops "jobified Update." |
 | **K47** | **Sharded warp.** `KWRP` catalog (small) + CAS volumes (`KCAS` files, content-addressed, 1–4 GB each) + Place shards. Loader caps become **per-shard** (32 MB blob stays until virtual geo). Catalog mmap is tens of MB. | 512 MB desktop cap is the v1 bomb-prevention; AAA needs volume without removing caps. |
@@ -257,10 +257,10 @@ CI: same `.warp` + Intent file ⇒ same Trace prefix hash on linux/mac/windows f
 | **K52** | **Staffing firewall is CI, not culture.** Extend `forbidden-imports.sh` **and** the `clippy.toml` comment: hearth, ash, ember, drift, chorus, netlock, `klotho-author`, `klotho-editor` must not import `klotho-manifest::tables`. Tables allowlist: render, audio, compile, vfx, cinematic. InferHost allowlist unchanged. `klotho-sim` deps remain commit/core/trace/world. Distaff save-path test: gizmo move without Pin is gone on recook (AAA-15). | A 100-person team will otherwise "just this once." |
 | **K53** | **Three pose channels.** (1) **Hashed Trace** = rites/qty/rel/interact + coarse 2 Hz `IslandSnap` for replay between epoch blobs. (2) **Net pose** = interest-filtered `Packet::PoseDelta` from Projection at auth Hz (unhashed, not `Predicted`). Overlay and remote interpolation consume (2) only. (3) **Rewind ring** = server RAM of last `Budget.rewind_ticks` published `WorldSnapshot`s (default 12 @ 60 Hz = 200 ms). Aim Laws may read a ring view; the **result** is Trace. Ring itself is not hashed and not replicated. | One 10 Hz IslandSnap cannot be save, net, overlay, and lag-comp. Overlay today already dies if Trace is thinned. |
 | **K54** | **`PackedIx = u32` process packed index.** AAA-03 replaces every identity `u16` listed in §Data Model. **Not** named `Slot` (`klotho_ir::Slot` is pred-lang `This/Target/Other/Name`). Per-Place row cap 100,000; process cap 200,000. Hearth tests keep `MAX_LOCI = 4_096`. `island: u16` remains. | Name clash with pred Slot would break AAA-03 vs AAA-08.1 in the same crate. |
-| **K55** | **Exclusive spatial owner is admit-time.** After Player (and Rel writes this tick), exactly one of Phys, Space, Motion may **commit** a pose for a Sigil. Default: unattached `Actor` → Motion; `Driveable` / rigid relics → Phys; leftover kinematic → Space; `PilotedBy`/`AttachedTo` children → Phys. Jobs may **over-produce** (MotionDelta for a driver who possesses this tick); the extra nacks `Conflict`. `write_cells(PhysDelta)` of a parent **includes every currently attached child**. Motion/Space skip attached actors when the **pre-admit** view already shows the Rel; same-tick possess is the nack path. Drift golden: possess at T, no Motion root on the driver at T. | ProposeJobs run *before* Player admit. Owner-at-propose-time is a race with `PilotedBy`. |
+| **K55** | **Exclusive spatial owner is admit-time.** After Player (and Rel writes this tick), exactly one of Phys, Space, Motion may **commit** a pose for a Sigil. Default: unattached `Actor` → Motion; `Driveable` / rigid relics → Phys; leftover kinematic → Space; `PilotedBy`/`AttachedTo` children → Phys. Jobs may **over-produce** (MotionDelta for a driver who possesses this tick); the extra nacks `Conflict`. `write_cells(PhysDelta)` of a parent **includes every currently attached child**. Motion/Space skip attached actors when the **pre-admit** view already shows the Rel; same-tick possess is the nack path. Drift golden: possess at T, no Motion root on the driver at T. **Do not** tag owner in Partition and skip at propose time — ProposeJobs run *before* Player admit, so same-tick `PilotedBy` is invisible. A later RFC may admit Player **before** Partition; that is a phase-order change, not a free K55 fix. Extra MotionDelta for one driver is not the 10 ms propose budget. `admit_key` is a total order; Conflict is deterministic. | ProposeJobs run *before* Player admit. Owner-at-propose-time is a race with `PilotedBy`. |
 | **K56** | **Attach is a kernel fact.** `Rel::PilotedBy` (Q12 closed). Optional `Rel::AttachedTo`. Era 1 compose is **yaw-only, not SO(3)**: `child.xz = parent.xz + rot_yaw(parent.yaw, attach_local.xz)`; `child.y = parent.y + attach_local.y`; **copy** parent yaw/pitch/roll onto the child (seat, not turret). General 6DOF welds are a later RFC. Motion does not integrate attached actors. `support` written only from admitted PhysDelta (or Motion swept for unattached). **Ban** Motion→phys calls. Drift v1: one vehicle + driver, flat AABB floor. | Millidegree Euler compose is gimbal-ambiguous. A seat copies parent attitude. |
 | **K57** | **Rewind is bounded; anti-cheat is a sidecar.** `Budget.rewind_ticks` (shooter 12; adventure 0). Fire/melee with `PlayerIntent.at` older than `now - rewind_ticks` → `StaleEpoch`. Analog clamped at ingest. Cmd-rate sidecar **reads** only. K10 is not this box. | Unbounded `RTT/2` rewind is Source-style backtrack. |
-| **K58** | **Partition is a sim-thread phase, not proposer memory.** After Interest, **before** ProposeJobs: union-find on `space_ix` **this tick**. Seed = Full-lod hulls that are already awake (`sleep_ticks == 0`) **or** have non-zero vel **or** `phys_req` **or** are `PilotedBy`/`AttachedTo` an awake locus. **Flood-fill through overlapping hulls including sleepers** (sleeping crate piles join the island). Island id = dense rank of min-Sigil in member-sorted order. Write `island: u16` onto the live view. This is `F(view)`, not last-tick memory. Partition is **not** an admit and is **not** hashed except via later PhysDelta sleep/pose. PhysDelta for a sleeper in the flood-fill sets `sleep_ticks = 0`. AAA-08 stacking golden uses this rule; `ContactTable` remains fallback if it still jitters. | `propose_island` cannot discover islands. Last-tick `island_id` reintroduces K22 memory. Awake-only partition cannot wake a stack. |
+| **K58** | **Partition is a sim-thread phase, not proposer memory.** After Interest, **before** ProposeJobs: union-find on **phys-body** hulls **this tick** (`F(view)`, not last-tick `island_id`). **Occupancy ≠ island.** `space_ix` still holds Dormant / `OpaqueClosed` sleepers for `never_clip_closed`. Island members are phys bodies only: `LocusKind::Actor`, or a Relic that is not idle kinematic scenery. **Idle scenery** (locked door, static wall) = `OpaqueClosed` ∧ `sleep_ticks == 0` ∧ zero vel ∧ no `phys_req` ∧ not attached. **`LocusKind::Place` is never an island member** (Drift floor AABB is occupancy, not a body). Seed = [`SimLod::Full`] phys bodies that are awake (`sleep_ticks == 0`) **or** non-zero vel **or** `phys_req` **or** `PilotedBy`/`AttachedTo` an awake locus. **Flood-fill through overlapping phys-body hulls including sleepers** (crate piles), never through idle scenery or Places. Island id = dense rank of min-Sigil. Non-members get `NO_ISLAND = u16::MAX` (Interest must not island-wake this id). **Caps, fail closed, do not split:** `MAX_ISLAND_SIZE = 256` members — oversize omits the **whole** group (`RejectReason::IslandTooLarge`); splitting a contact group is how stacking lies. `MAX_ISLANDS` extra groups omit by min-Sigil rank (`TooManyIslands`). Partition is **not** an admit; those rejects land on the next `TraceDelta` (unhashed). PhysDelta for a sleeper in the flood-fill sets `sleep_ticks = 0`. AAA-08 stacking golden uses this rule; `ContactTable` remains fallback if it still jitters. | `propose_island` cannot discover islands. Last-tick `island_id` reintroduces K22 memory. Flood-fill through *all* overlapping hulls makes a city of touching walls one island and serializes jobs. |
 
 ### Author-facing vs engine-facing (new nouns)
 
@@ -588,6 +588,8 @@ Evict path: kernel writes `PlaceSnap`, appends `PlaceEvicted`, drops rows. In-fl
 
 `klotho-stream` must not enable `klotho-world/mutate`. AAA-06 includes a **10k-row apply microbench** (gate: ≤ 2 ms after AAA-03 SoA; fail the PR if it misses on the Hearth profile's machine class).
 
+**Hitch vs K21:** Residency stays **one** transaction (`conflict_set` = every `PackedIx` in the PlaceSnap). Partial Place is still a kernel bug. Do **not** chunk a visible apply. Era 1 Places are sized so apply fits 2 ms (**author ≤ 10k rows** until the microbench says otherwise; process per-Place cap 100k stays as a bomb). Optional: decode off-thread into an unpublished spec, then one admit + one publish. Drift is two Places on a strip — not a 100k-row Place.
+
 Residency is **interest + hysteresis** (enter at 128 m, exit at 160 m, Canon-tunable). IO/decode are off the sim thread; hitch is apply only.
 
 ### Simulation LOD
@@ -598,7 +600,7 @@ SimLod::Far      // every lod_period global ticks (default 6 → 5 Hz @ 30 / 10 
 SimLod::Dormant  // no propose; projection rows may still exist (sleepers, locked doors)
 ```
 
-`OpaqueClosed` sleepers **remain in `space_ix`** (rev 5 K23 — an idle locked door still blocks). Dormant is not "deleted." Far agents still exist; they are omitted from `PoseDelta` except a cheap keep-alive, and they do not write 2 Hz `IslandSnap` unless interacting.
+`OpaqueClosed` sleepers **remain in `space_ix`** (rev 5 K23 — an idle locked door still blocks). Dormant is not "deleted." Dormant / idle `OpaqueClosed` / Place floors are **not** partition seeds and **not** flood-fill members; they still block. Far agents still exist; they are omitted from `PoseDelta` except a cheap keep-alive, and they do not write 2 Hz `IslandSnap` unless interacting.
 
 Crowds (Chorus slice): far agents are **one island per cluster** or a flow field in `klotho-mind` that writes `MindIntent::Move` toward a slot; Phys integrates a capsule. Presentation instancing is Manifest.
 
@@ -631,7 +633,7 @@ sequenceDiagram
 
 **Projection columns phys may read** (and only these): `pose`, `vel3`, `yaw/pitch/roll_rate`, `island`, `sleep_ticks`, `support: Option<(nx,ny,nz,depth_mm)>` (integer, written from last admitted PhysDelta or Motion swept), `phys_req`, `attach_local`, hull/affordance/rel. **Not** warm-start lambdas, not last-tick union-find.
 
-**Island partition (K58):** sim-thread (or one job) **before** ProposeJobs. Union-find on `space_ix` this tick. Seed = Full-lod hulls with `sleep_ticks == 0` or non-zero vel or `phys_req` or attach-to-awake. **Flood-fill overlapping hulls including sleepers** so a sleeping crate pile is in the same island as the bumped crate; PhysDelta sets those `sleep_ticks = 0`. Members sorted by Sigil; island id = dense rank of min-Sigil. Do **not** reuse last tick’s `island_id`. Laws do not read `island`. AAA-08 stacking golden is this rule; hashed `ContactTable` only if it still jitters.
+**Island partition (K58):** sim-thread (or one job) **before** ProposeJobs. Union-find on **phys-body** hulls this tick — not every `space_ix` occupant. Seed = `SimLod::Full` phys bodies with `sleep_ticks == 0` or non-zero vel or `phys_req` or attach-to-awake. **Flood-fill overlapping phys-body hulls including sleepers** so a sleeping crate pile is in the same island as the bumped crate; PhysDelta sets those `sleep_ticks = 0`. **Do not** flood through idle `OpaqueClosed` scenery or `LocusKind::Place` (a city of face-adjacent walls, or a floor AABB, must not become one island). Members sorted by Sigil; island id = dense rank of min-Sigil. Non-members: `NO_ISLAND`. Do **not** reuse last tick’s `island_id`. Do **not** split an oversize group — omit it (`IslandTooLarge`). Extra groups past `MAX_ISLANDS` omit (`TooManyIslands`). Laws do not read `island`. AAA-08 stacking golden is this rule; hashed `ContactTable` only if it still jitters. Drift floor is a Place AABB / occupancy query, **not** a phys body.
 
 **Exclusive owner (K55) is admit-time.** Propose may emit both a MotionDelta (unattached actor) and a later Phys attach. After Player Rel admits, kernel nacks the extra spatial proposal `Conflict`. `write_cells(PhysDelta)` of a `Driveable` includes every `PilotedBy`/`AttachedTo` child (post-Player view). Motion skips attached actors when the **pre-propose** view already has the Rel. Drift golden: possess at T ⇒ no admitted Motion root on the driver at T. Motion **must not** import `klotho-phys`.
 
@@ -651,7 +653,7 @@ child.yaw/pitch/roll = parent.yaw/pitch/roll    // seat copies attitude
 
 **Ragdoll:** on `Rel Dead`, Phys stops. Presenter ragdolls. Interact/loot/carry during ragdoll uses **last admitted pose** and **will look wrong**; that is accepted. Revive uses that pose.
 
-**Solver law (K44 / Q9 closed):** Era 1 ships **in-house or vendored scalar XPBD**, **no FFI**, SIMD optional and identical in CI and every dedicated server. Rapier/Jolt rejected as hashed truth. Client phys = Overlay only. No warm-start unless hashed. Ember/Drift phys goldens = pinned Linux, not three-OS Trace.
+**Solver law (K44 / Q9 closed):** Era 1 ships **in-house or vendored scalar XPBD**, **no FFI**, SIMD optional and identical in CI and every dedicated server. Rapier/Jolt rejected as hashed truth. Client phys = Overlay only. No warm-start unless hashed. Ember/Drift phys goldens = pinned Linux, not three-OS Trace. Phys crate: no fast-math, fp-contract off, no OS-varying FMA. Residual gate: p99 ≤ 1 mm, any sample ≤ 4 mm, or AAA-08 fails.
 
 **Kernel does not re-solve.** It verifies conservative overlap. Budget miss → reject (fail closed).
 
@@ -759,11 +761,25 @@ Resync { tick, epoch, prefix }              // TAG 8
 
 `Role::Host` = listen (K8, `net-listen`). `Role::Server` = dedicated (`net-dedicated`). `Role::Client` = overlay only. Caps: `MAX_PACKET = 1 MiB`, `MAX_EVENTS = 4_096` stay as bombs. PoseDelta payload cap e.g. 64 KiB/client/tick.
 
-`Interest.gen` is `u16`; wrap is defined (mod 65536); packets with `gen != client.gen && gen != client.gen.wrapping_add(1)` are dropped and trigger Resync.
+`Interest.gen` is `u16`; wrap is defined (mod 65536); packets with `gen != client.gen && gen != client.gen.wrapping_add(1)` are dropped and trigger Resync. Loss of the Interest dictionary or a gen skip **is** Resync (TAG 8) — do not accept a broader reorder window. 128 movers × 16 B is under MTU; 50 GB warp catalog sync is AAA-18/24/25 (Hello mismatch → download or disconnect), not an Era 1 codebook problem.
+
+### Pose-channel rebuild matrix (K53)
+
+These four jobs **must not** share one 10 Hz `IslandSnap`. Overlay interpolating PoseDelta while Trace keeps 2 Hz snaps is **not** drift.
+
+| Column / fact | Epoch snap / pause save / rewind ring (`WorldSnapshot`) | 2 Hz `IslandSnap` | `Packet::PoseDelta` |
+| --- | --- | --- | --- |
+| pose / vel / yaw | yes | yes (coarse, **between** automatic epochs only) | overlay / remote lerp **only** — never Projection |
+| `sleep_ticks` | yes | yes | no |
+| `island` | yes (this-tick K58 ids, including `NO_ISLAND`) | island id of the snap | no |
+| `support` / `phys_req` / `plant` | **snap only** (Projection columns; `support` lands with AAA-08) | **no** | no |
+| Rel / Qty / Rite | yes | no (those are Trace events) | no |
+
+**Load / pause (K48):** last epoch `WorldSnapshot` + Trace suffix. Do not reconstruct a Drift vehicle from 2 Hz `IslandSnap`. **Rewind (K57):** ring of `WorldSnapshot`s; Aim Laws read that view; Hit/Qty is the Trace. **Replay between epochs:** IslandSnap may fill pose/vel/sleep only. **Client present:** PoseDelta → Overlay, never hashed.
 
 ### Interest management and lag-comp
 
-`klotho-interest` inputs: Observer poses, Canon radii per `LocusKind` / Affordance, Place AABBs. Outputs: Full/Far/Dormant bitsets + residency **commands** (runtime wraps as proposals). Deterministic. Deps: world+core only.
+`klotho-interest` inputs: Observer poses, Canon radii per `LocusKind` / Affordance, Place AABBs. Outputs: Full/Far/Dormant bitsets + residency **commands** (runtime wraps as proposals). Deterministic. Deps: world+core only (`PhysRequest` and hulls already live on `WorldView` / `klotho-core` — do **not** add `interest → commit`). Island-wake **skips** `NO_ISLAND` so unassigned scenery does not become Full because it shares a default id. Interest still runs *before* this-tick Partition, so mate promotion uses last-tick island ids (not a crate-graph leak).
 
 Lag compensation is **Netlock / AAA-19**, not Ember. On `Verb::Fire` / melee, server selects a ring snapshot with `tick ∈ [now - rewind_ticks, now]`. Hitscan Law runs against that **view**. Older intents → `StaleEpoch`. The ring is RAM, unhashed, not replicated; `Emitted Hit` / `QtyChanged` are the Trace. Ember headless goldens do **not** require rewind.
 
@@ -786,6 +802,8 @@ AAA Distaff (`klotho-editor` + author):
 | Collision | Hull preview vs canonical AABB/capsule | Editing PhysX materials as truth |
 
 **Team authors without AdmitBuf:** designers write kdown; cook fails on missing tags and CFG; goldens are Intent RON. They are told Places are shards and Pins are facts. They are **not** told about SimLod per NPC (it is derived). Systems engineers add proposers rarely. CI is the ontology cop. AAA-15 test: a gizmo translation that is not Pinned does not survive recook (including play-in-editor dirties).
+
+AAA-15 is a **production editor program** (viewport, outliner, sequencer, cook, retarget, lighting, profiler), not one PR of egui glue. `forbidden-imports.sh` is necessary and insufficient: `klotho-manifest::tables` stays `pub(crate)`; AAA-11/15 add feature gates so presenter crates cannot leak tables into `klotho-editor` gameplay paths. Do not start this until Era 1 goldens exist.
 
 Hot-reload: CAS blob by id (mesh/clip/grain) without epoch bump. Canon/Rite/Law changes **require** epoch (K40) because clients and goldens key on `canon_hash`.
 
@@ -820,8 +838,8 @@ Console Era 4: `klotho-platform` **devkit spike, HAL TBD** (GDK = D3D12, Prosper
 | `klotho-audio` | SIMD mix, decoder, device | Drive Trace |
 | `klotho-platform` | window, file, JNI, console SDK | World mutation (already documented) |
 | `klotho-phys` | SIMD of **scalar** XPBD; **no FFI in Era 1** | Bypass AdmitBuf; keep f32 in Projection; OS-varying ISA |
-| `klotho-jobs` | steal, cache-pad atomics | Run admit; unordered reduction |
-| `klotho-stream` | mmap, uncached IO | Insert loci except via Residency proposal |
+| `klotho-jobs` | steal, cache-pad atomics | Run admit; unordered reduction. **Miri + Loom** on the deque before further steal changes |
+| `klotho-stream` | mmap, uncached IO | Insert loci except via Residency proposal. **Miri** on mmap header-validate |
 | **all else** | **forbidden** | — |
 
 Workspace `unsafe_code = "forbid"` stays; allowlisted crates `#![allow(unsafe_code)]` as today.
@@ -834,7 +852,7 @@ Adventure 30 Hz, 50k loci, **2k awake bodies** (not 2k islands), 8 players, 8 wo
 | --- | --- | --- | --- |
 | Ingest | sim | 0.3 ms | yes |
 | Interest | sim | 0.3 ms | yes |
-| Partition (K58 union-find) | sim (or 1 job) | ≤ 1.0 ms | yes |
+| Partition (K58 union-find on **phys bodies**, not every hull) | sim (or 1 job) | ≤ 1.0 ms | yes |
 | Phys+Motion+Mind propose 2k | 8 workers | ≤ 10 ms wall (max of the three) | **join ≤ 10 ms** |
 | Serial admit ≤ 2k spatial + rites | sim | ≤ 8 ms (`us_sim`) | yes |
 | Publish CoW + rewind push | sim | ≤ 1 ms | yes |
@@ -883,8 +901,7 @@ pub struct Vel3 { pub x: VelFx, pub y: VelFx, pub z: VelFx }
 pub type PackedIx = u32;
 
 impl Budget {
-    // AAA-02: widen pred_ops / rite_steps to u32 (landed fields are u16;
-    // 65_536 does not fit u16). Add rewind_ticks. Kernel counters follow.
+    // AAA-02 landed: pred_ops / rite_steps are u32; rewind_ticks exists.
     pub const HEARTH: Self = Self {
         us_sim: 4_000,
         pred_ops: 8_192,
@@ -910,10 +927,12 @@ impl Budget {
 
 pub const MAX_LOCI_PROCESS: usize = 200_000;
 pub const MAX_LOCI_HEARTH: usize = 4_096;
-pub const MAX_ISLANDS: u16 = u16::MAX;
+pub const MAX_ISLANDS: u16 = u16::MAX;      // 65_535 groups; ids 0..=65534
+pub const NO_ISLAND: u16 = u16::MAX;        // not a member; Interest skips
+pub const MAX_ISLAND_SIZE: u16 = 256;       // omit whole group, never split
 ```
 
-`RejectReason` adds `Residency`, `EpochMismatch`, `NotInterested`, and keeps `StaleEpoch` for rewind-too-old. Do not add `Predicted`.
+`RejectReason` adds `Residency`, `EpochMismatch`, `NotInterested` (AAA-06/18), **`TooManyIslands`**, **`IslandTooLarge`** (landed with K58 caps), and keeps `StaleEpoch` for rewind-too-old. Do not add `Predicted`.
 
 `RiteEnd` adds `Evicted` (streaming; not `FailBudget`).
 
@@ -969,14 +988,19 @@ pub trait IslandProposer: Send {
 }
 
 /// Sim-thread (or one job), after Interest, before ProposeJobs. K58.
-pub fn partition_islands(view: &WorldView) -> Vec<(u16, Vec<Sigil>)>;
+pub struct Partition {
+    pub islands: Vec<(u16, Vec<Sigil>)>,
+    pub omitted_too_large: u32, // IslandTooLarge, whole groups
+    pub omitted_too_many: u32,  // TooManyIslands
+}
+pub fn partition_islands(view: &WorldView) -> Partition;
 ```
 
 `&self` not `&mut self` (K22). Per-worker `AdmitBuf`. Runtime concatenates in island-id order, then `sort_by(admit_key)`. **Gate:** 8 workers ≡ 1 worker Ash Trace hash on a fixture that **injects ≥ 8 disjoint islands** (default Ash `island_id = 0` would make the test vacuous). Partition must run in both 1-worker and 8-worker paths.
 
 `CommitKernel::step` still takes `&mut [&mut dyn SyncProposer]` for Hearth. Runtime jobs path: fill heap via `ingest` / `AdmitBuf::drain` and pass `sync: &mut []`. `klotho-sim` stays off jobs.
 
-**Trace pose logging:** no per-admit `PoseCommitted`. Coarse 2 Hz `IslandSnap` for replay only. `PoseCommitted` keeps 6DOF (fix `xz`+yaw; Overlay today zeros Y).
+**Trace pose logging:** no per-admit `PoseCommitted`. Coarse 2 Hz `IslandSnap` for replay only. `PoseCommitted` stores full `PoseMm`. Overlay consumes PoseDelta after AAA-18 (until then, leftover `IslandSnap`).
 
 ### `klotho-world`
 
@@ -1117,7 +1141,8 @@ Keep `tracing` fields `{tick, epoch, sigil, law, reject, us}`. No model transcri
 - `klotho.stream.hitch_us`, `klotho.stream.places`
 - `klotho.trace.bytes`, `klotho.trace.epoch`, `klotho.snap.bytes`, `klotho.proj.us`
 - `klotho.net.kbps{dir}`, `klotho.net.interest_gen`, `klotho.infer.dropped_stale`
-- `klotho.phys.awake`, `klotho.phys.rejected_budget`, `klotho.phys.quant_residual_mm`
+- `klotho.phys.awake`, `klotho.phys.rejected_budget`, `klotho.phys.quant_residual_mm` (**gate:** p99 ≤ 1 mm, max ≤ 4 mm on Ember stacking CI)
+- `klotho.partition.too_large`, `klotho.partition.too_many`
 - `klotho.rewind.ticks_used`, `klotho.residency.rows_applied`
 
 **Ship P0:** Trace hash mismatch → disconnect + replay file (already). Epoch mismatch → patch or disconnect. Drift P0: residency rows + hitch_us. Netlock P0: rewind ticks used.
@@ -1165,7 +1190,7 @@ flowchart LR
 
 **Rollback:** see per-flag table. Golden Trace tags every milestone.
 
-**Staffing (indicative):** Era 1 is a **second engine**, not four people finishing rev 5. Plan: 2 kernel + 1 phys + 1 stream/tools as a *minimum*, sequentialized by the DAG (01∥02 then 03…). A 4-person team should **not** start Era 2 until Era 1 goldens exist. Do not claim 27 PRs are independently mergeable; claim **main green, Hearth/Ash goldens pass**.
+**Staffing (indicative):** Era 1 is a **second engine**, not four people finishing rev 5. Plan: 2 kernel + 1 phys + 1 stream/tools as a *minimum*. **AAA-01..05 and AAA-08.1 already landed.** Remaining Era 1 is short and sequentialized: **06 ∥ 08 → 07 → 09, 10**. A 4-person team should **not** start Era 2 until Ember+Drift goldens exist. Do not claim 27 PRs are independently mergeable; claim **main green, Hearth/Ash goldens pass**.
 
 ---
 
@@ -1189,6 +1214,7 @@ flowchart LR
 
 | Risk | Sev | Mitigation |
 | --- | --- | --- |
+| Partition mega-island (floor hull / touching walls) | **Critical** | K58: occupancy ≠ island; Place/idle OpaqueClosed not members; `MAX_ISLAND_SIZE` omit-not-split; Drift floor is not a body |
 | Dual-truth at phys/anim/nav boundary | **Critical** | K31/K37/K24; slices fail if a notify writes Projection; ragdoll never read back |
 | Team authors against Projection / Manifest tables | **High** | CI firewall extended; Distaff inspector shows Laws not columns |
 | Trace volume / save bloat | **High** | AAA-01 pose logging fix; K33 epochs; interest |
@@ -1221,7 +1247,9 @@ flowchart LR
 
 ## PR Plan
 
-This plan **supersedes rev 5 PRs after the already-landed 01–20 work**. Do not relitigate `klotho-core` existence. **Do not claim 27 independent merges.** Claim: each PR leaves `main` green; Hearth/Ash goldens pass (AAA-01 is the sole allowed hash rewrite). Flags keep Hearth playable if phys/stream/jobs are off.
+This plan **supersedes rev 5 PRs after the already-landed 01–20 work**. Do not relitigate `klotho-core` existence. **Do not claim 27 independent merges.** Claim: each PR leaves `main` green; Hearth/Ash goldens pass (AAA-01 was the first allowed hash rewrite; later ABI flag-days already landed with 02/03/08.1). Flags keep Hearth playable if phys/stream/jobs are off.
+
+**Landed on `main` (do not re-implement):** AAA-01 Trace tape, AAA-02 6DOF+budgets, AAA-03 `PackedIx`+CoW, AAA-04 jobs+Partition+`us_sim`, AAA-05 interest+SimLod, AAA-08.1 ISA/Verb/Rel. Rev 4 amends landed K58 (phys-body flood, `NO_ISLAND`, fail-closed size/count caps). **Next:** AAA-06 ∥ AAA-08.
 
 ```mermaid
 flowchart TB
@@ -1296,37 +1324,37 @@ flowchart TB
 
 ### Era 1 — Kernel-scale
 
-#### AAA-01 — Trace pose discipline (fix the tape)
+#### AAA-01 — Trace pose discipline (fix the tape) — **landed**
 
 - **Files:** `crates/klotho-commit/src/kernel.rs`, `crates/klotho-trace/**`, goldens if hashes change (Hearth/Ash replay hashes in `klotho-debug/fixtures`)
 - **Depends on:** none (can land on current v1)
 - **Changes:** Stop `PoseCommitted` on every Space/Motion admit. Interaction-rate `PoseCommitted` only (`Pick`/`Drop`/`Hinge`/`Interact`). Coarse **2 Hz** `IslandSnap` for replay, not net. **This is the one PR allowed to rewrite Hearth/Ash hashes.** Overlay still works on Hearth listen-server via remaining IslandSnap until AAA-18 PoseDelta. Gate: 64-awake 120-tick Trace bytes drop by orders of magnitude.
 
-#### AAA-02 — Integer 6DOF pose, `Vel3`, budget profiles
+#### AAA-02 — Integer 6DOF pose, `Vel3`, budget profiles — **landed**
 
 - **Files:** `crates/klotho-core/src/{units,space,budget}.rs`, `PoseMm` users, `klotho-world` vel columns, `Proposal` vel fields
 - **Depends on:** none (parallel with AAA-01)
 - **Changes:** `PoseMm` pitch/roll; `Vel3`; **widen `Budget.pred_ops` / `rite_steps` to `u32`** (65_536 does not fit landed `u16`); add `rewind_ticks` (`HEARTH` = 0). `Budget::AAA_*` with `eval_slo_ticks` 6 vs 12. Kernel `&mut u16` counters become `u32`. ABI flag-day for pose layout. No `f32` in commit. `us_sim` still unused in kernel until AAA-04.
 
-#### AAA-03 — `PackedIx = u32` + CoW snapshot (ABI)
+#### AAA-03 — `PackedIx = u32` + CoW snapshot (ABI) — **landed**
 
 - **Files:** `crates/klotho-world/**`, `GridIndex`, any identity-`u16` column listed in §API
 - **Depends on:** AAA-02 (pose columns). **Not** AAA-01
 - **Changes:** `pub type PackedIx = u32` in `klotho-core`. **Do not name it `Slot`.** Widen identity columns. `MAX_LOCI` profile 4,096 / 200,000. SoA pose/vel. CoW dirty-range snapshot. Per-Place grid ready. 50k-row publish microbench. This is ABI, not a constant bump.
 
-#### AAA-04 — `klotho-jobs` + Partition + total admit order
+#### AAA-04 — `klotho-jobs` + Partition + total admit order — **landed** (K58 caps in rev 4)
 
 - **Files:** new `crates/klotho-jobs/**`, `partition_islands`, `klotho-commit` `admit_key`, `IslandProposer`, runtime, `klotho-sim` phases + **wire `us_sim`**
 - **Depends on:** AAA-03
-- **Changes:** **Partition phase (K58)** before ProposeJobs. Per-worker buffers, `propose_island`, concat by island id, sort by `(order_key, mover, island, proposer_reg_ix)`. Admit-time K55 tests. **Gate: 8 workers ≡ 1 worker Ash prefix hash on a fixture with ≥ 8 disjoint islands** (inject; default Ash is all `island_id = 0`). `klotho-sim` does not depend on jobs. Unsafe allowlist.
+- **Changes:** **Partition phase (K58)** before ProposeJobs. Per-worker buffers, `propose_island`, concat by island id, sort by `(order_key, mover, island, proposer_reg_ix)`. Admit-time K55 tests. **Gate: 8 workers ≡ 1 worker Ash prefix hash on a fixture with ≥ 8 disjoint islands** (inject; default Ash is all `island_id = 0`). `klotho-sim` does not depend on jobs. Unsafe allowlist (**Miri + Loom on steal deque**). Rev 4: phys-body flood, `NO_ISLAND`, `MAX_ISLAND_SIZE` fail-closed (do not split), `TooManyIslands` / `IslandTooLarge` on next `TraceDelta`.
 
-#### AAA-05 — `klotho-interest` + SimLod
+#### AAA-05 — `klotho-interest` + SimLod — **landed**
 
 - **Files:** new `crates/klotho-interest/**` (deps: **world+core only**), lod column, space/mind skip Dormant
 - **Depends on:** AAA-03
 - **Changes:** Pure `F(view)`. Sleepers remain in `space_ix`. Far period 6. Golden: Dormant locked door still blocks.
 
-#### AAA-08.1 — Pred-lang / ISA / Verb / Rel / TraceBody
+#### AAA-08.1 — Pred-lang / ISA / Verb / Rel / TraceBody — **landed**
 
 - **Files:** `docs/pred-lang.md`, `klotho-ir`, `klotho-canon`, `klotho-trace`, `klotho-commit` rite VM, `ProposalKind`
 - **Depends on:** AAA-02
@@ -1336,7 +1364,7 @@ flowchart TB
 
 - **Files:** `proposal.rs`, kernel, `klotho-trace`, `klotho-world` per-Place index
 - **Depends on:** AAA-05, AAA-08.1 (`PlaceLoaded` tags)
-- **Changes:** `Proposal::Residency { snap: Arc<PlaceSnap>, … }`. Atomic all-rows-or-none; conflict set = all slots. `RiteEnd::Evicted`. Runtime builds the proposal. **10k-row apply microbench.** Fail closed on hash mismatch.
+- **Changes:** `Proposal::Residency { snap: Arc<PlaceSnap>, … }`. Atomic all-rows-or-none; conflict set = all slots. **Do not chunk a visible apply** (K21). Era 1 Places **author ≤ 10k rows** until the microbench passes; process cap 100k stays as a bomb. `RiteEnd::Evicted`. Runtime builds the proposal. **10k-row apply microbench (≤ 2 ms).** Fail closed on hash mismatch.
 
 #### AAA-07 — `klotho-stream` + sharded warp
 
@@ -1348,7 +1376,7 @@ flowchart TB
 
 - **Files:** new `crates/klotho-phys/**`, runtime register, `PhysDelta`, attach apply in kernel
 - **Depends on:** AAA-02, AAA-04, AAA-05, AAA-08.1
-- **Changes:** Scalar XPBD, **no FFI**, SIMD optional same-ISA. Quantized out. Admit-time K55. Kernel yaw-only attach (K56). `support` column. Lambdas zeroed. Partition sleeper flood-fill. **Pinned-Linux stacking golden: bump bottom crate, sleeping neighbors wake and stay stacked** (K58). `never_clip_closed` still rejects. No ragdoll on commit. `phys` flag off → v1 Space only.
+- **Changes:** Scalar XPBD, **no FFI**, SIMD optional same-ISA. **No fast-math, fp-contract off, no OS-varying FMA.** Quantized out. Residual gate p99 ≤ 1 mm / max ≤ 4 mm. Admit-time K55. Kernel yaw-only attach (K56). `support` column. Lambdas zeroed. Partition sleeper flood-fill through **phys bodies only**; floor is not a body. **Pinned-Linux stacking golden: bump bottom crate, sleeping neighbors wake and stay stacked** (K58). `never_clip_closed` still rejects. No ragdoll on commit. `phys` flag off → v1 Space only.
 
 #### AAA-09 — Ember headless goldens (no lag-comp)
 
@@ -1398,7 +1426,7 @@ flowchart TB
 
 - **Files:** new `crates/klotho-editor/**`, `klotho-author` reuse
 - **Depends on:** AAA-12, AAA-14
-- **Changes:** Viewport of Manifest, outliner of loci, Pin UI, cook dashboard. Play-in-editor hosts runtime, pause = stop `step`. Joins `forbidden-imports.sh`. **Test:** gizmo move without Pin is gone on recook. Saving = Pin.
+- **Changes:** Viewport of Manifest, outliner of loci, Pin UI, cook dashboard. Play-in-editor hosts runtime, pause = stop `step`. Joins `forbidden-imports.sh`. **Test:** gizmo move without Pin is gone on recook. Saving = Pin. This is a full editor program; split follow-up PRs rather than smuggling retarget+lighting+sequencer into one merge. `tables` stay `pub(crate)` with feature gates.
 
 #### AAA-16 — Spatial audio device
 
@@ -1484,4 +1512,4 @@ flowchart TB
 
 ---
 
-*End of successor HLD (rev 3, user Qs closed). Klotho's product is still Canon / Intent / Trace / Projection. Pose has three channels. PackedIx is u32 (not pred Slot). Partition produces islands before jobs. K55 is admit-time. Phys is scalar XPBD. GI is probes+SSGI. Infer is an OS-process sidecar. Ember is ClipSet, not MotionDb. Pause save is a fresh snap. AAA is capacity, proposers, and presentation — not a component bag, not a second physics world, not Predicted-on-Trace, and not a year-1 Unreal clone. If a PR puts `&mut World` in infer, a scene file as truth, f32 in Projection, parallel admit, Jolt as hashed truth, or a CombatManager crate to ship Ember, it is a bug, not a feature.*
+*End of successor HLD (rev 4). Klotho's product is still Canon / Intent / Trace / Projection. Pose has three channels with an explicit rebuild matrix. PackedIx is u32 (not pred Slot) and already landed. Partition produces **phys-body** islands before jobs; occupancy is not an island; oversize groups fail closed, they are not split. K55 is admit-time over-produce-then-nack. Phys is scalar XPBD with pinned FMA-off + residual gate. GI is probes+SSGI. Infer is an OS-process sidecar. Ember is ClipSet, not MotionDb. Pause save is a fresh snap. AAA is capacity, proposers, and presentation — not a component bag, not a second physics world, not Predicted-on-Trace, and not a year-1 Unreal clone. If a PR puts `&mut World` in infer, a scene file as truth, f32 in Projection, parallel admit, Jolt as hashed truth, a CombatManager crate to ship Ember, or a floor hull as one giant island, it is a bug, not a feature.*

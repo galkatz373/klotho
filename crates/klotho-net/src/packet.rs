@@ -47,6 +47,8 @@ const REJ_WITNESS: u8 = 8;
 const REJ_WRONG_HULL: u8 = 9;
 const REJ_CONFLICT: u8 = 10;
 const REJ_BUDGET: u8 = 11;
+const REJ_TOO_MANY_ISLANDS: u8 = 12;
+const REJ_ISLAND_TOO_LARGE: u8 = 13;
 
 /// blake3 of [`STAMP_TOKEN`]. Hello mismatch on stamp or canon_hash disconnects.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
@@ -415,6 +417,8 @@ fn encode_reject(b: &mut Buf, r: RejectReason) {
         RejectReason::WrongHull => b.u8(REJ_WRONG_HULL),
         RejectReason::Conflict => b.u8(REJ_CONFLICT),
         RejectReason::Budget => b.u8(REJ_BUDGET),
+        RejectReason::TooManyIslands => b.u8(REJ_TOO_MANY_ISLANDS),
+        RejectReason::IslandTooLarge => b.u8(REJ_ISLAND_TOO_LARGE),
     }
 }
 
@@ -431,6 +435,8 @@ fn decode_reject(r: &mut Reader<'_>) -> Result<RejectReason, NetError> {
         REJ_WRONG_HULL => Ok(RejectReason::WrongHull),
         REJ_CONFLICT => Ok(RejectReason::Conflict),
         REJ_BUDGET => Ok(RejectReason::Budget),
+        REJ_TOO_MANY_ISLANDS => Ok(RejectReason::TooManyIslands),
+        REJ_ISLAND_TOO_LARGE => Ok(RejectReason::IslandTooLarge),
         _ => Err(NetError::UnknownTag),
     }
 }

@@ -29,6 +29,11 @@ pub enum RejectReason {
     Conflict,
     /// Pred-ops, rite-steps, or `us_sim` exhausted; fail closed.
     Budget,
+    /// More contact groups this tick than [`crate::MAX_ISLANDS`].
+    TooManyIslands,
+    /// One contact group exceeded [`crate::MAX_ISLAND_SIZE`]. The island is
+    /// omitted (not split).
+    IslandTooLarge,
 }
 
 /// Kernel invariant violation. The only `Err` `step` is allowed to return.
@@ -55,6 +60,8 @@ impl core::fmt::Display for RejectReason {
             Self::WrongHull => write!(f, "WrongHull"),
             Self::Conflict => write!(f, "Conflict"),
             Self::Budget => write!(f, "Budget"),
+            Self::TooManyIslands => write!(f, "TooManyIslands"),
+            Self::IslandTooLarge => write!(f, "IslandTooLarge"),
         }
     }
 }
@@ -81,6 +88,8 @@ mod tests {
             RejectReason::WitnessMismatch,
             RejectReason::UnclaimedAgency,
             RejectReason::Budget,
+            RejectReason::TooManyIslands,
+            RejectReason::IslandTooLarge,
         ];
         for r in reasons {
             let s = r.to_string();

@@ -5,9 +5,11 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use klotho_canon::Canon;
-use klotho_core::{Budget, KernelFault, PlayerId, RejectReason, Sigil, Tick, Vel3};
+use klotho_core::{Budget, KernelFault, NO_ISLAND, PlayerId, RejectReason, Sigil, Tick, Vel3};
 use klotho_ir::{Channel, IntentTarget, Rel, SourceKind, Verb};
-use klotho_trace::{ISLAND_SNAP_PERIOD_TICKS, IslandSnap, TraceBody, TraceDelta, TraceEvent};
+use klotho_trace::{
+    ISLAND_SNAP_PERIOD_TICKS, IslandSnap, ProposalKind, TraceBody, TraceDelta, TraceEvent,
+};
 use klotho_world::{World, WorldMut, WorldSnapshot, WorldView};
 
 use crate::admit::{AdmitBuf, SyncProposer};
@@ -22,6 +24,8 @@ pub struct CommitKernel {
     world: World,
     heap: Vec<(Proposal, u8)>,
     players: BTreeMap<PlayerId, Sigil>,
+    /// Fail-closed partition rejects, flushed on the next [`Self::step`].
+    partition_rejects: Vec<(ProposalKind, RejectReason)>,
 }
 
 impl CommitKernel {
@@ -32,6 +36,7 @@ impl CommitKernel {
             world,
             heap: Vec::new(),
             players: BTreeMap::new(),
+            partition_rejects: Vec::new(),
         }
     }
 
@@ -68,8 +73,21 @@ impl CommitKernel {
     }
 
     /// K58: rewrite this-tick `island` ids from the live view. Not an admit.
+    ///
+    /// Non-members get [`NO_ISLAND`]. Oversize / too-many groups are omitted
+    /// and recorded as legal rejects on the next [`Self::step`].
     pub fn partition(&mut self) -> Vec<(u16, Vec<Sigil>)> {
-        let islands = partition_islands(&self.world.view());
+        let part = partition_islands(&self.world.view());
+        self.partition_rejects.clear();
+        if part.omitted_too_large > 0 {
+            self.partition_rejects
+                .push((ProposalKind::Phys, RejectReason::IslandTooLarge));
+        }
+        if part.omitted_too_many > 0 {
+            self.partition_rejects
+                .push((ProposalKind::Phys, RejectReason::TooManyIslands));
+        }
+        let islands = part.islands;
         let writes: Vec<(Sigil, u16, u16)> = {
             let view = self.world.view();
             let mut assigned: BTreeMap<Sigil, u16> = BTreeMap::new();
@@ -81,7 +99,7 @@ impl CommitKernel {
             view.loci()
                 .map(|s| {
                     let sleep = view.island(s).map(|(_, t)| t).unwrap_or(0);
-                    let island = assigned.get(&s).copied().unwrap_or(0);
+                    let island = assigned.get(&s).copied().unwrap_or(NO_ISLAND);
                     (s, island, sleep)
                 })
                 .collect()
@@ -125,6 +143,9 @@ impl CommitKernel {
         batch.sort_by_key(|(p, ix)| p.admit_key(*ix));
 
         let mut delta = TraceDelta::empty(tick);
+        delta
+            .rejects
+            .extend(core::mem::take(&mut self.partition_rejects));
         let mut written: BTreeMap<(u128, u8), ()> = BTreeMap::new();
         let mut pred_ops = budget.pred_ops;
         let mut rite_steps = budget.rite_steps;
@@ -387,7 +408,7 @@ fn island_snaps(view: WorldView<'_>, tick: Tick) -> Vec<TraceEvent> {
         let Some((island, sleep)) = view.island(s) else {
             continue;
         };
-        if sleep != 0 {
+        if island == NO_ISLAND || sleep != 0 {
             continue;
         }
         let Some(pose) = view.pose(s) else {

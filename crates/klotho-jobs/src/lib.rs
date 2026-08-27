@@ -1,7 +1,8 @@
 //! Island propose jobs. Steal queues, per-worker buffers, join by island id.
 //!
 //! Gameplay never schedules jobs (K46). `klotho-world/mutate` is not enabled.
-//! Unsafe is limited to the steal deque.
+//! Unsafe is limited to the steal deque. Further steal changes need Miri
+//! and a Loom model of the deque (K39).
 
 #![allow(unsafe_code)]
 #![warn(missing_docs)]

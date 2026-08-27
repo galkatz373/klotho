@@ -137,8 +137,7 @@ pub enum TraceBody {
         /// Quantum that fired (`heat` = 10).
         quantum: i32,
     },
-    /// Coarse 2 Hz island physics snapshot (awake islands). Replay between
-    /// epoch blobs; not the net pose stream.
+    /// Coarse 2 Hz snapshot of awake posed island members.
     IslandSnap(IslandSnap),
     /// Interaction-rate semantic pose.
     PoseCommitted {

@@ -408,9 +408,19 @@ mod tests {
         assert_eq!(snaps.len(), 2, "{d:?}");
         assert_eq!(snaps[0].island, 0);
         assert_eq!(snaps[0].members, vec![awake]);
+        assert_eq!(
+            snaps[0].poses,
+            vec![PoseMm::new(Mm(10), Mm(0), Mm(0), YawMd(0))]
+        );
+        assert_eq!(snaps[0].vels, vec![(VelFx::ZERO, VelFx::ZERO)]);
+        assert_eq!(snaps[0].yaw_rates, vec![0]);
         assert_eq!(snaps[0].sleep_ticks, vec![0]);
         assert_eq!(snaps[1].island, 2);
         assert_eq!(snaps[1].members, vec![other]);
+        assert_eq!(
+            snaps[1].poses,
+            vec![PoseMm::new(Mm(30), Mm(0), Mm(5), YawMd(90))]
+        );
         assert!(
             k.world()
                 .trace()
@@ -418,5 +428,23 @@ mod tests {
                 .iter()
                 .any(|e| matches!(e.body, TraceBody::IslandSnap(_)))
         );
+    }
+
+    #[test]
+    fn island_snap_skips_cadence_tick_when_all_sleep() {
+        let mut k = empty_kernel();
+        plant_mover(
+            &mut k,
+            relic(1),
+            PoseMm::new(Mm(10), Mm(0), Mm(0), YawMd(0)),
+            0,
+            12,
+        );
+        for _ in 0..ISLAND_SNAP_PERIOD_TICKS {
+            let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+            assert!(island_snaps(&d.events).is_empty(), "{d:?}");
+            assert!(!pose_committed(&d.events), "{d:?}");
+        }
+        assert_eq!(k.world().tick().0 % ISLAND_SNAP_PERIOD_TICKS, 0);
     }
 }

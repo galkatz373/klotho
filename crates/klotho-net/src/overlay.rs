@@ -19,8 +19,9 @@ impl Overlay {
         Self::default()
     }
 
-    /// Replace current poses from `events`. Previous current becomes the
-    /// interpolation source and is not a Trace input.
+    /// Replace current poses from `PoseCommitted` / `IslandSnap` in `events`.
+    /// Previous current becomes the interpolation source and is not a Trace
+    /// input. A delta with neither pose event leaves overlay empty.
     pub fn apply_delta(&mut self, events: &[TraceEvent]) {
         self.previous = core::mem::take(&mut self.current);
         for e in events {
@@ -93,8 +94,8 @@ fn lerp_i32(a: i32, b: i32, t_permille: u16) -> i32 {
 
 #[cfg(test)]
 mod tests {
-    use klotho_core::{LocusKind, Tick};
-    use klotho_trace::{PoseReason, fold_prefix, genesis_hash};
+    use klotho_core::{LocusKind, Tick, VelFx};
+    use klotho_trace::{IslandSnap, PoseReason, fold_prefix, genesis_hash};
 
     use super::*;
 
@@ -111,6 +112,24 @@ mod tests {
                 yaw: YawMd(0),
                 reason: PoseReason::Land,
             },
+        )
+    }
+
+    fn snap_event(x: i32) -> TraceEvent {
+        let pose = PoseMm::new(Mm(x), Mm(0), Mm(0), YawMd(0));
+        TraceEvent::new(
+            Tick(30),
+            TraceBody::IslandSnap(
+                IslandSnap::new(
+                    0,
+                    vec![actor()],
+                    vec![pose],
+                    vec![(VelFx::ZERO, VelFx::ZERO)],
+                    vec![0],
+                    vec![0],
+                )
+                .unwrap(),
+            ),
         )
     }
 
@@ -140,5 +159,18 @@ mod tests {
             o.interpolate(actor(), 500).unwrap()
         };
         assert_eq!(interp.x, Mm(25));
+    }
+
+    #[test]
+    fn island_snap_fills_overlay() {
+        let snap = snap_event(40);
+        let mut overlay = Overlay::new();
+        overlay.apply_delta(std::slice::from_ref(&snap));
+        assert_eq!(
+            overlay.pose(actor()).unwrap(),
+            PoseMm::new(Mm(40), Mm(0), Mm(0), YawMd(0))
+        );
+        overlay.apply_delta(&[]);
+        assert!(overlay.is_empty());
     }
 }

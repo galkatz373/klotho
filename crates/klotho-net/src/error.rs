@@ -17,7 +17,7 @@ pub enum NetError {
     BadEvent,
     /// Ed25519 verify failed. Packet is dropped, not ingested.
     BadSignature,
-    /// Verifying-key bytes are the wrong length or not a curve point.
+    /// Verifying-key bytes are the wrong length, off-curve, or small-order.
     BadKey,
     /// OS entropy for join-time keygen failed.
     Keygen,
@@ -27,7 +27,7 @@ pub enum NetError {
     ThirdPlayer,
     /// Trace prefix / delta ancestry mismatch. Disconnect and write a replay.
     Desync,
-    /// Mind and Infer proposals run on the host only.
+    /// Space, Motion, Mind, and Infer run on the host only.
     HostOnly,
     /// Intent sent before Hello completed.
     NotJoined,

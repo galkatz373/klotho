@@ -3,7 +3,7 @@
 //! Signatures authenticate which client sent the packet, not whether a human
 //! produced it.
 
-use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 use klotho_ir::PlayerIntent;
 
 use crate::error::NetError;
@@ -49,14 +49,19 @@ impl Keypair {
     }
 }
 
-/// Parse a 32-byte verifying key. Wrong length or invalid point is an error.
+/// Parse a 32-byte verifying key. Wrong length, invalid point, or small-order
+/// keys are errors.
 pub fn verifying_key_from_bytes(bytes: &[u8]) -> Result<VerifyingKey, NetError> {
     if bytes.len() != 32 {
         return Err(NetError::BadKey);
     }
     let mut raw = [0u8; 32];
     raw.copy_from_slice(bytes);
-    VerifyingKey::from_bytes(&raw).map_err(|_| NetError::BadKey)
+    let vk = VerifyingKey::from_bytes(&raw).map_err(|_| NetError::BadKey)?;
+    if vk.is_weak() {
+        return Err(NetError::BadKey);
+    }
+    Ok(vk)
 }
 
 /// Sign canonical LE bytes of `intent`.
@@ -72,7 +77,8 @@ pub fn sign_intent(kp: &Keypair, intent: &PlayerIntent) -> Result<Signed<PlayerI
 /// Verify `msg` (canonical LE intent bytes) against `vk`.
 pub fn verify_bytes(vk: &VerifyingKey, signature: &[u8; 64], msg: &[u8]) -> Result<(), NetError> {
     let sig = Signature::from_bytes(signature);
-    vk.verify(msg, &sig).map_err(|_| NetError::BadSignature)
+    vk.verify_strict(msg, &sig)
+        .map_err(|_| NetError::BadSignature)
 }
 
 /// Verify and decode a signed intent. Failures must not be ingested.
@@ -135,6 +141,7 @@ mod tests {
     fn truncated_or_off_curve_key_is_error() {
         assert_eq!(verifying_key_from_bytes(&[0u8; 31]), Err(NetError::BadKey));
         assert_eq!(verifying_key_from_bytes(&[]), Err(NetError::BadKey));
+        assert_eq!(verifying_key_from_bytes(&[0u8; 32]), Err(NetError::BadKey));
         let mut raw = [0u8; 32];
         let mut off_curve = false;
         for i in 0u16..=1024 {

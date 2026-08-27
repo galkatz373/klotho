@@ -18,12 +18,12 @@ use crate::packet::{
 use crate::replay::write_replay;
 use crate::sign::{Keypair, Signed, sign_intent, verify_intent, verifying_key_from_bytes};
 
-/// Listen-server role. Minds and infer run only on [`Role::Host`].
+/// Whether this side may ingest mind and infer proposals.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum Role {
-    /// Owns CommitKernel, Space, Motion, Mind, Infer.
+    /// Mind and infer ingest allowed.
     Host,
-    /// Overlay only. Never hashed. No mind / infer ingest.
+    /// Overlay only; never hashed. Mind and infer ingest refused.
     Client,
 }
 
@@ -147,6 +147,12 @@ impl Host {
     #[must_use]
     pub fn role(&self) -> Role {
         Role::Host
+    }
+
+    /// Remote slot after a successful join.
+    #[must_use]
+    pub fn remote(&self) -> Option<PlayerId> {
+        self.remote
     }
 
     /// Current Trace prefix the host will put on Snapshot.
@@ -291,8 +297,16 @@ impl Host {
         }
     }
 
+    /// Record a prefix mismatch reported by a client so a replay may be written.
+    pub fn record_desync(&mut self) {
+        self.disconnect(DisconnectReason::Desync);
+    }
+
     /// Write ingested intents after a desync disconnect.
     pub fn write_desync_replay(&self, path: &Path) -> Result<(), NetError> {
+        if self.disconnect_reason != Some(DisconnectReason::Desync) {
+            return Err(NetError::Disconnected);
+        }
         write_replay(path, self.canon_hash, self.prefix, &self.ingested)
     }
 
@@ -344,9 +358,7 @@ impl Host {
                         wire.send(&r)?;
                     }
                 }
-                Err(NetError::HelloMismatch) | Err(NetError::ThirdPlayer) => {
-                    // Disconnect already recorded; do not send a pause packet.
-                }
+                Err(NetError::HelloMismatch) | Err(NetError::ThirdPlayer) => {}
                 Err(e) => return Err(e),
             }
         }
@@ -440,12 +452,14 @@ impl Client {
         self.disconnected
     }
 
-    /// Refuse Mind / Infer ingest. Space/Motion/Player are not ingested here
-    /// either; the type-level rule the tests care about is host-only minds.
+    /// Clients only deliver PlayerIntent.
     pub fn ingest_kind(&self, kind: ProposalKind) -> Result<(), NetError> {
         match kind {
-            ProposalKind::Mind | ProposalKind::Infer => Err(NetError::HostOnly),
-            ProposalKind::Player | ProposalKind::Space | ProposalKind::Motion => Ok(()),
+            ProposalKind::Player => Ok(()),
+            ProposalKind::Space
+            | ProposalKind::Motion
+            | ProposalKind::Mind
+            | ProposalKind::Infer => Err(NetError::HostOnly),
         }
     }
 
@@ -599,6 +613,13 @@ mod tests {
             Some(DisconnectReason::HelloMismatch)
         );
         assert!(host.ingested().is_empty());
+        let path = std::env::temp_dir().join(format!(
+            "klotho-net-replay-hello-{}-1.ron",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(host.write_desync_replay(&path), Err(NetError::Disconnected));
+        assert!(!path.exists());
     }
 
     #[test]
@@ -669,23 +690,42 @@ mod tests {
         let mut host = Host::new(Hash::ZERO).unwrap();
         assert_eq!(host.accept_join(&[0u8; 16]), Err(NetError::BadKey));
         assert_eq!(host.accept_join(&[0u8; 31]), Err(NetError::BadKey));
+        assert_eq!(host.accept_join(&[0u8; 32]), Err(NetError::BadKey));
         let signed = sign_intent(&Keypair::generate().unwrap(), &look(1, 1)).unwrap();
         assert!(!host.ingest_signed(PlayerId(1), &signed).unwrap());
         assert_eq!(host.dropped_verify(), 1);
         assert!(host.consume().is_empty());
+        assert_eq!(host.remote(), None);
     }
 
     #[test]
     fn third_player_join_refused() {
-        let mut host = Host::new(Hash::from_bytes([7; 32])).unwrap();
+        let canon = Hash::from_bytes([7; 32]);
+        let mut host = Host::new(canon).unwrap();
         let a = Keypair::generate().unwrap();
         let b = Keypair::generate().unwrap();
-        assert_eq!(host.accept_join(&a.verifying_bytes()).unwrap(), PlayerId(1));
+        host.handle(Packet::Hello {
+            canon_hash: canon,
+            build: CompilerStamp::current(),
+            verifying_key: a.verifying_bytes(),
+            slot: PlayerId(0),
+        })
+        .unwrap();
         assert_eq!(
-            host.accept_join(&b.verifying_bytes()).unwrap_err(),
+            host.handle(Packet::Hello {
+                canon_hash: canon,
+                build: CompilerStamp::current(),
+                verifying_key: b.verifying_bytes(),
+                slot: PlayerId(0),
+            })
+            .unwrap_err(),
             NetError::ThirdPlayer
         );
         assert_eq!(host.disconnect_reason(), None);
+        assert_eq!(host.remote(), Some(PlayerId(1)));
+        let signed = sign_intent(&a, &look(1, 1)).unwrap();
+        assert!(host.ingest_signed(PlayerId(1), &signed).unwrap());
+        assert_eq!(host.consume().len(), 1);
     }
 
     #[test]
@@ -703,6 +743,14 @@ mod tests {
         );
         assert_eq!(
             client.ingest_kind(ProposalKind::Infer),
+            Err(NetError::HostOnly)
+        );
+        assert_eq!(
+            client.ingest_kind(ProposalKind::Space),
+            Err(NetError::HostOnly)
+        );
+        assert_eq!(
+            client.ingest_kind(ProposalKind::Motion),
             Err(NetError::HostOnly)
         );
         client.ingest_kind(ProposalKind::Player).unwrap();
@@ -749,6 +797,8 @@ mod tests {
             std::process::id(),
             9
         ));
+        assert_eq!(host.write_desync_replay(&path), Err(NetError::Disconnected));
+        host.record_desync();
         host.write_desync_replay(&path).unwrap();
         let meta = std::fs::metadata(&path).unwrap();
         assert!(meta.len() > 0);
@@ -801,5 +851,22 @@ mod tests {
             })
             .unwrap_err();
         assert_eq!(err, NetError::Desync);
+        assert!(client.disconnected());
+        assert_eq!(client.disconnect_reason(), Some(DisconnectReason::Desync));
+    }
+
+    #[test]
+    fn latest_unconsumed_intent_wins_on_wire() {
+        let canon = Hash::from_bytes([12; 32]);
+        let (mut host, mut client) = memory_session(canon).unwrap();
+        let _ = client.send_intent(look(1, 1)).unwrap();
+        let _ = client.send_intent(look(1, 2)).unwrap();
+        host.pump().unwrap();
+        let got = host.consume();
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].analog.stick_x, 2);
+        assert_eq!(host.dropped_older().len(), 1);
+        assert_eq!(host.dropped_older()[0].analog.stick_x, 1);
+        assert_eq!(host.ingested(), got.as_slice());
     }
 }

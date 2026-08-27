@@ -727,6 +727,47 @@ mod tests {
             }),
             Err(NetError::Oversize)
         );
+
+        let mut intent_len = vec![TAG_INTENT];
+        intent_len.extend_from_slice(&[0u8; 64]);
+        intent_len.extend_from_slice(&((MAX_INTENT as u32) + 1).to_le_bytes());
+        assert_eq!(decode_packet(&intent_len), Err(NetError::Oversize));
+
+        let mut blob_len = vec![TAG_SNAPSHOT];
+        blob_len.extend_from_slice(&0u64.to_le_bytes());
+        blob_len.extend_from_slice(&[0u8; 32]);
+        blob_len.extend_from_slice(&[0u8; 32]);
+        blob_len.extend_from_slice(&((MAX_BLOB as u32) + 1).to_le_bytes());
+        assert_eq!(decode_packet(&blob_len), Err(NetError::Oversize));
+    }
+
+    #[test]
+    fn inner_event_count_oversize_is_error() {
+        fn wrap_event(ev: &[u8]) -> Vec<u8> {
+            let mut pkt = vec![TAG_TRACE_DELTA];
+            pkt.extend_from_slice(&0u64.to_le_bytes());
+            pkt.extend_from_slice(&1u32.to_le_bytes());
+            pkt.extend_from_slice(&(ev.len() as u32).to_le_bytes());
+            pkt.extend_from_slice(ev);
+            pkt
+        }
+
+        let mut snap = vec![1u8];
+        snap.extend_from_slice(&0u64.to_le_bytes());
+        snap.push(5);
+        snap.extend_from_slice(&0u16.to_le_bytes());
+        snap.extend_from_slice(&u32::MAX.to_le_bytes());
+        assert_eq!(decode_packet(&wrap_event(&snap)), Err(NetError::BadEvent));
+
+        let mut uttered = vec![1u8];
+        uttered.extend_from_slice(&0u64.to_le_bytes());
+        uttered.push(12);
+        uttered.extend_from_slice(&0u128.to_le_bytes());
+        uttered.extend_from_slice(&u32::MAX.to_le_bytes());
+        assert_eq!(
+            decode_packet(&wrap_event(&uttered)),
+            Err(NetError::BadEvent)
+        );
     }
 
     #[test]

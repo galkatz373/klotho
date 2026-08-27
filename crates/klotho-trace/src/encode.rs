@@ -194,7 +194,7 @@ pub fn decode_event(bytes: &[u8]) -> Result<TraceEvent, TraceError> {
         },
         TAG_UTTERED => {
             let speaker = r.sigil()?;
-            let n = r.u32_le()? as usize;
+            let n = r.count_capped(2)?;
             let mut fact_ids = Vec::with_capacity(n);
             for _ in 0..n {
                 fact_ids.push(r.u16_le()?);
@@ -236,7 +236,7 @@ fn encode_snap(b: &mut Buf, s: &IslandSnap) {
 
 fn decode_snap(r: &mut Reader<'_>) -> Result<IslandSnap, TraceError> {
     let island = r.u16_le()?;
-    let n = r.u32_le()? as usize;
+    let n = r.count_capped(16 + 16 + 8 + 4 + 2)?;
     let mut members = Vec::with_capacity(n);
     for _ in 0..n {
         members.push(r.sigil()?);
@@ -349,6 +349,19 @@ impl Reader<'_> {
         Ok(u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
     }
 
+    fn remaining(&self) -> usize {
+        self.bytes.len().saturating_sub(self.pos)
+    }
+
+    fn count_capped(&mut self, elem_bytes: usize) -> Result<usize, TraceError> {
+        let n = self.u32_le()? as usize;
+        // n is untrusted; with_capacity must not see u32::MAX.
+        if elem_bytes == 0 || n > self.remaining() / elem_bytes {
+            return Err(TraceError::BadEvent);
+        }
+        Ok(n)
+    }
+
     fn u64_le(&mut self) -> Result<u64, TraceError> {
         let b = self.take(8)?;
         Ok(u64::from_le_bytes([
@@ -439,5 +452,25 @@ mod tests {
             IslandSnap::new(0, vec![actor(1)], vec![], vec![], vec![], vec![]),
             Err(TraceError::SnapLen)
         );
+    }
+
+    #[test]
+    fn uttered_count_capped_by_remaining() {
+        let mut bytes = vec![EVENT_VERSION];
+        bytes.extend_from_slice(&0u64.to_le_bytes());
+        bytes.push(TAG_UTTERED);
+        bytes.extend_from_slice(&actor(1).raw().to_le_bytes());
+        bytes.extend_from_slice(&u32::MAX.to_le_bytes());
+        assert_eq!(decode_event(&bytes), Err(TraceError::BadEvent));
+    }
+
+    #[test]
+    fn island_snap_count_capped_by_remaining() {
+        let mut bytes = vec![EVENT_VERSION];
+        bytes.extend_from_slice(&0u64.to_le_bytes());
+        bytes.push(TAG_ISLAND_SNAP);
+        bytes.extend_from_slice(&0u16.to_le_bytes());
+        bytes.extend_from_slice(&u32::MAX.to_le_bytes());
+        assert_eq!(decode_event(&bytes), Err(TraceError::BadEvent));
     }
 }

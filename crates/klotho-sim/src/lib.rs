@@ -27,7 +27,7 @@ pub enum Phase {
     /// Kick async infer against the **previous** snapshot.
     /// `InferHost` lives in `klotho-runtime`; this phase is a marker.
     InferKick,
-    /// Listen-server flush. No-op here; runtime `net` flushes after `Sim::tick`.
+    /// Listen-server flush marker. Sim does not call net.
     NetFlush,
 }
 

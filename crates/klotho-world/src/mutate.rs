@@ -68,12 +68,14 @@ impl WorldMut<'_> {
         self.world.projection_mut().set_qty(s, r, v)
     }
 
-    /// Insert a relation. `LockedBy` reindexes `space_ix`.
+    /// Insert a relation. Reindexes `space_ix` when Place membership or
+    /// OpaqueClosed changes (`Rel::In`, `Rel::LockedBy`).
     pub fn add_rel(&mut self, a: Sigil, r: Rel, b: Sigil) -> Result<(), WorldError> {
         self.world.projection_mut().add_rel(a, r, b)
     }
 
-    /// Delete a relation.
+    /// Delete a relation. Reindexes `space_ix` when Place membership or
+    /// OpaqueClosed changes (`Rel::In`, `Rel::LockedBy`).
     pub fn del_rel(&mut self, a: Sigil, r: Rel, b: Sigil) -> Result<(), WorldError> {
         self.world.projection_mut().del_rel(a, r, b)
     }
@@ -88,7 +90,7 @@ impl WorldMut<'_> {
         self.world.trace_mut().append(e);
     }
 
-    /// Rebuild `space_ix` from hull+pose+LockedBy. Equals incremental indexing.
+    /// Rebuild `space_ix` from hull, pose, OpaqueClosed, and Place membership.
     pub fn rebuild_space_ix(&mut self) {
         self.world.projection_mut().rebuild_space_ix();
     }

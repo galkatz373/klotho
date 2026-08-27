@@ -349,7 +349,8 @@ impl Projection {
         }
     }
 
-    /// Drop `space_ix` and rebuild from hull+pose+LockedBy. Legal any time.
+    /// Drop `space_ix` and rebuild from hull, pose, OpaqueClosed, and Place
+    /// membership. Legal any time.
     pub fn rebuild_space_ix(&mut self) {
         let items: Vec<(PackedIx, AabbMm, bool, Option<Sigil>)> = (0..self.sigils.len()
             as PackedIx)

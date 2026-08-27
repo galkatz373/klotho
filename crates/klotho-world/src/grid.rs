@@ -3,9 +3,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use klotho_core::{AabbMm, IVec3, PackedIx, Sigil};
+use klotho_core::{AabbMm, IVec3, MAX_LOCI_PROCESS, PackedIx, Sigil};
 
 use crate::cow::CowCol;
+
+fn packed_in_range(ix: PackedIx) -> bool {
+    (ix as usize) < MAX_LOCI_PROCESS
+}
 
 /// Uniform grid cell size, millimetres. Power of two for cheap `div_euclid`.
 pub const CELL_MM: i32 = 1024;
@@ -27,6 +31,9 @@ impl GridIndex {
     }
 
     fn ensure_ix(&mut self, ix: PackedIx) {
+        if !packed_in_range(ix) {
+            return;
+        }
         let n = ix as usize + 1;
         if self.occupied.len() < n {
             self.occupied.resize(n, Vec::new());
@@ -50,7 +57,13 @@ impl GridIndex {
     }
 
     /// Insert `world` AABB for `ix`. Replaces any previous occupancy.
+    ///
+    /// `ix` is a dense packed row (`0..len`). [`MAX_LOCI_PROCESS`] and above
+    /// are ignored so a lone `PackedIx::MAX` cannot allocate the occupancy table.
     pub fn index(&mut self, ix: PackedIx, world: AabbMm, opaque_closed: bool) {
+        if !packed_in_range(ix) {
+            return;
+        }
         self.unindex(ix);
         if world.is_empty() {
             return;
@@ -98,6 +111,11 @@ impl GridIndex {
         self.cells.len()
     }
 
+    #[cfg(test)]
+    fn occupancy_rows(&self) -> usize {
+        self.occupied.len()
+    }
+
     pub(crate) fn approx_bytes(&self) -> usize {
         let mut n = self.cells.len() * 16;
         for bucket in self.cells.values() {
@@ -116,6 +134,8 @@ pub struct PlaceIndex {
     unplaced: Arc<GridIndex>,
     places: BTreeMap<Sigil, Arc<GridIndex>>,
     bounds: BTreeMap<Sigil, AabbMm>,
+    /// Current posed hulls in each Place, used to shrink [`Self::bounds`].
+    place_hulls: BTreeMap<Sigil, BTreeMap<PackedIx, AabbMm>>,
     /// Place grid that currently holds each packed index (`None` = unplaced).
     home: CowCol<Option<Sigil>>,
 }
@@ -152,9 +172,42 @@ impl PlaceIndex {
     }
 
     pub(crate) fn ensure(&mut self, ix: PackedIx) {
+        if !packed_in_range(ix) {
+            return;
+        }
         while self.home.len() <= ix as usize {
             self.home.push(None);
         }
+    }
+
+    fn set_place_bounds(&mut self, place: Sigil) {
+        let u = self.place_hulls.get(&place).and_then(|hulls| {
+            let mut u: Option<AabbMm> = None;
+            for &aabb in hulls.values() {
+                u = Some(match u {
+                    None => aabb,
+                    Some(prev) => prev.union(aabb),
+                });
+            }
+            u
+        });
+        match u {
+            Some(b) => {
+                self.bounds.insert(place, b);
+            }
+            None => {
+                self.place_hulls.remove(&place);
+                self.places.remove(&place);
+                self.bounds.remove(&place);
+            }
+        }
+    }
+
+    fn forget_place_hull(&mut self, place: Sigil, ix: PackedIx) {
+        if let Some(hulls) = self.place_hulls.get_mut(&place) {
+            hulls.remove(&ix);
+        }
+        self.set_place_bounds(place);
     }
 
     /// Remove `ix` from whichever grid currently holds it.
@@ -168,12 +221,15 @@ impl PlaceIndex {
             if let Some(g) = self.places.get_mut(&p) {
                 Arc::make_mut(g).unindex(ix);
             }
+            self.forget_place_hull(p, ix);
         } else {
             Arc::make_mut(&mut self.unplaced).unindex(ix);
         }
     }
 
     /// Insert `world` AABB for `ix` into `place` (or the unplaced grid).
+    ///
+    /// `ix` is a dense packed row. [`MAX_LOCI_PROCESS`] and above are ignored.
     pub fn index(
         &mut self,
         ix: PackedIx,
@@ -181,6 +237,9 @@ impl PlaceIndex {
         opaque_closed: bool,
         place: Option<Sigil>,
     ) {
+        if !packed_in_range(ix) {
+            return;
+        }
         self.unindex(ix);
         if world.is_empty() {
             return;
@@ -192,10 +251,8 @@ impl PlaceIndex {
                 .entry(p)
                 .or_insert_with(|| Arc::new(GridIndex::new()));
             Arc::make_mut(g).index(ix, world, opaque_closed);
-            self.bounds
-                .entry(p)
-                .and_modify(|b| *b = b.union(world))
-                .or_insert(world);
+            self.place_hulls.entry(p).or_default().insert(ix, world);
+            self.set_place_bounds(p);
             self.home.set(ix as usize, Some(p));
         } else {
             Arc::make_mut(&mut self.unplaced).index(ix, world, opaque_closed);
@@ -214,7 +271,11 @@ impl PlaceIndex {
         }
     }
 
-    /// Packed indices whose hull may overlap `swept`, across unplaced + overlapping Places.
+    /// Packed indices whose hull may overlap `swept`.
+    ///
+    /// Unions the unplaced grid with every Place whose coarse AABB intersects
+    /// `swept`. Admission uses this union. Per-Place isolation is
+    /// [`Self::grid`] / [`Self::unplaced`].
     #[must_use]
     pub fn candidates(&self, swept: AabbMm, opaque_closed_only: bool) -> BTreeSet<PackedIx> {
         let mut out = self.unplaced.candidates(swept, opaque_closed_only);
@@ -236,6 +297,7 @@ impl PlaceIndex {
             n += g.approx_bytes();
         }
         n += self.bounds.len() * 32;
+        n += self.place_hulls.len() * 16;
         n
     }
 }
@@ -289,14 +351,69 @@ mod tests {
     }
 
     #[test]
-    fn grid_index_accepts_packed_ix_above_u16() {
+    fn grid_index_refuses_ix_at_process_cap() {
         let mut g = GridIndex::new();
-        let ix: PackedIx = 70_000;
-        g.index(ix, box_at(0), false);
+        g.index(0, box_at(0), false);
+        let before = g.occupancy_rows();
+        g.index(MAX_LOCI_PROCESS as PackedIx, box_at(0), false);
+        g.index(PackedIx::MAX, box_at(0), false);
+        assert_eq!(g.occupancy_rows(), before);
         let hits = g.candidates(box_at(0), false);
-        assert!(hits.contains(&ix));
-        g.unindex(ix);
-        assert!(g.candidates(box_at(0), false).is_empty());
+        assert!(hits.contains(&0));
+        assert!(!hits.contains(&(MAX_LOCI_PROCESS as PackedIx)));
+        assert!(!hits.contains(&PackedIx::MAX));
+    }
+
+    #[test]
+    fn place_index_refuses_ix_at_process_cap() {
+        let mut ix = PlaceIndex::new();
+        let p = Sigil::pack(LocusKind::Place, 0, 1).unwrap();
+        ix.index(MAX_LOCI_PROCESS as PackedIx, box_at(0), false, Some(p));
+        ix.index(PackedIx::MAX, box_at(0), false, None);
+        assert_eq!(ix.place_count(), 0);
+        assert!(ix.grid(p).is_none());
+        assert!(ix.unplaced().candidates(box_at(0), false).is_empty());
+    }
+
+    #[test]
+    fn place_index_isolates_colocated_places() {
+        let mut ix = PlaceIndex::new();
+        let a = Sigil::pack(LocusKind::Place, 0, 1).unwrap();
+        let b = Sigil::pack(LocusKind::Place, 0, 2).unwrap();
+        ix.index(0, box_at(0), false, Some(a));
+        ix.index(1, box_at(0), false, Some(b));
+        ix.index(2, box_at(0), false, None);
+        let swept = box_at(0);
+        let unplaced = ix.unplaced().candidates(swept, false);
+        assert!(unplaced.contains(&2));
+        assert!(!unplaced.contains(&0));
+        assert!(!unplaced.contains(&1));
+        let ga = ix.grid(a).unwrap().candidates(swept, false);
+        assert!(ga.contains(&0));
+        assert!(!ga.contains(&1) && !ga.contains(&2));
+        let gb = ix.grid(b).unwrap().candidates(swept, false);
+        assert!(gb.contains(&1));
+        assert!(!gb.contains(&0) && !gb.contains(&2));
+        let all = ix.candidates(swept, false);
+        assert!(all.contains(&0) && all.contains(&1) && all.contains(&2));
+    }
+
+    #[test]
+    fn place_index_drops_empty_and_shrinks_bounds() {
+        let mut ix = PlaceIndex::new();
+        let a = Sigil::pack(LocusKind::Place, 0, 1).unwrap();
+        ix.index(0, box_at(0), false, Some(a));
+        ix.index(1, box_at(1_000_000), false, Some(a));
+        assert_eq!(ix.place_count(), 1);
+        let wide = ix.bounds(a).unwrap();
+        ix.unindex(1);
+        let tight = ix.bounds(a).unwrap();
+        assert!(tight.max.x < wide.max.x);
+        assert_eq!(ix.place_count(), 1);
+        ix.unindex(0);
+        assert_eq!(ix.place_count(), 0);
+        assert!(ix.grid(a).is_none());
+        assert!(ix.bounds(a).is_none());
     }
 
     #[test]

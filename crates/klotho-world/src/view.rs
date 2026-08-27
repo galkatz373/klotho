@@ -95,7 +95,9 @@ impl WorldView<'_> {
         self.proj.posed_hull(s)
     }
 
-    /// `space_ix` candidates. Admission uses `opaque_closed_only = true`.
+    /// `space_ix` candidates (unplaced ∪ overlapping Places).
+    /// Admission uses `opaque_closed_only = true`. Per-Place isolation is
+    /// [`PlaceIndex::grid`](crate::PlaceIndex::grid).
     #[must_use]
     pub fn space_candidates(&self, swept: AabbMm, opaque_closed_only: bool) -> Vec<Sigil> {
         self.proj

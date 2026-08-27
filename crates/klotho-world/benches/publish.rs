@@ -1,16 +1,34 @@
-//! 50k-row snapshot publish microbench. Not a Hearth fixture.
+//! 50k-row pose-column snapshot publish microbench. Not a Hearth fixture.
+//!
+//! Hulls are bound on a 64-row subset so `PlaceIndex` is non-empty; the timed
+//! path is still `World::snapshot()` of the 50k pose column.
 
 use std::hint::black_box;
 use std::sync::Arc;
 use std::time::Instant;
 
 use klotho_canon::cook_diffs;
-use klotho_core::{Hash, LocusKind, Mm, PoseMm, Sigil, YawMd};
+use klotho_core::{AabbMm, BlobId, Hash, IVec3, LocusKind, Mm, PoseMm, Sigil, YawMd};
 use klotho_ir::{CanonDiff, from_ron};
 use klotho_world::World;
 
 fn relic(id: u128) -> Sigil {
     Sigil::pack(LocusKind::Relic, 0, id).unwrap()
+}
+
+fn hull() -> AabbMm {
+    AabbMm::new(
+        IVec3 {
+            x: -100,
+            y: 0,
+            z: -100,
+        },
+        IVec3 {
+            x: 100,
+            y: 500,
+            z: 100,
+        },
+    )
 }
 
 fn world_n(n: usize) -> World {
@@ -27,6 +45,9 @@ fn world_n(n: usize) -> World {
             m.insert_locus(s, LocusKind::Relic).unwrap();
             m.set_pose(s, PoseMm::new(Mm(i as i32), Mm(0), Mm(0), YawMd(0)))
                 .unwrap();
+            if i < 64 {
+                m.set_hull(s, hull(), BlobId::ZERO).unwrap();
+            }
         }
     }
     w
@@ -51,5 +72,5 @@ fn main() {
         black_box(w.snapshot());
     }
     let dirty = t.elapsed();
-    eprintln!("publish 50k x{ITERS}: clean={clean:?} after-one-dirty-row={dirty:?}");
+    eprintln!("pose-column publish 50k x{ITERS}: clean={clean:?} after-one-dirty-row={dirty:?}");
 }

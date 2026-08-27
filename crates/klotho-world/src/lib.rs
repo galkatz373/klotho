@@ -1,6 +1,6 @@
 //! World is a view of `(canon_hash, trace_prefix_hash)` plus the live Intent
-//! heap. Projection columns (including `VelTable`, `IslandTable`, `space_ix`)
-//! are derived. Snapshots are checkpoints of Trace, not a second world.
+//! heap. Projection columns (vel / island columns and `space_ix`) are derived.
+//! Snapshots are checkpoints of Trace, not a second world.
 //!
 //! Write path is `WorldMut` behind feature `mutate` (crate unit tests also see
 //! it). `klotho-commit` is the only runtime crate that enables the feature.
@@ -430,54 +430,100 @@ mod tests {
         assert!(snap1.shares_pose_chunk(&snap2, crate::cow::COW_CHUNK));
     }
 
+    fn origin_swept() -> AabbMm {
+        AabbMm::new(
+            IVec3 {
+                x: -200,
+                y: 0,
+                z: -200,
+            },
+            IVec3 {
+                x: 200,
+                y: 500,
+                z: 200,
+            },
+        )
+    }
+
     #[test]
     fn per_place_grid_ready() {
         let mut w = opaque_world();
         let place_a = Sigil::pack(LocusKind::Place, 0, 10).unwrap();
         let place_b = Sigil::pack(LocusKind::Place, 0, 11).unwrap();
-        let near = relic(1);
-        let far = relic(2);
+        let in_a = relic(1);
+        let in_b = relic(2);
+        let free = relic(3);
         {
             let mut m = w.mutate();
             m.insert_locus(place_a, LocusKind::Place).unwrap();
             m.insert_locus(place_b, LocusKind::Place).unwrap();
-            m.insert_locus(near, LocusKind::Relic).unwrap();
-            m.insert_locus(far, LocusKind::Relic).unwrap();
-            m.set_hull(near, box_mm(100), BlobId::ZERO).unwrap();
-            m.set_hull(far, box_mm(100), BlobId::ZERO).unwrap();
-            m.set_pose(near, PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)))
-                .unwrap();
-            m.set_pose(far, PoseMm::new(Mm(1_000_000), Mm(0), Mm(0), YawMd(0)))
-                .unwrap();
-            m.add_rel(near, Rel::In, place_a).unwrap();
-            m.add_rel(far, Rel::In, place_b).unwrap();
+            m.insert_locus(in_a, LocusKind::Relic).unwrap();
+            m.insert_locus(in_b, LocusKind::Relic).unwrap();
+            m.insert_locus(free, LocusKind::Relic).unwrap();
+            for s in [in_a, in_b, free] {
+                m.set_hull(s, box_mm(100), BlobId::ZERO).unwrap();
+                m.set_pose(s, PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)))
+                    .unwrap();
+            }
+            m.add_rel(in_a, Rel::In, place_a).unwrap();
+            m.add_rel(in_b, Rel::In, place_b).unwrap();
         }
-        let space = w.view();
-        let hits = space.space_candidates(
-            AabbMm::new(
-                IVec3 {
-                    x: -200,
-                    y: 0,
-                    z: -200,
-                },
-                IVec3 {
-                    x: 200,
-                    y: 500,
-                    z: 200,
-                },
-            ),
-            false,
-        );
-        assert!(hits.contains(&near));
-        assert!(!hits.contains(&far));
+        let swept = origin_swept();
+        let ix_a = w.projection().packed(in_a).unwrap();
+        let ix_b = w.projection().packed(in_b).unwrap();
+        let ix_free = w.projection().packed(free).unwrap();
+        let space = w.projection().space_ix();
+        let ga = space.grid(place_a).unwrap().candidates(swept, false);
+        assert!(ga.contains(&ix_a));
+        assert!(!ga.contains(&ix_b) && !ga.contains(&ix_free));
+        let gb = space.grid(place_b).unwrap().candidates(swept, false);
+        assert!(gb.contains(&ix_b));
+        assert!(!gb.contains(&ix_a) && !gb.contains(&ix_free));
+        let unplaced = space.unplaced().candidates(swept, false);
+        assert!(unplaced.contains(&ix_free));
+        assert!(!unplaced.contains(&ix_a) && !unplaced.contains(&ix_b));
+        let hits = w.view().space_candidates(swept, false);
+        assert!(hits.contains(&in_a) && hits.contains(&in_b) && hits.contains(&free));
         assert_eq!(w.projection().space_ix().place_count(), 2);
-        assert!(w.projection().space_ix().grid(place_a).is_some());
-        assert!(w.projection().space_ix().grid(place_b).is_some());
+
+        w.mutate().del_rel(in_a, Rel::In, place_a).unwrap();
+        let space = w.projection().space_ix();
+        assert!(space.grid(place_a).is_none());
+        assert_eq!(space.place_count(), 1);
+        assert!(space.unplaced().candidates(swept, false).contains(&ix_a));
+        w.mutate().add_rel(in_a, Rel::In, place_a).unwrap();
+        let space = w.projection().space_ix();
+        assert!(
+            space
+                .grid(place_a)
+                .unwrap()
+                .candidates(swept, false)
+                .contains(&ix_a)
+        );
+        assert!(!space.unplaced().candidates(swept, false).contains(&ix_a));
+    }
+
+    #[test]
+    fn packed_ix_past_u16_max() {
+        let n = usize::from(u16::MAX) + 2;
+        let mut w = opaque_world_cap(n);
+        {
+            let mut m = w.mutate();
+            for i in 0..n as u128 {
+                m.insert_locus(relic(i + 1), LocusKind::Relic).unwrap();
+            }
+        }
+        let last = relic(n as u128);
+        let ix = w.projection().packed(last).unwrap();
+        assert_eq!(ix, (n - 1) as PackedIx);
+        assert!(ix > PackedIx::from(u16::MAX));
+        assert_eq!(w.view().loci().count(), n);
     }
 
     #[test]
     fn publish_50k_rows() {
         const N: usize = 50_000;
+        const HULLS: u128 = 64;
         let mut w = opaque_world_cap(N);
         {
             let mut m = w.mutate();
@@ -486,6 +532,9 @@ mod tests {
                 m.insert_locus(s, LocusKind::Relic).unwrap();
                 m.set_pose(s, PoseMm::new(Mm(i as i32), Mm(0), Mm(0), YawMd(0)))
                     .unwrap();
+                if i < HULLS {
+                    m.set_hull(s, box_mm(100), BlobId::ZERO).unwrap();
+                }
             }
         }
         let t0 = std::time::Instant::now();

@@ -10,6 +10,7 @@ members = [
     "crates/klotho-commit",
     "crates/klotho-sim",
     "crates/klotho-jobs",
+    "crates/klotho-interest",
     "crates/klotho-input",
     "crates/klotho-space",
     "crates/klotho-motion",
@@ -48,6 +49,7 @@ klotho-world = { path = "crates/klotho-world" }
 klotho-commit = { path = "crates/klotho-commit" }
 klotho-sim = { path = "crates/klotho-sim" }
 klotho-jobs = { path = "crates/klotho-jobs" }
+klotho-interest = { path = "crates/klotho-interest" }
 klotho-input = { path = "crates/klotho-input" }
 klotho-space = { path = "crates/klotho-space" }
 klotho-motion = { path = "crates/klotho-motion" }

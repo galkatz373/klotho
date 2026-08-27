@@ -1028,6 +1028,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "klotho-interest"
+version = "0.1.0"
+dependencies = [
+ "klotho-canon",
+ "klotho-core",
+ "klotho-world",
+]
+
+[[package]]
 name = "klotho-ir"
 version = "0.1.0"
 dependencies = [
@@ -1138,6 +1147,7 @@ dependencies = [
  "klotho-core",
  "klotho-infer",
  "klotho-input",
+ "klotho-interest",
  "klotho-ir",
  "klotho-jobs",
  "klotho-manifest",

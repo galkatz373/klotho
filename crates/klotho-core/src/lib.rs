@@ -26,8 +26,8 @@ mod units;
 pub use budget::Budget;
 pub use hash::{BlobId, Hash};
 pub use id::{
-    AffordanceId, LawId, LocusKind, MAX_ISLANDS, MAX_LOCI_HEARTH, MAX_LOCI_PROCESS, PackedIx,
-    PlayerId, ResourceId, Sigil, SimLod,
+    AffordanceId, LOD_PERIOD, LawId, LocusKind, MAX_ISLANDS, MAX_LOCI_HEARTH, MAX_LOCI_PROCESS,
+    PackedIx, PlayerId, ResourceId, Sigil, SimLod,
 };
 pub use reject::{KernelFault, RejectReason};
 pub use rng::Rng;

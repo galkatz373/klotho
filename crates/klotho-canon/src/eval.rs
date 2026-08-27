@@ -28,6 +28,8 @@ pub trait PredStore {
     fn in_window(&self, rite: crate::RiteId, ch: Channel) -> bool;
     /// Island sleep. `None` if the locus is unknown.
     fn sleep_ticks(&self, s: Sigil) -> Option<u16>;
+    /// Simulation LOD. Missing row is [`SimLod::Full`].
+    fn sim_lod(&self, s: Sigil) -> SimLod;
 }
 
 /// Proposal + pin bindings for one eval. `other` is rebound by related-scans.
@@ -204,7 +206,9 @@ fn eval_atom<S: PredStore + ?Sized>(
         Atom::TargetIs(s) => ctx.target.is_some() && resolve(s, ctx, other) == ctx.target,
         Atom::OtherIs(s) => other.is_some() && resolve(s, ctx, other) == other,
         Atom::RayHits { .. } => false,
-        Atom::SimLodIs(s, lod) => resolve(s, ctx, other).is_some() && lod == SimLod::Full,
+        Atom::SimLodIs(s, lod) => {
+            resolve(s, ctx, other).is_some_and(|s| ctx.store.sim_lod(s) == lod)
+        }
         Atom::InPlace(s, p) => match (resolve(s, ctx, other), resolve(p, ctx, other)) {
             (Some(a), Some(b)) => ctx.store.has_rel(a, Rel::In, b),
             _ => false,
@@ -285,6 +289,7 @@ pub struct MemStore {
     rites: std::collections::BTreeSet<(Sigil, crate::RiteId)>,
     windows: Vec<(crate::RiteId, Channel)>,
     sleep: std::collections::BTreeMap<Sigil, u16>,
+    lod: std::collections::BTreeMap<Sigil, SimLod>,
 }
 
 impl MemStore {
@@ -353,6 +358,11 @@ impl MemStore {
     pub fn set_sleep(&mut self, s: Sigil, ticks: u16) {
         self.sleep.insert(s, ticks);
     }
+
+    /// Set simulation LOD.
+    pub fn set_sim_lod(&mut self, s: Sigil, lod: SimLod) {
+        self.lod.insert(s, lod);
+    }
 }
 
 impl PredStore for MemStore {
@@ -397,6 +407,10 @@ impl PredStore for MemStore {
 
     fn sleep_ticks(&self, s: Sigil) -> Option<u16> {
         self.sleep.get(&s).copied()
+    }
+
+    fn sim_lod(&self, s: Sigil) -> SimLod {
+        self.lod.get(&s).copied().unwrap_or(SimLod::Full)
     }
 }
 
@@ -538,13 +552,21 @@ mod tests {
         store.add_rel(this, Rel::In, place);
         let claimed = [];
         let pins = [];
-        let c = ctx(&store, this, Some(place), &pins, Verb::Use, &claimed);
         let mut tick = PRED_OPS_PER_TICK;
         let full = compile_pred(&Pred::SimLodIs(Slot::This, SimLod::Full)).unwrap();
-        assert!(eval_pred(&full, &c, &mut tick).unwrap());
-        tick = PRED_OPS_PER_TICK;
         let far = compile_pred(&Pred::SimLodIs(Slot::This, SimLod::Far)).unwrap();
-        assert!(!eval_pred(&far, &c, &mut tick).unwrap());
+        {
+            let c = ctx(&store, this, Some(place), &pins, Verb::Use, &claimed);
+            assert!(eval_pred(&full, &c, &mut tick).unwrap());
+            tick = PRED_OPS_PER_TICK;
+            assert!(!eval_pred(&far, &c, &mut tick).unwrap());
+        }
+        store.set_sim_lod(this, SimLod::Far);
+        let c = ctx(&store, this, Some(place), &pins, Verb::Use, &claimed);
+        tick = PRED_OPS_PER_TICK;
+        assert!(eval_pred(&far, &c, &mut tick).unwrap());
+        tick = PRED_OPS_PER_TICK;
+        assert!(!eval_pred(&full, &c, &mut tick).unwrap());
         tick = PRED_OPS_PER_TICK;
         let ray = compile_pred(&Pred::RayHits {
             from: Slot::This,

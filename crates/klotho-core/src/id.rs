@@ -50,6 +50,9 @@ impl LocusKind {
     }
 }
 
+/// Far-rate period in global ticks (K29).
+pub const LOD_PERIOD: u16 = 6;
+
 /// Simulation LOD. Missing projection column is treated as [`Self::Full`].
 #[repr(u8)]
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Serialize, Deserialize)]

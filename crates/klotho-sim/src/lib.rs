@@ -121,7 +121,7 @@ impl Sim {
         Ok(report)
     }
 
-    /// [`Phase::Interest`] marker. Interest crate is AAA-05.
+    /// [`Phase::Interest`] marker. Runtime applies `klotho-interest`.
     pub fn phase_interest(&self) {
         profile_enter("klotho.interest");
         let _ = Phase::Interest;

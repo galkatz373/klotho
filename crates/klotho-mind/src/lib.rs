@@ -13,7 +13,7 @@
 use std::collections::BTreeMap;
 
 use klotho_commit::{AdmitBuf, IslandProposer, Proposal, SyncProposer};
-use klotho_core::{LocusKind, PoseMm, ResourceId, Sigil, Tick};
+use klotho_core::{LOD_PERIOD, LocusKind, PoseMm, ResourceId, Sigil, SimLod, Tick};
 use klotho_ir::{IntentTarget, MindIntent, MindSpec, Name, Rel, Verb};
 use klotho_world::WorldView;
 
@@ -143,6 +143,14 @@ impl IslandProposer for Mind {
     }
 }
 
+fn skip_lod(view: &WorldView<'_>, s: Sigil) -> bool {
+    match view.sim_lod(s) {
+        SimLod::Dormant => true,
+        SimLod::Far => view.tick().0 % u64::from(LOD_PERIOD) != 0,
+        SimLod::Full => false,
+    }
+}
+
 fn plan_one(
     agent: &BoundAgent,
     view: &WorldView<'_>,
@@ -153,6 +161,9 @@ fn plan_one(
         return None;
     }
     if view.has_rel(agent.locus, Rel::Dead, agent.locus) {
+        return None;
+    }
+    if skip_lod(view, agent.locus) {
         return None;
     }
     let mut best: Option<MindIntent> = None;

@@ -2,7 +2,7 @@
 
 use klotho_canon::{PredStore, RiteId};
 use klotho_core::{
-    AabbMm, AffordanceId, PackedIx, PhysRequest, PoseMm, ResourceId, Sigil, Tick, Vel3,
+    AabbMm, AffordanceId, PackedIx, PhysRequest, PoseMm, ResourceId, Sigil, SimLod, Tick, Vel3,
 };
 use klotho_ir::{Channel, Rel};
 
@@ -89,6 +89,12 @@ impl WorldView<'_> {
     #[must_use]
     pub fn island(&self, s: Sigil) -> Option<(u16, u16)> {
         self.proj.island(s)
+    }
+
+    /// Simulation LOD. Unknown locus is [`SimLod::Full`].
+    #[must_use]
+    pub fn sim_lod(&self, s: Sigil) -> SimLod {
+        self.proj.sim_lod(s)
     }
 
     /// `Opaque ∧ LockedBy`.
@@ -181,5 +187,9 @@ impl PredStore for WorldView<'_> {
 
     fn sleep_ticks(&self, s: Sigil) -> Option<u16> {
         self.proj.island(s).map(|(_, t)| t)
+    }
+
+    fn sim_lod(&self, s: Sigil) -> SimLod {
+        self.proj.sim_lod(s)
     }
 }

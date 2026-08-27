@@ -5,7 +5,8 @@ use std::sync::Arc;
 
 use klotho_canon::RiteId;
 use klotho_core::{
-    AabbMm, AffordanceId, BlobId, LocusKind, PackedIx, PhysRequest, PoseMm, ResourceId, Sigil, Vel3,
+    AabbMm, AffordanceId, BlobId, LocusKind, PackedIx, PhysRequest, PoseMm, ResourceId, Sigil,
+    SimLod, Vel3,
 };
 use klotho_ir::{Channel, Rel};
 use klotho_trace::{RelTag, TraceBody, TraceEvent};
@@ -30,6 +31,7 @@ pub struct Projection {
     yaw_rate: CowCol<i32>,
     island_id: CowCol<u16>,
     sleep_ticks: CowCol<u16>,
+    sim_lod: CowCol<SimLod>,
     /// `(packed, rel_u8)` → neighbors.
     rels: Arc<BTreeMap<(PackedIx, u8), Vec<Sigil>>>,
     rel_triples: Arc<BTreeSet<(PackedIx, u8, Sigil)>>,
@@ -77,6 +79,7 @@ impl Projection {
             yaw_rate: CowCol::default(),
             island_id: CowCol::default(),
             sleep_ticks: CowCol::default(),
+            sim_lod: CowCol::default(),
             rels: Arc::new(BTreeMap::new()),
             rel_triples: Arc::new(BTreeSet::new()),
             qty: Arc::new(BTreeMap::new()),
@@ -141,6 +144,7 @@ impl Projection {
         self.yaw_rate.push(0);
         self.island_id.push(0);
         self.sleep_ticks.push(0);
+        self.sim_lod.push(SimLod::Full);
         Arc::make_mut(&mut self.space_ix).ensure(i);
         Ok(i)
     }
@@ -204,6 +208,12 @@ impl Projection {
         let i = self.packed(s).ok_or(WorldError::UnknownLocus)?;
         self.island_id.set(i as usize, island);
         self.sleep_ticks.set(i as usize, sleep);
+        Ok(())
+    }
+
+    pub(crate) fn set_sim_lod(&mut self, s: Sigil, lod: SimLod) -> Result<(), WorldError> {
+        let i = self.packed(s).ok_or(WorldError::UnknownLocus)?;
+        self.sim_lod.set(i as usize, lod);
         Ok(())
     }
 
@@ -484,6 +494,18 @@ impl Projection {
             self.island_id.get(i as usize).copied().unwrap_or(0),
             self.sleep_ticks.get(i as usize).copied().unwrap_or(0),
         ))
+    }
+
+    /// Simulation LOD. Unknown locus is [`SimLod::Full`].
+    #[must_use]
+    pub fn sim_lod(&self, s: Sigil) -> SimLod {
+        let Some(i) = self.packed(s) else {
+            return SimLod::Full;
+        };
+        self.sim_lod
+            .get(i as usize)
+            .copied()
+            .unwrap_or(SimLod::Full)
     }
 
     /// Local hull AABB (unposed).

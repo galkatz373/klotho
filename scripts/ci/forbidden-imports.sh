@@ -29,6 +29,19 @@ check_gameplay_tables examples/hearth-slice
 check_gameplay_tables examples/ash-slice
 check_gameplay_tables crates/klotho-author
 
+# klotho-interest may not import commit (K49).
+if command -v rg >/dev/null 2>&1; then
+  if rg -n --glob '!target/**' 'klotho_commit::|klotho-commit' crates/klotho-interest; then
+    echo "klotho-interest must depend on world+core only" >&2
+    fail=1
+  fi
+else
+  if grep -RIn -E 'klotho_commit::|klotho-commit' crates/klotho-interest >/dev/null 2>&1; then
+    echo "klotho-interest must depend on world+core only" >&2
+    fail=1
+  fi
+fi
+
 # Gameplay never schedules jobs (K46).
 check_gameplay_jobs() {
   local dir="$1"

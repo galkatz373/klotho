@@ -16,7 +16,7 @@ mod overlap;
 pub use overlap::{CapsuleMm, aabb_overlaps, capsule_overlaps_aabb, swept_aabb};
 
 use klotho_commit::{AdmitBuf, IslandProposer, Proposal, SyncProposer};
-use klotho_core::{BlobId, HullWitness, LocusKind, PoseMm, Sigil, Tick, Vel3};
+use klotho_core::{BlobId, HullWitness, LOD_PERIOD, LocusKind, PoseMm, Sigil, SimLod, Tick, Vel3};
 use klotho_world::{WorldView, world_aabb};
 
 /// Walk speed used when tests seed a whole-mm vel. Not a physics constant.
@@ -70,6 +70,9 @@ fn propose_one(view: &WorldView, s: Sigil) -> Option<Proposal> {
         // Player / NPC walk is Motion (root clip). Dual-truth is forbidden.
         return None;
     }
+    if skip_lod(view, s) {
+        return None;
+    }
     let sleep = view.island(s).map(|(_, t)| t).unwrap_or(0);
     if sleep > 0 {
         return None;
@@ -106,6 +109,14 @@ fn propose_one(view: &WorldView, s: Sigil) -> Option<Proposal> {
     })
 }
 
+fn skip_lod(view: &WorldView, s: Sigil) -> bool {
+    match view.sim_lod(s) {
+        SimLod::Dormant => true,
+        SimLod::Far => view.tick().0 % u64::from(LOD_PERIOD) != 0,
+        SimLod::Full => false,
+    }
+}
+
 fn hits_closed(view: &WorldView, mover: Sigil, swept: klotho_core::AabbMm) -> bool {
     for o in view.space_candidates(swept, true) {
         if o == mover {
@@ -129,7 +140,7 @@ mod tests {
     use klotho_commit::{CommitKernel, Proposal};
     use klotho_core::{
         AabbMm, BlobId, Budget, Hash, HullWitness, IVec3, LocusKind, Mm, PlayerId, PoseMm,
-        RejectReason, Sigil, Tick, Vel3, VelFx, YawMd,
+        RejectReason, Sigil, SimLod, Tick, Vel3, VelFx, YawMd,
     };
     use klotho_ir::{CanonDiff, Rel, from_ron};
     use klotho_world::World;
@@ -282,6 +293,22 @@ mod tests {
             Mm(1400),
             "rejected delta must not move"
         );
+    }
+
+    #[test]
+    fn dormant_locked_door_still_blocks() {
+        let (mut k, player, door) = kernel();
+        k.world_mut().set_sim_lod(door, SimLod::Dormant).unwrap();
+        assert!(k.world().view().opaque_closed(door));
+        let mut space = Space;
+        let d = k.step(Tick(1), Budget::HEARTH, &mut [&mut space]).unwrap();
+        assert!(
+            d.rejects
+                .iter()
+                .any(|(_, r)| matches!(r, RejectReason::Law(_) | RejectReason::WitnessMismatch)),
+            "{d:?}"
+        );
+        assert_eq!(k.world().view().pose(player).unwrap().z, Mm(1400));
     }
 
     #[test]

@@ -3,7 +3,7 @@
 
 use klotho_core::{
     AabbMm, AffordanceId, BlobId, LocusKind, PackedIx, PhysRequest, PoseMm, ResourceId, Sigil,
-    Tick, Vel3,
+    SimLod, Tick, Vel3,
 };
 use klotho_ir::{PlayerIntent, Rel};
 use klotho_trace::TraceEvent;
@@ -62,6 +62,11 @@ impl WorldMut<'_> {
     /// Set island id and sleep ticks.
     pub fn set_island(&mut self, s: Sigil, island: u16, sleep: u16) -> Result<(), WorldError> {
         self.world.projection_mut().set_island(s, island, sleep)
+    }
+
+    /// Set simulation LOD. Does not unindex `space_ix`.
+    pub fn set_sim_lod(&mut self, s: Sigil, lod: SimLod) -> Result<(), WorldError> {
+        self.world.projection_mut().set_sim_lod(s, lod)
     }
 
     /// Set a quantity row.

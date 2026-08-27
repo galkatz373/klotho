@@ -30,7 +30,7 @@ pub enum Rel {
     Dead = 10,
     /// Vehicle / possessed body. Object is the pilot.
     PilotedBy = 11,
-    /// Streaming attach. Object is the carrier that keeps this row loaded.
+    /// Attach parent. Object is the carrier locus.
     AttachedTo = 12,
 }
 

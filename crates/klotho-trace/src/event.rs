@@ -73,7 +73,7 @@ pub enum RiteEnd {
     Fail = 1,
     /// Per-rite or per-tick step cap exceeded.
     FailBudget = 2,
-    /// Locus left the live prefix (streaming). Not [`Self::FailBudget`].
+    /// Place evict / epoch halt. Not [`Self::FailBudget`].
     Evicted = 3,
 }
 
@@ -244,14 +244,14 @@ pub enum TraceBody {
         /// Interned fact ids claimed.
         fact_ids: Vec<u16>,
     },
-    /// Place rows inserted this tick.
+    /// Recorded Place load. Apply is later.
     PlaceLoaded {
         /// Place locus.
         place: Sigil,
-        /// Row count admitted.
+        /// Recorded row count.
         n: u32,
     },
-    /// Place rows dropped this tick.
+    /// Recorded Place evict. Apply is later.
     PlaceEvicted {
         /// Place locus.
         place: Sigil,
@@ -265,11 +265,11 @@ pub enum TraceBody {
         /// Pose at emit.
         at: PoseMm,
     },
-    /// Locus left the live prefix. Generation bump is recorded here.
+    /// Recorded despawn. Apply is later.
     Despawned {
         /// Retired sigil.
         sigil: Sigil,
-        /// Generation after bump.
+        /// Recorded generation.
         generation: u8,
     },
 }

@@ -460,12 +460,14 @@ mod tests {
         k.ingest(Proposal::Player(player_use()));
         let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
         assert!(d.rejects.is_empty(), "{d:?}");
-        assert!(
-            d.events
-                .iter()
-                .any(|e| matches!(e.body, klotho_trace::TraceBody::Spawned { .. })),
-            "{d:?}"
-        );
+        let spawned = d.events.iter().find_map(|e| match e.body {
+            klotho_trace::TraceBody::Spawned {
+                sigil, template, ..
+            } => Some((sigil, template)),
+            _ => None,
+        });
+        assert_eq!(spawned, Some((s, 0)), "{d:?}");
+        assert_eq!(k.world().view().loci().count(), 1);
         let req = k.world().view().phys_req(s).expect("phys_req");
         assert_eq!(req.lin.x, 3);
         assert_eq!(req.ang.y, 1);

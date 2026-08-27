@@ -217,7 +217,7 @@ pub fn run_burst(
                     .facts
                     .iter()
                     .position(|n| n.as_str() == name.as_str())
-                    .unwrap_or(0) as u16;
+                    .ok_or(RejectReason::Budget)? as u16;
                 let at = spec.view().pose(actor).unwrap_or_default();
                 spec.push(TraceEvent::new(
                     tick,

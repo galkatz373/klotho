@@ -82,7 +82,7 @@ pub enum Pred {
     TargetIs(Slot),
     /// Slot equality.
     OtherIs(Slot),
-    /// Hitscan vs hulls. Eval is false until phys (AAA-08).
+    /// Hitscan vs hulls. Eval is false until a phys hitscan exists.
     RayHits {
         /// Ray origin.
         from: Slot,

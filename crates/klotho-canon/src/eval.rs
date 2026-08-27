@@ -557,5 +557,9 @@ mod tests {
         tick = PRED_OPS_PER_TICK;
         let here = compile_pred(&Pred::InPlace(Slot::This, Slot::Target)).unwrap();
         assert!(eval_pred(&here, &c, &mut tick).unwrap());
+        let empty = MemStore::new();
+        let c_empty = ctx(&empty, this, Some(place), &pins, Verb::Use, &claimed);
+        tick = PRED_OPS_PER_TICK;
+        assert!(!eval_pred(&here, &c_empty, &mut tick).unwrap());
     }
 }

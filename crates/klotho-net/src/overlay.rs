@@ -170,25 +170,29 @@ mod tests {
     #[test]
     fn pose_committed_copies_six_dof() {
         let s = actor();
-        let mut pose = PoseMm::new(Mm(40), Mm(50), Mm(20), YawMd(7));
-        pose.pitch = YawMd(1_000);
-        pose.roll = YawMd(2_000);
-        let land = TraceEvent::new(
+        let mut prev = PoseMm::new(Mm(10), Mm(50), Mm(20), YawMd(7));
+        prev.pitch = YawMd(1_000);
+        prev.roll = YawMd(2_000);
+        let first = TraceEvent::new(
             Tick(1),
             TraceBody::PoseCommitted {
                 s,
-                pose,
+                pose: prev,
+                reason: PoseReason::Land,
+            },
+        );
+        let next = PoseMm::new(Mm(40), Mm(0), Mm(0), YawMd(0));
+        let land = TraceEvent::new(
+            Tick(2),
+            TraceBody::PoseCommitted {
+                s,
+                pose: next,
                 reason: PoseReason::Land,
             },
         );
         let mut overlay = Overlay::new();
+        overlay.apply_delta(std::slice::from_ref(&first));
         overlay.apply_delta(std::slice::from_ref(&land));
-        let p = overlay.pose(s).unwrap();
-        assert_eq!(p.x, Mm(40));
-        assert_eq!(p.y, Mm(50));
-        assert_eq!(p.z, Mm(20));
-        assert_eq!(p.yaw, YawMd(7));
-        assert_eq!(p.pitch, YawMd(1_000));
-        assert_eq!(p.roll, YawMd(2_000));
+        assert_eq!(overlay.pose(s).unwrap(), next);
     }
 }

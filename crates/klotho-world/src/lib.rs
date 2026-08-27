@@ -255,7 +255,7 @@ mod tests {
     }
 
     #[test]
-    fn pose_committed_keeps_pitch_roll_and_y() {
+    fn pose_committed_copies_six_dof() {
         let mut w = opaque_world();
         let s = relic(1);
         {
@@ -269,23 +269,55 @@ mod tests {
                 Tick(1),
                 TraceBody::PoseCommitted {
                     s,
-                    pose: {
-                        let mut q = PoseMm::new(Mm(11), Mm(50), Mm(21), YawMd(31));
-                        q.pitch = YawMd(1_000);
-                        q.roll = YawMd(2_000);
-                        q
-                    },
+                    pose: PoseMm::new(Mm(11), Mm(0), Mm(21), YawMd(31)),
                     reason: PoseReason::Land,
                 },
             ));
         }
         let got = w.view().pose(s).unwrap();
         assert_eq!(got.x, Mm(11));
-        assert_eq!(got.y, Mm(50));
+        assert_eq!(got.y, Mm(0));
         assert_eq!(got.z, Mm(21));
         assert_eq!(got.yaw, YawMd(31));
-        assert_eq!(got.pitch, YawMd(1_000));
-        assert_eq!(got.roll, YawMd(2_000));
+        assert_eq!(got.pitch, YawMd::ZERO);
+        assert_eq!(got.roll, YawMd::ZERO);
+    }
+
+    #[test]
+    fn place_spawn_despawn_apply_is_noop() {
+        let mut w = opaque_world();
+        let s = relic(1);
+        let place = Sigil::pack(LocusKind::Place, 0, 2).unwrap();
+        let pose = PoseMm::new(Mm(10), Mm(50), Mm(20), YawMd(30));
+        {
+            let mut m = w.mutate();
+            m.insert_locus(s, LocusKind::Relic).unwrap();
+            m.insert_locus(place, LocusKind::Place).unwrap();
+            m.set_pose(s, pose).unwrap();
+            m.add_rel(s, Rel::In, place).unwrap();
+            m.set_qty(s, ResourceId(0), 7).unwrap();
+            for body in [
+                TraceBody::PlaceLoaded { place, n: 99 },
+                TraceBody::PlaceEvicted { place },
+                TraceBody::Spawned {
+                    template: 1,
+                    sigil: relic(9),
+                    at: PoseMm::default(),
+                },
+                TraceBody::Despawned {
+                    sigil: s,
+                    generation: 3,
+                },
+            ] {
+                m.append(TraceEvent::new(Tick(1), body));
+            }
+        }
+        let view = w.view();
+        assert_eq!(view.loci().count(), 2);
+        assert_eq!(view.pose(s), Some(pose));
+        assert!(view.has_rel(s, Rel::In, place));
+        assert_eq!(view.qty(s, ResourceId(0)), 7);
+        assert!(view.pose(relic(9)).is_none());
     }
 
     #[test]

@@ -93,7 +93,7 @@ pub enum Atom {
     TargetIs(CookedSlot),
     /// Slot equals the scan-bound Other.
     OtherIs(CookedSlot),
-    /// Hitscan vs hulls. Eval is false until phys.
+    /// Hitscan vs hulls. Eval is false until a phys hitscan exists.
     RayHits {
         /// Ray origin.
         from: CookedSlot,

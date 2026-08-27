@@ -184,18 +184,16 @@ pub struct PoseMm {
     pub z: Mm,
     /// Yaw about Y, millidegrees, normalized by callers that care.
     pub yaw: YawMd,
-    /// Pitch about X, millidegrees. Missing on decode is 0.
+    /// Pitch about X, millidegrees.
     #[serde(default)]
     pub pitch: YawMd,
-    /// Roll about Z, millidegrees. Missing on decode is 0.
+    /// Roll about Z, millidegrees.
     #[serde(default)]
     pub roll: YawMd,
 }
 
 impl PoseMm {
-    /// Construct from millimetre translation and yaw. Pitch and roll are zero
-    /// so 2.5D call sites stay unchanged. Y is height, not the second axis in
-    /// a graphics basis — it is the second *argument*.
+    /// Construct from millimetre translation and yaw. Pitch and roll are zero.
     #[must_use]
     pub const fn new(x: Mm, y: Mm, z: Mm, yaw: YawMd) -> Self {
         Self {

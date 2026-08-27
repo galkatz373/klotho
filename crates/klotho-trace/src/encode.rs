@@ -298,6 +298,7 @@ fn decode_pose(r: &mut Reader<'_>, wide: bool) -> Result<PoseMm, TraceError> {
     let z = Mm(r.i32_le()?);
     let y = Mm(r.i32_le()?);
     let yaw = YawMd(r.i32_le()?);
+    // v1 rows omit pitch/roll; missing axes are 0.
     let (pitch, roll) = if wide {
         (YawMd(r.i32_le()?), YawMd(r.i32_le()?))
     } else {
@@ -320,6 +321,7 @@ fn decode_vel(r: &mut Reader<'_>, wide: bool) -> Result<Vel3, TraceError> {
         let z = VelFx(r.i32_le()?);
         Ok(Vel3::new(x, y, z))
     } else {
+        // v1 rows omit vel.y; missing axis is 0.
         let z = VelFx(r.i32_le()?);
         Ok(Vel3::new(x, VelFx::ZERO, z))
     }
@@ -496,17 +498,31 @@ mod tests {
     #[test]
     fn island_snap_round_trip() {
         let s = actor(9);
+        let mut pose = PoseMm::new(Mm(10), Mm(5), Mm(20), YawMd(7));
+        pose.pitch = YawMd(1_000);
+        pose.roll = YawMd(2_000);
         let snap = IslandSnap::new(
             4,
             vec![s],
-            vec![PoseMm::new(Mm(10), Mm(0), Mm(20), YawMd(0))],
-            vec![Vel3::new(VelFx::ZERO, VelFx::ZERO, VelFx::ONE)],
+            vec![pose],
+            vec![Vel3::new(
+                VelFx::ONE,
+                VelFx::from_mm_per_tick(3),
+                VelFx::ZERO,
+            )],
             vec![0],
             vec![3],
         )
         .unwrap();
         let e = TraceEvent::new(Tick(0), TraceBody::IslandSnap(snap));
-        assert_eq!(decode_event(&encode_event(&e)).unwrap(), e);
+        let got = decode_event(&encode_event(&e)).unwrap();
+        assert_eq!(got, e);
+        let TraceBody::IslandSnap(snap) = got.body else {
+            panic!("expected snap");
+        };
+        assert_eq!(snap.poses[0].pitch, YawMd(1_000));
+        assert_eq!(snap.poses[0].roll, YawMd(2_000));
+        assert_eq!(snap.vels[0].y, VelFx::from_mm_per_tick(3));
     }
 
     #[test]

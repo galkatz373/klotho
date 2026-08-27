@@ -27,15 +27,16 @@ impl Overlay {
         for e in events {
             match &e.body {
                 TraceBody::PoseCommitted { s, xz, yaw, .. } => {
+                    let prev = self.previous.get(s).copied();
                     self.current.insert(
                         *s,
                         PoseMm {
                             x: xz.0,
-                            y: Mm::ZERO,
+                            y: prev.map(|p| p.y).unwrap_or(Mm::ZERO),
                             z: xz.1,
                             yaw: *yaw,
-                            pitch: YawMd::ZERO,
-                            roll: YawMd::ZERO,
+                            pitch: prev.map(|p| p.pitch).unwrap_or(YawMd::ZERO),
+                            roll: prev.map(|p| p.roll).unwrap_or(YawMd::ZERO),
                         },
                     );
                 }
@@ -98,7 +99,7 @@ fn lerp_i32(a: i32, b: i32, t_permille: u16) -> i32 {
 
 #[cfg(test)]
 mod tests {
-    use klotho_core::{LocusKind, Tick, VelFx};
+    use klotho_core::{LocusKind, Tick, Vel3};
     use klotho_trace::{IslandSnap, PoseReason, fold_prefix, genesis_hash};
 
     use super::*;
@@ -128,7 +129,7 @@ mod tests {
                     0,
                     vec![actor()],
                     vec![pose],
-                    vec![(VelFx::ZERO, VelFx::ZERO)],
+                    vec![Vel3::ZERO],
                     vec![0],
                     vec![0],
                 )
@@ -176,5 +177,37 @@ mod tests {
         );
         overlay.apply_delta(&[]);
         assert!(overlay.is_empty());
+    }
+
+    #[test]
+    fn pose_committed_keeps_previous_height_and_attitude() {
+        let s = actor();
+        let mut snap_pose = PoseMm::new(Mm(10), Mm(50), Mm(20), YawMd(0));
+        snap_pose.pitch = YawMd(1_000);
+        snap_pose.roll = YawMd(2_000);
+        let snap = TraceEvent::new(
+            Tick(1),
+            TraceBody::IslandSnap(
+                IslandSnap::new(
+                    0,
+                    vec![s],
+                    vec![snap_pose],
+                    vec![Vel3::ZERO],
+                    vec![0],
+                    vec![0],
+                )
+                .unwrap(),
+            ),
+        );
+        let land = pose_event(40);
+        let mut overlay = Overlay::new();
+        overlay.apply_delta(std::slice::from_ref(&snap));
+        overlay.apply_delta(std::slice::from_ref(&land));
+        let p = overlay.pose(s).unwrap();
+        assert_eq!(p.x, Mm(40));
+        assert_eq!(p.z, Mm(0));
+        assert_eq!(p.y, Mm(50));
+        assert_eq!(p.pitch, YawMd(1_000));
+        assert_eq!(p.roll, YawMd(2_000));
     }
 }

@@ -45,7 +45,7 @@ mod tests {
         YawMd,
     };
     use klotho_ir::{CanonDiff, Rel, from_ron};
-    use klotho_trace::{TraceBody, TraceEvent};
+    use klotho_trace::{PoseReason, TraceBody, TraceEvent};
 
     use super::*;
 
@@ -243,6 +243,36 @@ mod tests {
         assert_eq!(snap.view().pose(s).unwrap().x, Mm(1));
         assert_eq!(w.view().pose(s).unwrap().x, Mm(99));
         assert_eq!(snap.trace_prefix_hash, w.trace_prefix_hash());
+    }
+
+    #[test]
+    fn pose_committed_keeps_pitch_roll_and_y() {
+        let mut w = opaque_world();
+        let s = relic(1);
+        {
+            let mut m = w.mutate();
+            m.insert_locus(s, LocusKind::Relic).unwrap();
+            let mut p = PoseMm::new(Mm(10), Mm(50), Mm(20), YawMd(30));
+            p.pitch = YawMd(1_000);
+            p.roll = YawMd(2_000);
+            m.set_pose(s, p).unwrap();
+            m.append(TraceEvent::new(
+                Tick(1),
+                TraceBody::PoseCommitted {
+                    s,
+                    xz: (Mm(11), Mm(21)),
+                    yaw: YawMd(31),
+                    reason: PoseReason::Land,
+                },
+            ));
+        }
+        let got = w.view().pose(s).unwrap();
+        assert_eq!(got.x, Mm(11));
+        assert_eq!(got.y, Mm(50));
+        assert_eq!(got.z, Mm(21));
+        assert_eq!(got.yaw, YawMd(31));
+        assert_eq!(got.pitch, YawMd(1_000));
+        assert_eq!(got.roll, YawMd(2_000));
     }
 
     #[test]

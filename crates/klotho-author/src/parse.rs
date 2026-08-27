@@ -8,8 +8,8 @@
 //! Comments are full-line `#` only (optional ` #` tails on statement lines,
 //! not inside quotes). They are not RON payload.
 //!
-//! `seed pose <name> x y z yaw` uses [`PoseMm::new`] order (Y is height), not
-//! the struct field order `x, z, y, yaw`. Repeated `style notes` last-wins;
+//! `seed pose <name> x y z yaw` matches [`PoseMm::new`] and struct fields
+//! (`x, y, z, yaw`; pitch/roll default 0). Repeated `style notes` last-wins;
 //! `style palette` / `style tag` append.
 //!
 //! ```text

@@ -216,6 +216,37 @@ mod tests {
     }
 
     #[test]
+    fn space_delta_keeps_pitch_roll() {
+        let diffs: Vec<CanonDiff> = from_ron("[]").unwrap();
+        let canon = cook_diffs(&diffs).unwrap();
+        let mut k = CommitKernel::new(World::new(Arc::new(canon), Hash::ZERO));
+        let s = relic(1);
+        {
+            let mut w = k.world_mut();
+            w.insert_locus(s, LocusKind::Relic).unwrap();
+            w.set_hull(s, box_xz(100, 1800, 100), hull_id(1)).unwrap();
+            let mut pose = PoseMm::new(Mm(0), Mm(50), Mm(0), YawMd(0));
+            pose.pitch = YawMd(1_000);
+            pose.roll = YawMd(2_000);
+            w.set_pose(s, pose).unwrap();
+            w.set_vel(
+                s,
+                Vel3::new(VelFx::ZERO, VelFx::ZERO, VelFx::from_mm_per_tick(20)),
+                0,
+            )
+            .unwrap();
+        }
+        let mut space = Space;
+        let d = k.step(Tick(1), Budget::HEARTH, &mut [&mut space]).unwrap();
+        assert!(d.rejects.is_empty(), "{d:?}");
+        let got = k.world().view().pose(s).unwrap();
+        assert_eq!(got.z, Mm(20));
+        assert_eq!(got.y, Mm(50));
+        assert_eq!(got.pitch, YawMd(1_000));
+        assert_eq!(got.roll, YawMd(2_000));
+    }
+
+    #[test]
     fn idle_locked_door_blocks() {
         let (mut k, player, door) = kernel();
         assert!(k.world().view().opaque_closed(door));

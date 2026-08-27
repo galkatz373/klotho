@@ -6,7 +6,7 @@ use std::time::Instant;
 use klotho_canon::cook_diffs;
 use klotho_commit::CommitKernel;
 use klotho_core::{
-    AabbMm, BlobId, Budget, Hash, IVec3, LocusKind, Mm, PoseMm, Sigil, Tick, VelFx, YawMd,
+    AabbMm, BlobId, Budget, Hash, IVec3, LocusKind, Mm, PoseMm, Sigil, Tick, Vel3, VelFx, YawMd,
 };
 use klotho_debug::BudgetMode;
 use klotho_ir::{CanonDiff, from_ron};
@@ -52,8 +52,16 @@ fn awake64_is_under_four_ms() {
             .unwrap();
         w.set_pose(s, PoseMm::new(Mm(i as i32 * 400), Mm(0), Mm(0), YawMd(0)))
             .unwrap();
-        w.set_vel(s, VelFx::from_mm_per_tick(WALK_MM_PER_TICK), VelFx::ZERO, 0)
-            .unwrap();
+        w.set_vel(
+            s,
+            Vel3::new(
+                VelFx::from_mm_per_tick(WALK_MM_PER_TICK),
+                VelFx::ZERO,
+                VelFx::ZERO,
+            ),
+            0,
+        )
+        .unwrap();
     }
     let mut space = Space;
     let t0 = Instant::now();

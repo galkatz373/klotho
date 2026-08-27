@@ -1,7 +1,7 @@
 //! Read path. Same API from live `World` and `WorldSnapshot`.
 
 use klotho_canon::{PredStore, RiteId};
-use klotho_core::{AabbMm, AffordanceId, PoseMm, ResourceId, Sigil, Tick, VelFx};
+use klotho_core::{AabbMm, AffordanceId, PoseMm, ResourceId, Sigil, Tick, Vel3};
 use klotho_ir::{Channel, Rel};
 
 use crate::proj::Projection;
@@ -71,9 +71,9 @@ impl WorldView<'_> {
         self.proj.pose(s)
     }
 
-    /// `(vel_x, vel_z, yaw_rate)`.
+    /// `(vel, yaw_rate)`.
     #[must_use]
-    pub fn vel(&self, s: Sigil) -> Option<(VelFx, VelFx, i32)> {
+    pub fn vel(&self, s: Sigil) -> Option<(Vel3, i32)> {
         self.proj.vel(s)
     }
 

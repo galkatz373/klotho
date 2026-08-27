@@ -16,7 +16,7 @@ mod overlap;
 pub use overlap::{CapsuleMm, aabb_overlaps, capsule_overlaps_aabb, swept_aabb};
 
 use klotho_commit::{AdmitBuf, Proposal, SyncProposer};
-use klotho_core::{BlobId, HullWitness, LocusKind, PoseMm, Sigil, Tick, VelFx};
+use klotho_core::{BlobId, HullWitness, LocusKind, PoseMm, Sigil, Tick, Vel3};
 use klotho_world::{WorldView, world_aabb};
 
 /// Walk speed used when tests seed a whole-mm vel. Not a physics constant.
@@ -59,15 +59,17 @@ fn propose_one(view: &WorldView, s: Sigil) -> Option<Proposal> {
     }
     let pose = view.pose(s)?;
     let local = view.hull(s)?;
-    let (vx, vz, yaw_rate) = view.vel(s).unwrap_or((VelFx::ZERO, VelFx::ZERO, 0));
-    if vx == VelFx::ZERO && vz == VelFx::ZERO && yaw_rate == 0 {
+    let (vel, yaw_rate) = view.vel(s).unwrap_or((Vel3::ZERO, 0));
+    if vel == Vel3::ZERO && yaw_rate == 0 {
         return None;
     }
     let next = PoseMm {
-        x: pose.x.displace(vx),
-        z: pose.z.displace(vz),
-        y: pose.y,
+        x: pose.x.displace(vel.x),
+        y: pose.y.displace(vel.y),
+        z: pose.z.displace(vel.z),
         yaw: pose.yaw,
+        pitch: pose.pitch,
+        roll: pose.roll,
     };
     let from = world_aabb(local, pose.translation());
     let to = world_aabb(local, next.translation());
@@ -78,8 +80,7 @@ fn propose_one(view: &WorldView, s: Sigil) -> Option<Proposal> {
     Some(Proposal::SpaceDelta {
         mover: s,
         pose: next,
-        vel_x: vx,
-        vel_z: vz,
+        vel,
         yaw_rate,
         island,
         sleep_ticks: 0,
@@ -111,7 +112,7 @@ mod tests {
     use klotho_commit::{CommitKernel, Proposal};
     use klotho_core::{
         AabbMm, BlobId, Budget, Hash, HullWitness, IVec3, LocusKind, Mm, PlayerId, PoseMm,
-        RejectReason, Sigil, Tick, VelFx, YawMd,
+        RejectReason, Sigil, Tick, Vel3, VelFx, YawMd,
     };
     use klotho_ir::{CanonDiff, Rel, from_ron};
     use klotho_world::World;
@@ -173,8 +174,12 @@ mod tests {
             w.set_affordance(door, opaque, true).unwrap();
             w.add_rel(door, Rel::LockedBy, door).unwrap();
             w.set_island(door, 1, 12).unwrap(); // sleeper still blocks
-            w.set_vel(player, VelFx::ZERO, VelFx::from_mm_per_tick(500), 0)
-                .unwrap();
+            w.set_vel(
+                player,
+                Vel3::new(VelFx::ZERO, VelFx::ZERO, VelFx::from_mm_per_tick(500)),
+                0,
+            )
+            .unwrap();
         }
         (k, player, door)
     }
@@ -197,8 +202,12 @@ mod tests {
                 .unwrap();
             w.set_pose(player, PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)))
                 .unwrap();
-            w.set_vel(player, VelFx::ZERO, VelFx::from_mm_per_tick(20), 0)
-                .unwrap();
+            w.set_vel(
+                player,
+                Vel3::new(VelFx::ZERO, VelFx::ZERO, VelFx::from_mm_per_tick(20)),
+                0,
+            )
+            .unwrap();
         }
         let mut space = Space;
         let d = k.step(Tick(1), Budget::HEARTH, &mut [&mut space]).unwrap();
@@ -245,8 +254,7 @@ mod tests {
         k.ingest(Proposal::SpaceDelta {
             mover: player,
             pose,
-            vel_x: VelFx::ZERO,
-            vel_z: VelFx::ZERO,
+            vel: Vel3::ZERO,
             yaw_rate: 0,
             island: 0,
             sleep_ticks: 0,
@@ -273,8 +281,16 @@ mod tests {
                 .unwrap();
             w.set_pose(s, PoseMm::new(Mm(i as i32 * 400), Mm(0), Mm(0), YawMd(0)))
                 .unwrap();
-            w.set_vel(s, VelFx::from_mm_per_tick(WALK_MM_PER_TICK), VelFx::ZERO, 0)
-                .unwrap();
+            w.set_vel(
+                s,
+                Vel3::new(
+                    VelFx::from_mm_per_tick(WALK_MM_PER_TICK),
+                    VelFx::ZERO,
+                    VelFx::ZERO,
+                ),
+                0,
+            )
+            .unwrap();
         }
         let mut space = Space;
         let t0 = Instant::now();

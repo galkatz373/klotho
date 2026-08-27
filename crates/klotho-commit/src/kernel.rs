@@ -117,8 +117,8 @@ impl CommitKernel {
         &mut self,
         p: Proposal,
         tick: Tick,
-        pred_ops: &mut u16,
-        rite_steps: &mut u16,
+        pred_ops: &mut u32,
+        rite_steps: &mut u32,
         written: &mut BTreeMap<(u128, u8), ()>,
     ) -> Result<Vec<TraceEvent>, RejectReason> {
         let (actor, target, verb, source, claimed, swept_hits) = self.preflight(&p, tick)?;
@@ -149,8 +149,7 @@ impl CommitKernel {
             Proposal::SpaceDelta {
                 mover,
                 pose,
-                vel_x,
-                vel_z,
+                vel,
                 yaw_rate,
                 island,
                 sleep_ticks,
@@ -159,8 +158,7 @@ impl CommitKernel {
             | Proposal::MotionDelta {
                 mover,
                 pose,
-                vel_x,
-                vel_z,
+                vel,
                 yaw_rate,
                 island,
                 sleep_ticks,
@@ -168,7 +166,7 @@ impl CommitKernel {
             } => {
                 spec.set_pose(*mover, *pose)
                     .map_err(|_| RejectReason::Budget)?;
-                spec.set_vel(*mover, *vel_x, *vel_z, *yaw_rate)
+                spec.set_vel(*mover, *vel, *yaw_rate)
                     .map_err(|_| RejectReason::Budget)?;
                 spec.set_island(*mover, *island, *sleep_ticks)
                     .map_err(|_| RejectReason::Budget)?;

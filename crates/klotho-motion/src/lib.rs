@@ -23,7 +23,7 @@ pub use clip::{Clip, ClipSet, WALK_MM_PER_TICK};
 pub use yaw::rotate_xz;
 
 use klotho_commit::{AdmitBuf, Proposal, SyncProposer};
-use klotho_core::{BlobId, HullWitness, IVec3, LocusKind, Mm, PoseMm, Sigil, Tick, VelFx};
+use klotho_core::{BlobId, HullWitness, IVec3, LocusKind, Mm, PoseMm, Sigil, Tick, Vel3, VelFx};
 use klotho_ir::Verb;
 use klotho_world::{WorldView, world_aabb};
 
@@ -85,9 +85,9 @@ fn propose_one(clips: &ClipSet, view: &WorldView, s: Sigil) -> Option<Proposal> 
     }
     let pose = view.pose(s)?;
     let local = view.hull(s)?;
-    let (vx, vz, yaw_rate) = view.vel(s).unwrap_or((VelFx::ZERO, VelFx::ZERO, 0));
+    let (vel, yaw_rate) = view.vel(s).unwrap_or((Vel3::ZERO, 0));
     let grounded = pose.y.0 <= 0;
-    let verb = if vx != VelFx::ZERO || vz != VelFx::ZERO {
+    let verb = if vel.x != VelFx::ZERO || vel.y != VelFx::ZERO || vel.z != VelFx::ZERO {
         Verb::Move
     } else {
         Verb::Look
@@ -99,9 +99,11 @@ fn propose_one(clips: &ClipSet, view: &WorldView, s: Sigil) -> Option<Proposal> 
     }
     let next = PoseMm {
         x: pose.x.wrapping_add(Mm(root.x)),
-        z: pose.z.wrapping_add(Mm(root.z)),
         y: pose.y.wrapping_add(Mm(root.y)),
+        z: pose.z.wrapping_add(Mm(root.z)),
         yaw: pose.yaw,
+        pitch: pose.pitch,
+        roll: pose.roll,
     };
     let from = world_aabb(local, pose.translation());
     let to = world_aabb(local, next.translation());
@@ -115,8 +117,7 @@ fn propose_one(clips: &ClipSet, view: &WorldView, s: Sigil) -> Option<Proposal> 
         // Vel is the Move request (analog/tests). Space skips Actors, so it
         // is not also integrated. Zeroing it here would drop stick on the
         // next tick.
-        vel_x: vx,
-        vel_z: vz,
+        vel,
         yaw_rate,
         island,
         sleep_ticks: 0,
@@ -149,7 +150,7 @@ mod tests {
     use klotho_commit::{CommitKernel, Proposal};
     use klotho_core::{
         AabbMm, BlobId, Budget, Hash, HullWitness, IVec3, LocusKind, Mm, PlayerId, PoseMm,
-        RejectReason, Sigil, Tick, VelFx, YawMd,
+        RejectReason, Sigil, Tick, Vel3, VelFx, YawMd,
     };
     use klotho_ir::{CanonDiff, Rel, from_ron};
     use klotho_world::World;
@@ -215,8 +216,12 @@ mod tests {
             w.set_affordance(door, opaque, true).unwrap();
             w.add_rel(door, Rel::LockedBy, door).unwrap();
             w.set_island(door, 1, 12).unwrap();
-            w.set_vel(player, VelFx::ZERO, VelFx::from_mm_per_tick(500), 0)
-                .unwrap();
+            w.set_vel(
+                player,
+                Vel3::new(VelFx::ZERO, VelFx::ZERO, VelFx::from_mm_per_tick(500)),
+                0,
+            )
+            .unwrap();
         }
         (k, player, door)
     }
@@ -224,9 +229,7 @@ mod tests {
     #[test]
     fn tpose_idle_does_not_move() {
         let (mut k, player, _) = kernel();
-        k.world_mut()
-            .set_vel(player, VelFx::ZERO, VelFx::ZERO, 0)
-            .unwrap();
+        k.world_mut().set_vel(player, Vel3::ZERO, 0).unwrap();
         let mut motion = Motion::hearth();
         let d = k.step(Tick(1), Budget::HEARTH, &mut [&mut motion]).unwrap();
         assert!(d.rejects.is_empty(), "{d:?}");
@@ -249,7 +252,8 @@ mod tests {
                 PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(YawMd::QUARTER_TURN)),
             )
             .unwrap();
-            w.set_vel(player, VelFx::ONE, VelFx::ZERO, 0).unwrap();
+            w.set_vel(player, Vel3::new(VelFx::ONE, VelFx::ZERO, VelFx::ZERO), 0)
+                .unwrap();
         }
         let mut motion = Motion::hearth();
         let d = k.step(Tick(1), Budget::HEARTH, &mut [&mut motion]).unwrap();
@@ -259,7 +263,7 @@ mod tests {
         assert_eq!(p.z, Mm(0));
         assert_eq!(
             k.world().view().vel(player).unwrap(),
-            (VelFx::ONE, VelFx::ZERO, 0)
+            (Vel3::new(VelFx::ONE, VelFx::ZERO, VelFx::ZERO), 0)
         );
     }
 
@@ -298,8 +302,7 @@ mod tests {
         k.ingest(Proposal::MotionDelta {
             mover: player,
             pose,
-            vel_x: VelFx::ZERO,
-            vel_z: VelFx::ZERO,
+            vel: Vel3::ZERO,
             yaw_rate: 0,
             island: 0,
             sleep_ticks: 0,
@@ -328,8 +331,12 @@ mod tests {
                 .unwrap();
             w.set_pose(barrel, PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)))
                 .unwrap();
-            w.set_vel(barrel, VelFx::ZERO, VelFx::from_mm_per_tick(20), 0)
-                .unwrap();
+            w.set_vel(
+                barrel,
+                Vel3::new(VelFx::ZERO, VelFx::ZERO, VelFx::from_mm_per_tick(20)),
+                0,
+            )
+            .unwrap();
         }
         let mut motion = Motion::hearth();
         let d = k.step(Tick(1), Budget::HEARTH, &mut [&mut motion]).unwrap();

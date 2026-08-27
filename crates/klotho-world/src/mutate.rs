@@ -1,9 +1,7 @@
 //! Write path. Public via [`World::mutate`] when feature `mutate` is on
 //! (`klotho-commit` only). Always compiled so projection writers stay linked.
 
-use klotho_core::{
-    AabbMm, AffordanceId, BlobId, LocusKind, PoseMm, ResourceId, Sigil, Tick, VelFx,
-};
+use klotho_core::{AabbMm, AffordanceId, BlobId, LocusKind, PoseMm, ResourceId, Sigil, Tick, Vel3};
 use klotho_ir::{PlayerIntent, Rel};
 use klotho_trace::TraceEvent;
 
@@ -54,14 +52,8 @@ impl WorldMut<'_> {
     }
 
     /// Set velocity columns.
-    pub fn set_vel(
-        &mut self,
-        s: Sigil,
-        vx: VelFx,
-        vz: VelFx,
-        yaw_rate: i32,
-    ) -> Result<(), WorldError> {
-        self.world.projection_mut().set_vel(s, vx, vz, yaw_rate)
+    pub fn set_vel(&mut self, s: Sigil, vel: Vel3, yaw_rate: i32) -> Result<(), WorldError> {
+        self.world.projection_mut().set_vel(s, vel, yaw_rate)
     }
 
     /// Set island id and sleep ticks.

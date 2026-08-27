@@ -9,9 +9,9 @@ use klotho_trace::{ProposalKind, TraceDelta, TraceEvent};
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default)]
 pub struct BudgetUsed {
     /// Unused placeholder. Always 0.
-    pub pred_ops: u16,
+    pub pred_ops: u32,
     /// Unused placeholder. Always 0.
-    pub rite_steps: u16,
+    pub rite_steps: u32,
     /// Observed step wall time, microseconds.
     pub us_sim: u32,
 }

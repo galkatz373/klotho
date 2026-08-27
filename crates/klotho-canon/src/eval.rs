@@ -58,7 +58,7 @@ pub struct EvalCtx<'a, S: PredStore + ?Sized> {
 pub fn eval_pred<S: PredStore + ?Sized>(
     prog: &PredProgram,
     ctx: &EvalCtx<'_, S>,
-    tick_ops: &mut u16,
+    tick_ops: &mut u32,
 ) -> Result<bool, RejectReason> {
     let mut eval_ops = PRED_OPS_PER_EVAL;
     let mut scan_pc = 0usize;
@@ -79,7 +79,7 @@ fn eval_chunk<S: PredStore + ?Sized>(
     ctx: &EvalCtx<'_, S>,
     other: Option<Sigil>,
     scan_pc: &mut usize,
-    tick_ops: &mut u16,
+    tick_ops: &mut u32,
     eval_ops: &mut u16,
 ) -> Result<bool, RejectReason> {
     let mut stack: Vec<bool> = Vec::new();
@@ -132,7 +132,7 @@ fn eval_scan<S: PredStore + ?Sized>(
     prog: &PredProgram,
     ctx: &EvalCtx<'_, S>,
     outer_other: Option<Sigil>,
-    tick_ops: &mut u16,
+    tick_ops: &mut u32,
     eval_ops: &mut u16,
 ) -> Result<bool, RejectReason> {
     let Some(of) = resolve(scan.of, ctx, outer_other) else {
@@ -223,7 +223,7 @@ fn pop(stack: &mut Vec<bool>) -> bool {
     stack.pop().unwrap_or(false)
 }
 
-fn charge(tick_ops: &mut u16, eval_ops: &mut u16) -> Result<(), RejectReason> {
+fn charge(tick_ops: &mut u32, eval_ops: &mut u16) -> Result<(), RejectReason> {
     if *tick_ops == 0 || *eval_ops == 0 {
         return Err(RejectReason::Budget);
     }

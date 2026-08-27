@@ -16,7 +16,7 @@ pub fn admit_laws(
     source: SourceKind,
     claimed: &[Channel],
     swept_hits: bool,
-    pred_ops: &mut u16,
+    pred_ops: &mut u32,
 ) -> Result<(), RejectReason> {
     let pins = canon.pin_sigils.as_slice();
     let ctx = EvalCtx {
@@ -105,7 +105,7 @@ fn cap_count(
     verb: Verb,
     source: SourceKind,
     claimed: &[Channel],
-    pred_ops: &mut u16,
+    pred_ops: &mut u32,
 ) -> Result<u16, RejectReason> {
     let prog = canon.pred(mark).ok_or(RejectReason::Budget)?;
     let mut n: u16 = 0;

@@ -1,7 +1,7 @@
 //! Canonical little-endian encoding of [`TraceEvent`]. Hashed bytes never go
 //! through serde. Tag numbers are frozen: bump [`EVENT_VERSION`] to invalidate.
 
-use klotho_core::{Mm, PoseMm, ResourceId, Sigil, Tick, VelFx, YawMd};
+use klotho_core::{Mm, PoseMm, ResourceId, Sigil, Tick, Vel3, VelFx, YawMd};
 
 use crate::error::TraceError;
 use crate::event::{IslandSnap, PoseReason, RelTag, RiteEnd, TraceBody, TraceEvent};
@@ -222,9 +222,10 @@ fn encode_snap(b: &mut Buf, s: &IslandSnap) {
     for p in &s.poses {
         encode_pose(b, *p);
     }
-    for &(vx, vz) in &s.vels {
-        b.i32_le(vx.0);
-        b.i32_le(vz.0);
+    for v in &s.vels {
+        b.i32_le(v.x.0);
+        b.i32_le(v.y.0);
+        b.i32_le(v.z.0);
     }
     for &y in &s.yaw_rates {
         b.i32_le(y);
@@ -236,18 +237,21 @@ fn encode_snap(b: &mut Buf, s: &IslandSnap) {
 
 fn decode_snap(r: &mut Reader<'_>) -> Result<IslandSnap, TraceError> {
     let island = r.u16_le()?;
+    // Cap uses the v1 per-member floor (sigil + xz-yaw pose + xz vel + rates).
+    // Newer rows are larger; the tighter floor still refuses huge `n`.
     let n = r.count_capped(16 + 16 + 8 + 4 + 2)?;
     let mut members = Vec::with_capacity(n);
     for _ in 0..n {
         members.push(r.sigil()?);
     }
+    let (wide_pose, wide_vel) = snap_layout(r.remaining(), n)?;
     let mut poses = Vec::with_capacity(n);
     for _ in 0..n {
-        poses.push(decode_pose(r)?);
+        poses.push(decode_pose(r, wide_pose)?);
     }
     let mut vels = Vec::with_capacity(n);
     for _ in 0..n {
-        vels.push((VelFx(r.i32_le()?), VelFx(r.i32_le()?)));
+        vels.push(decode_vel(r, wide_vel)?);
     }
     let mut yaw_rates = Vec::with_capacity(n);
     for _ in 0..n {
@@ -260,19 +264,65 @@ fn decode_snap(r: &mut Reader<'_>) -> Result<IslandSnap, TraceError> {
     IslandSnap::new(island, members, poses, vels, yaw_rates, sleep_ticks)
 }
 
+/// v1: pose x/z/y/yaw (16) + vel x/z (8) + yaw_rate (4) + sleep (2) = 30.
+/// v2: pose + pitch/roll (24) + vel xyz (12) + yaw_rate (4) + sleep (2) = 42.
+fn snap_layout(remaining: usize, n: usize) -> Result<(bool, bool), TraceError> {
+    if n == 0 {
+        return if remaining == 0 {
+            Ok((true, true))
+        } else {
+            Err(TraceError::BadEvent)
+        };
+    }
+    if remaining % n != 0 {
+        return Err(TraceError::BadEvent);
+    }
+    match remaining / n {
+        30 => Ok((false, false)),
+        42 => Ok((true, true)),
+        _ => Err(TraceError::BadEvent),
+    }
+}
+
 fn encode_pose(b: &mut Buf, p: PoseMm) {
     b.i32_le(p.x.0);
     b.i32_le(p.z.0);
     b.i32_le(p.y.0);
     b.i32_le(p.yaw.0);
+    b.i32_le(p.pitch.0);
+    b.i32_le(p.roll.0);
 }
 
-fn decode_pose(r: &mut Reader<'_>) -> Result<PoseMm, TraceError> {
+fn decode_pose(r: &mut Reader<'_>, wide: bool) -> Result<PoseMm, TraceError> {
     let x = Mm(r.i32_le()?);
     let z = Mm(r.i32_le()?);
     let y = Mm(r.i32_le()?);
     let yaw = YawMd(r.i32_le()?);
-    Ok(PoseMm { x, z, y, yaw })
+    let (pitch, roll) = if wide {
+        (YawMd(r.i32_le()?), YawMd(r.i32_le()?))
+    } else {
+        (YawMd::ZERO, YawMd::ZERO)
+    };
+    Ok(PoseMm {
+        x,
+        y,
+        z,
+        yaw,
+        pitch,
+        roll,
+    })
+}
+
+fn decode_vel(r: &mut Reader<'_>, wide: bool) -> Result<Vel3, TraceError> {
+    let x = VelFx(r.i32_le()?);
+    if wide {
+        let y = VelFx(r.i32_le()?);
+        let z = VelFx(r.i32_le()?);
+        Ok(Vel3::new(x, y, z))
+    } else {
+        let z = VelFx(r.i32_le()?);
+        Ok(Vel3::new(x, VelFx::ZERO, z))
+    }
 }
 
 struct Buf {
@@ -450,13 +500,43 @@ mod tests {
             4,
             vec![s],
             vec![PoseMm::new(Mm(10), Mm(0), Mm(20), YawMd(0))],
-            vec![(VelFx::ZERO, VelFx::ONE)],
+            vec![Vel3::new(VelFx::ZERO, VelFx::ZERO, VelFx::ONE)],
             vec![0],
             vec![3],
         )
         .unwrap();
         let e = TraceEvent::new(Tick(0), TraceBody::IslandSnap(snap));
         assert_eq!(decode_event(&encode_event(&e)).unwrap(), e);
+    }
+
+    #[test]
+    fn island_snap_v1_pose_vel_missing_axes_are_zero() {
+        let s = actor(9);
+        let mut bytes = vec![EVENT_VERSION];
+        bytes.extend_from_slice(&0u64.to_le_bytes());
+        bytes.push(TAG_ISLAND_SNAP);
+        bytes.extend_from_slice(&4u16.to_le_bytes());
+        bytes.extend_from_slice(&1u32.to_le_bytes());
+        bytes.extend_from_slice(&s.raw().to_le_bytes());
+        for v in [10i32, 20, 0, 0] {
+            bytes.extend_from_slice(&v.to_le_bytes());
+        }
+        bytes.extend_from_slice(&0i32.to_le_bytes());
+        bytes.extend_from_slice(&VelFx::ONE.0.to_le_bytes());
+        bytes.extend_from_slice(&0i32.to_le_bytes());
+        bytes.extend_from_slice(&3u16.to_le_bytes());
+        let e = decode_event(&bytes).unwrap();
+        let TraceBody::IslandSnap(snap) = e.body else {
+            panic!("expected snap");
+        };
+        assert_eq!(snap.poses[0].x, Mm(10));
+        assert_eq!(snap.poses[0].z, Mm(20));
+        assert_eq!(snap.poses[0].pitch, YawMd::ZERO);
+        assert_eq!(snap.poses[0].roll, YawMd::ZERO);
+        assert_eq!(
+            snap.vels[0],
+            Vel3::new(VelFx::ZERO, VelFx::ZERO, VelFx::ONE)
+        );
     }
 
     #[test]

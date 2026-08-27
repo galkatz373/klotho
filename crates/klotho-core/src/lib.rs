@@ -28,6 +28,6 @@ pub use hash::{BlobId, Hash};
 pub use id::{AffordanceId, LawId, LocusKind, PlayerId, ResourceId, Sigil};
 pub use reject::{KernelFault, RejectReason};
 pub use rng::Rng;
-pub use space::{AabbMm, HullWitness, IVec3, PoseMm};
+pub use space::{AabbMm, HullWitness, IVec3, PoseMm, Vel3};
 pub use tick::{Epoch, Tick};
 pub use units::{Mm, VelFx, YawMd};

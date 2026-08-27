@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use klotho_canon::RiteId;
-use klotho_core::{AabbMm, AffordanceId, BlobId, LocusKind, PoseMm, ResourceId, Sigil, VelFx};
+use klotho_core::{AabbMm, AffordanceId, BlobId, LocusKind, PoseMm, ResourceId, Sigil, Vel3};
 use klotho_ir::{Channel, Rel};
 use klotho_trace::{RelTag, TraceBody, TraceEvent};
 
@@ -22,8 +22,7 @@ pub struct Projection {
     hull_local: Vec<Option<AabbMm>>,
     hull_id: Vec<BlobId>,
     pose: Vec<Option<PoseMm>>,
-    vel_x: Vec<VelFx>,
-    vel_z: Vec<VelFx>,
+    vel: Vec<Vel3>,
     yaw_rate: Vec<i32>,
     island_id: Vec<u16>,
     sleep_ticks: Vec<u16>,
@@ -99,8 +98,7 @@ impl Projection {
         self.hull_local.push(None);
         self.hull_id.push(BlobId::ZERO);
         self.pose.push(None);
-        self.vel_x.push(VelFx::ZERO);
-        self.vel_z.push(VelFx::ZERO);
+        self.vel.push(Vel3::ZERO);
         self.yaw_rate.push(0);
         self.island_id.push(0);
         self.sleep_ticks.push(0);
@@ -146,16 +144,9 @@ impl Projection {
         Ok(())
     }
 
-    pub(crate) fn set_vel(
-        &mut self,
-        s: Sigil,
-        vx: VelFx,
-        vz: VelFx,
-        yaw_rate: i32,
-    ) -> Result<(), WorldError> {
+    pub(crate) fn set_vel(&mut self, s: Sigil, vel: Vel3, yaw_rate: i32) -> Result<(), WorldError> {
         let i = self.slot(s).ok_or(WorldError::UnknownLocus)?;
-        self.vel_x[i as usize] = vx;
-        self.vel_z[i as usize] = vz;
+        self.vel[i as usize] = vel;
         self.yaw_rate[i as usize] = yaw_rate;
         Ok(())
     }
@@ -253,9 +244,8 @@ impl Projection {
                     if let Some(p) = snap.poses.get(k) {
                         self.pose[i as usize] = Some(*p);
                     }
-                    if let Some(&(vx, vz)) = snap.vels.get(k) {
-                        self.vel_x[i as usize] = vx;
-                        self.vel_z[i as usize] = vz;
+                    if let Some(&v) = snap.vels.get(k) {
+                        self.vel[i as usize] = v;
                     }
                     if let Some(&y) = snap.yaw_rates.get(k) {
                         self.yaw_rate[i as usize] = y;
@@ -269,14 +259,17 @@ impl Projection {
             }
             TraceBody::PoseCommitted { s, xz, yaw, .. } => {
                 if let Some(i) = self.slot(*s) {
-                    let y = self.pose[i as usize]
-                        .map(|p| p.y)
-                        .unwrap_or(klotho_core::Mm::ZERO);
+                    let prev = self.pose[i as usize];
+                    let y = prev.map(|p| p.y).unwrap_or(klotho_core::Mm::ZERO);
+                    let pitch = prev.map(|p| p.pitch).unwrap_or(klotho_core::YawMd::ZERO);
+                    let roll = prev.map(|p| p.roll).unwrap_or(klotho_core::YawMd::ZERO);
                     self.pose[i as usize] = Some(PoseMm {
                         x: xz.0,
-                        z: xz.1,
                         y,
+                        z: xz.1,
                         yaw: *yaw,
+                        pitch,
+                        roll,
                     });
                     self.reindex_slot(i);
                 }
@@ -402,15 +395,11 @@ impl Projection {
         self.pose[i as usize]
     }
 
-    /// `(vel_x, vel_z, yaw_rate)`.
+    /// `(vel, yaw_rate)`.
     #[must_use]
-    pub fn vel(&self, s: Sigil) -> Option<(VelFx, VelFx, i32)> {
+    pub fn vel(&self, s: Sigil) -> Option<(Vel3, i32)> {
         let i = self.slot(s)?;
-        Some((
-            self.vel_x[i as usize],
-            self.vel_z[i as usize],
-            self.yaw_rate[i as usize],
-        ))
+        Some((self.vel[i as usize], self.yaw_rate[i as usize]))
     }
 
     /// `(island_id, sleep_ticks)`.

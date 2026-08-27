@@ -1,6 +1,6 @@
 //! Proposals. Only [`crate::CommitKernel`] commits them.
 
-use klotho_core::{BlobId, HullWitness, IVec3, PoseMm, Sigil, VelFx};
+use klotho_core::{BlobId, HullWitness, IVec3, PoseMm, Sigil, Vel3};
 use klotho_ir::{InferIntent, MindIntent, PlayerIntent};
 use klotho_trace::ProposalKind;
 
@@ -19,10 +19,8 @@ pub enum Proposal {
         mover: Sigil,
         /// Proposed pose.
         pose: PoseMm,
-        /// Vel X.
-        vel_x: VelFx,
-        /// Vel Z.
-        vel_z: VelFx,
+        /// Linear velocity.
+        vel: Vel3,
         /// Yaw rate, millideg / tick.
         yaw_rate: i32,
         /// Island id.
@@ -40,10 +38,8 @@ pub enum Proposal {
         mover: Sigil,
         /// Proposed pose.
         pose: PoseMm,
-        /// Vel X.
-        vel_x: VelFx,
-        /// Vel Z.
-        vel_z: VelFx,
+        /// Linear velocity.
+        vel: Vel3,
         /// Yaw rate.
         yaw_rate: i32,
         /// Island id.

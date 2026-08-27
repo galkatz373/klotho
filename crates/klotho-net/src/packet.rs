@@ -549,7 +549,7 @@ impl Reader<'_> {
 
 #[cfg(test)]
 mod tests {
-    use klotho_core::{LocusKind, Mm, PoseMm, VelFx};
+    use klotho_core::{LocusKind, Mm, PoseMm, Vel3};
     use klotho_ir::Agency;
     use klotho_trace::{IslandSnap, PoseReason, TraceBody};
 
@@ -624,7 +624,7 @@ mod tests {
                         0,
                         vec![actor],
                         vec![PoseMm::new(Mm(1), Mm(0), Mm(2), YawMd(0))],
-                        vec![(VelFx::ZERO, VelFx::ZERO)],
+                        vec![Vel3::ZERO],
                         vec![0],
                         vec![0],
                     )

@@ -1,6 +1,6 @@
 //! Admitted Trace events. Rejected proposals never land here.
 
-use klotho_core::{Mm, PoseMm, ResourceId, Sigil, Tick, VelFx, YawMd};
+use klotho_core::{Mm, PoseMm, ResourceId, Sigil, Tick, Vel3, YawMd};
 
 use crate::error::TraceError;
 
@@ -207,8 +207,8 @@ pub struct IslandSnap {
     pub members: Vec<Sigil>,
     /// Pose per member.
     pub poses: Vec<PoseMm>,
-    /// `(vel_x, vel_z)` per member.
-    pub vels: Vec<(VelFx, VelFx)>,
+    /// Linear velocity per member.
+    pub vels: Vec<Vel3>,
     /// Yaw rate (millideg / tick) per member.
     pub yaw_rates: Vec<i32>,
     /// Sleep ticks per member. `0` is awake.
@@ -221,7 +221,7 @@ impl IslandSnap {
         island: u16,
         members: Vec<Sigil>,
         poses: Vec<PoseMm>,
-        vels: Vec<(VelFx, VelFx)>,
+        vels: Vec<Vel3>,
         yaw_rates: Vec<i32>,
         sleep_ticks: Vec<u16>,
     ) -> Result<Self, TraceError> {

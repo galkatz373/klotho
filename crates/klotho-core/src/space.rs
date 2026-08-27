@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Mm, Sigil, YawMd};
+use crate::{Mm, Sigil, VelFx, YawMd};
 
 /// Integer 3-vector in millimetres. Y is height.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Serialize, Deserialize)]
@@ -147,25 +147,65 @@ impl AabbMm {
     }
 }
 
-/// Committed pose. Ground plane is XZ; Y is height. Yaw is millidegrees about Y.
+/// Integer 3-velocity in 16.16 millimetres per tick (K20).
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Serialize, Deserialize)]
+pub struct Vel3 {
+    /// X, 16.16 mm / tick.
+    pub x: VelFx,
+    /// Y (height), 16.16 mm / tick.
+    pub y: VelFx,
+    /// Z, 16.16 mm / tick.
+    pub z: VelFx,
+}
+
+impl Vel3 {
+    /// Zero on every axis.
+    pub const ZERO: Self = Self {
+        x: VelFx::ZERO,
+        y: VelFx::ZERO,
+        z: VelFx::ZERO,
+    };
+
+    /// Construct from axis components.
+    #[must_use]
+    pub const fn new(x: VelFx, y: VelFx, z: VelFx) -> Self {
+        Self { x, y, z }
+    }
+}
+
+/// Committed pose. Ground plane is XZ; Y is height. Angles are millidegrees.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Serialize, Deserialize)]
 pub struct PoseMm {
     /// X, millimetres.
     pub x: Mm,
-    /// Z, millimetres (forward in Hearth's default basis).
-    pub z: Mm,
     /// Y (height), millimetres.
     pub y: Mm,
+    /// Z, millimetres (forward in Hearth's default basis).
+    pub z: Mm,
     /// Yaw about Y, millidegrees, normalized by callers that care.
     pub yaw: YawMd,
+    /// Pitch about X, millidegrees. Missing on decode is 0.
+    #[serde(default)]
+    pub pitch: YawMd,
+    /// Roll about Z, millidegrees. Missing on decode is 0.
+    #[serde(default)]
+    pub roll: YawMd,
 }
 
 impl PoseMm {
-    /// Construct from millimetre components. Field order matches the HLD
-    /// (`x`, `z`, `y`, `yaw`) — Y is height, not the second argument.
+    /// Construct from millimetre translation and yaw. Pitch and roll are zero
+    /// so 2.5D call sites stay unchanged. Y is height, not the second axis in
+    /// a graphics basis — it is the second *argument*.
     #[must_use]
     pub const fn new(x: Mm, y: Mm, z: Mm, yaw: YawMd) -> Self {
-        Self { x, z, y, yaw }
+        Self {
+            x,
+            y,
+            z,
+            yaw,
+            pitch: YawMd::ZERO,
+            roll: YawMd::ZERO,
+        }
     }
 
     /// Integer millimetre translation of the origin of this pose.
@@ -260,6 +300,9 @@ mod tests {
         assert_eq!(p.x, Mm(1));
         assert_eq!(p.y, Mm(2));
         assert_eq!(p.z, Mm(3));
+        assert_eq!(p.yaw, YawMd(4));
+        assert_eq!(p.pitch, YawMd::ZERO);
+        assert_eq!(p.roll, YawMd::ZERO);
         assert_eq!(p.translation(), IVec3 { x: 1, y: 2, z: 3 });
     }
 

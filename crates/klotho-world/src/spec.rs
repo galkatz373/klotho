@@ -1,7 +1,7 @@
 //! Speculative projection + event list (K21). Drop = rollback.
 
 use klotho_canon::RiteId;
-use klotho_core::{AabbMm, BlobId, PoseMm, ResourceId, Sigil, Tick, VelFx};
+use klotho_core::{AabbMm, BlobId, PoseMm, ResourceId, Sigil, Tick, Vel3};
 use klotho_ir::Rel;
 use klotho_trace::TraceEvent;
 
@@ -48,14 +48,8 @@ impl SpecDelta {
     }
 
     /// Write vel columns on the spec.
-    pub fn set_vel(
-        &mut self,
-        s: Sigil,
-        vx: VelFx,
-        vz: VelFx,
-        yaw_rate: i32,
-    ) -> Result<(), WorldError> {
-        self.proj.set_vel(s, vx, vz, yaw_rate)
+    pub fn set_vel(&mut self, s: Sigil, vel: Vel3, yaw_rate: i32) -> Result<(), WorldError> {
+        self.proj.set_vel(s, vel, yaw_rate)
     }
 
     /// Write island/sleep on the spec.

@@ -7,13 +7,13 @@ use klotho_ir::{Channel, Cmp, Rel, RiteOp, SourceKind, Verb};
 /// Pred ops allowed in one predicate eval.
 pub const PRED_OPS_PER_EVAL: u16 = 64;
 /// Pred ops allowed in one kernel tick (matches [`klotho_core::Budget::HEARTH`]).
-pub const PRED_OPS_PER_TICK: u16 = 8_192;
+pub const PRED_OPS_PER_TICK: u32 = 8_192;
 /// `ExistsRelated` / `CountRelated` neighbor scan cap.
 pub const RELATED_SCAN_CAP: u8 = 64;
 /// ISA steps of one rite in one tick.
 pub const RITE_STEPS_PER_RITE_TICK: u16 = 64;
 /// ISA steps across all rites in one tick.
-pub const RITE_STEPS_PER_TICK: u16 = 2_000;
+pub const RITE_STEPS_PER_TICK: u32 = 2_000;
 /// Heat threshold for [`klotho_ir::Pred::Burning`] desugar (`Qty(s, heat) Ge 400`).
 pub const IGNITE: i32 = 400;
 /// Resource name [`Pred::Burning`](klotho_ir::Pred::Burning) desugars into.

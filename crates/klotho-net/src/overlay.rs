@@ -31,9 +31,11 @@ impl Overlay {
                         *s,
                         PoseMm {
                             x: xz.0,
-                            z: xz.1,
                             y: Mm::ZERO,
+                            z: xz.1,
                             yaw: *yaw,
+                            pitch: YawMd::ZERO,
+                            roll: YawMd::ZERO,
                         },
                     );
                 }
@@ -68,6 +70,8 @@ impl Overlay {
             y: Mm(lerp_i32(prev.y.0, cur.y.0, t)),
             z: Mm(lerp_i32(prev.z.0, cur.z.0, t)),
             yaw: YawMd(lerp_i32(prev.yaw.0, cur.yaw.0, t)),
+            pitch: YawMd(lerp_i32(prev.pitch.0, cur.pitch.0, t)),
+            roll: YawMd(lerp_i32(prev.roll.0, cur.roll.0, t)),
         })
     }
 

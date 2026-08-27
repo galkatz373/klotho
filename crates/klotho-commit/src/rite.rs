@@ -24,12 +24,12 @@ pub fn run_burst(
     source: SourceKind,
     claimed: &[Channel],
     start_pc: u16,
-    rite_steps: &mut u16,
-    pred_ops: &mut u16,
+    rite_steps: &mut u32,
+    pred_ops: &mut u32,
     tick: Tick,
 ) -> Result<Burst, RejectReason> {
-    let cap = rite.chunk.cap_steps.min(*rite_steps);
-    let mut steps: u16 = 0;
+    let cap = u32::from(rite.chunk.cap_steps).min(*rite_steps);
+    let mut steps: u32 = 0;
     let mut pc = start_pc;
     let pins = canon.pin_sigils.as_slice();
     let view_pins = pins;
@@ -226,7 +226,7 @@ fn eval_guard(
     verb: Verb,
     source: SourceKind,
     claimed: &[Channel],
-    pred_ops: &mut u16,
+    pred_ops: &mut u32,
 ) -> Result<bool, RejectReason> {
     let Some(&pid) = rite.guards.get(&pc) else {
         return Ok(true);
@@ -318,8 +318,8 @@ pub fn drive_rite(
     verb: Verb,
     source: SourceKind,
     claimed: &[Channel],
-    rite_steps: &mut u16,
-    pred_ops: &mut u16,
+    rite_steps: &mut u32,
+    pred_ops: &mut u32,
     tick: Tick,
 ) -> Result<(), RejectReason> {
     if let Some((rid, machine)) = spec.view().first_rite(actor) {
@@ -437,8 +437,8 @@ fn drive_apply_hit(
     verb: Verb,
     source: SourceKind,
     claimed: &[Channel],
-    rite_steps: &mut u16,
-    pred_ops: &mut u16,
+    rite_steps: &mut u32,
+    pred_ops: &mut u32,
     tick: Tick,
 ) -> Result<(), RejectReason> {
     let Some(victim) = target else {

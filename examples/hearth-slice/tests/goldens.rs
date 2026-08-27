@@ -3,7 +3,7 @@
 use hearth_slice::{boot, pin, replay};
 use klotho_commit::Proposal;
 use klotho_core::{
-    AabbMm, BlobId, Budget, IVec3, LocusKind, Mm, PoseMm, RejectReason, Tick, VelFx, YawMd,
+    AabbMm, BlobId, Budget, IVec3, LocusKind, Mm, PoseMm, RejectReason, Tick, Vel3, VelFx, YawMd,
 };
 use klotho_ir::{FactId, InferIntent, IntentTarget, ModelId, Name, Rel, Verb, from_ron};
 use klotho_motion::{ClipSet, Motion};
@@ -208,8 +208,12 @@ fn plant_walk_into_door(k: &mut klotho_commit::CommitKernel) {
     w.set_pose(door, PoseMm::new(Mm(0), Mm(0), Mm(1850), YawMd(0)))
         .unwrap();
     w.set_island(door, 1, 12).unwrap();
-    w.set_vel(player, VelFx::ZERO, VelFx::from_mm_per_tick(500), 0)
-        .unwrap();
+    w.set_vel(
+        player,
+        Vel3::new(VelFx::ZERO, VelFx::ZERO, VelFx::from_mm_per_tick(500)),
+        0,
+    )
+    .unwrap();
 }
 
 #[test]

@@ -9,7 +9,7 @@ use crate::presenter::Presenter;
 
 enum Msg {
     Frame {
-        vis: VisualManifest,
+        vis: Box<VisualManifest>,
         observer: Observer,
         budget: GpuBudget,
     },
@@ -50,7 +50,7 @@ impl RenderThread {
     /// Queue a frame. Returns immediately — the sim thread must not wait (Q2).
     pub fn submit(&self, vis: VisualManifest, observer: Observer, budget: GpuBudget) {
         let _ = self.tx.send(Msg::Frame {
-            vis,
+            vis: Box::new(vis),
             observer,
             budget,
         });

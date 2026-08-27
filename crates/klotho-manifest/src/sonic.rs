@@ -13,6 +13,8 @@ pub struct GrainVoice {
     pub gain_milli: u16,
     /// Spatial position. `None` is non-spatial (UI / bed-adjacent).
     pub pos: Option<IVec3>,
+    /// Occlusion stub. Extract leaves `false` unless a hull test ran.
+    pub occluded: bool,
 }
 
 /// One ambience bed. v1 has at most one.
@@ -100,6 +102,7 @@ mod tests {
             at: Tick(3),
             gain_milli: 1000,
             pos: None,
+            occluded: false,
         });
         t.set_bed(BedRef {
             blob: blob(9),

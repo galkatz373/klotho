@@ -27,7 +27,12 @@ check_gameplay_tables() {
 
 check_gameplay_tables examples/hearth-slice
 check_gameplay_tables examples/ash-slice
+check_gameplay_tables examples/ember-slice
+check_gameplay_tables examples/drift-slice
+check_gameplay_tables examples/chorus-slice
+check_gameplay_tables examples/netlock-slice
 check_gameplay_tables crates/klotho-author
+check_gameplay_tables crates/klotho-editor
 
 # klotho-interest may not import commit (K49).
 if command -v rg >/dev/null 2>&1; then

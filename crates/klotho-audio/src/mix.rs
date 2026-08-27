@@ -402,6 +402,7 @@ mod tests {
             at,
             gain_milli: 1000,
             pos,
+            occluded: false,
         }
     }
 
@@ -619,6 +620,7 @@ mod tests {
                 at: Tick(0),
                 gain_milli: 500,
                 pos: None,
+                occluded: false,
             }],
             None,
         );

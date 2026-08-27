@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use klotho_compile::Binding;
 use klotho_core::{BlobId, Sigil};
-use klotho_manifest::{MaterialRef, VisualManifest};
+use klotho_manifest::{InstancePass, MaterialRef, PaletteSlot, SkinnedInstance, VisualManifest};
 use klotho_world::WorldSnapshot;
 
 /// Mesh + material for a locus. Presentation table, not a World column.
@@ -14,6 +14,8 @@ pub struct VisualBind {
     pub mesh: BlobId,
     /// Closed material.
     pub material: MaterialRef,
+    /// Which instance list to fill. Hearth kitbash is [`InstancePass::Opaque`].
+    pub pass: InstancePass,
 }
 
 /// Pin cook bindings onto seed Sigils.
@@ -33,6 +35,7 @@ pub fn binds_from_cooked(
                         tag: b.material,
                         palette: 0,
                     },
+                    pass: InstancePass::Opaque,
                 },
             );
         }
@@ -51,18 +54,51 @@ pub fn extract_visual(
     let view = snap.view();
     let mut items = Vec::new();
     let mut debug_sigils = Vec::new();
+    let mut masked = Vec::new();
+    let mut skinned = Vec::new();
+    let mut palettes = Vec::new();
     for (s, bind) in binds {
         let Some(pose) = view.pose(*s) else {
             continue;
         };
-        items.push((bind.mesh, pose, bind.material));
+        match bind.pass {
+            InstancePass::Opaque => items.push((bind.mesh, pose, bind.material)),
+            InstancePass::Masked => masked.push((bind.mesh, pose, bind.material)),
+            InstancePass::Skinned => {
+                let Ok(palette) = u16::try_from(palettes.len()) else {
+                    continue;
+                };
+                palettes.push(PaletteSlot {
+                    gpu: klotho_manifest::GpuHandle::NONE,
+                    bones: 0,
+                });
+                skinned.push(SkinnedInstance {
+                    blob: bind.mesh,
+                    gpu: klotho_manifest::GpuHandle::NONE,
+                    pose,
+                    palette,
+                    material: bind.material,
+                });
+            }
+        }
         if debug {
             if let Some(h) = view.posed_hull(*s) {
                 debug_sigils.push((*s, h));
             }
         }
     }
-    VisualManifest::from_instances(snap.epoch, items, [], debug_sigils)
+    VisualManifest::from_v2(
+        snap.epoch,
+        snap.tick,
+        items,
+        masked,
+        skinned,
+        palettes,
+        [],
+        [],
+        klotho_manifest::PostFlags::UNLIT,
+        debug_sigils,
+    )
 }
 
 #[cfg(test)]

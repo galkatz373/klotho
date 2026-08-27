@@ -42,6 +42,7 @@ pub fn extract_sonic(
             at: ev.tick,
             gain_milli: GAIN_FULL,
             pos,
+            occluded: false,
         });
     }
     SonicManifest::from_voices(epoch, grains, bed)

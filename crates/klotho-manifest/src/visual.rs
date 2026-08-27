@@ -1,6 +1,6 @@
 //! Visual presentation buffer. GPU handles are presenter-owned (PR 12).
 
-use klotho_core::{AabbMm, BlobId, Epoch, IVec3, PoseMm, Sigil};
+use klotho_core::{AabbMm, BlobId, Epoch, IVec3, PoseMm, Sigil, Tick};
 
 use crate::material::MaterialTag;
 
@@ -58,6 +58,112 @@ pub enum LightKind {
     },
     /// Emissive surface (forge, fire). No separate radius in v1.
     Emissive,
+    /// Directional sun. `dir` is millimetre-scale, presenter-normalized.
+    Sun {
+        /// Direction vector (not unit; presenter normalizes).
+        dir: IVec3,
+        /// Milli-intensity.
+        intensity_milli: u16,
+    },
+}
+
+/// Which instance list a mesh extract lands in.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default)]
+pub enum InstancePass {
+    /// Opaque statics. Hearth unlit path.
+    #[default]
+    Opaque,
+    /// Alpha-tested / masked.
+    Masked,
+    /// Skinned palettes. GPU skinning is a later presenter.
+    Skinned,
+}
+
+/// One skinned instance. Palette index is into [`VisualManifest::palettes`].
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub struct SkinnedInstance {
+    /// Skinned-mesh CAS blob.
+    pub blob: BlobId,
+    /// Presenter GPU slot. Extract leaves [`GpuHandle::NONE`].
+    pub gpu: GpuHandle,
+    /// Admitted root pose.
+    pub pose: PoseMm,
+    /// Index into [`VisualManifest::palettes`].
+    pub palette: u16,
+    /// Closed material.
+    pub material: MaterialRef,
+}
+
+/// GPU skinning palette slot. Bones are presenter-owned.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub struct PaletteSlot {
+    /// Presenter GPU slot. Extract leaves [`GpuHandle::NONE`].
+    pub gpu: GpuHandle,
+    /// Bone count the clip/mesh declared. 0 = unused.
+    pub bones: u8,
+}
+
+/// Cook-baked irradiance probe volume. SSGI is presenter-only.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub struct ProbeGrid {
+    /// Probe grid CAS blob.
+    pub blob: BlobId,
+    /// Grid origin, millimetres.
+    pub origin: IVec3,
+    /// Cell size, millimetres.
+    pub spacing_mm: i32,
+    /// Cell counts along X, Y, Z.
+    pub dim: (u8, u8, u8),
+}
+
+/// Post-process permutation. Unlit Hearth goldens use [`PostFlags::UNLIT`].
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub struct PostFlags {
+    /// Temporal AA. Off for competitive permutation.
+    pub taa: bool,
+    /// Bloom.
+    pub bloom: bool,
+    /// Irradiance probes + SSGI. Off for unlit and competitive.
+    pub gi: bool,
+    /// Shooter competitive: no TAA/GI, at most one cascade.
+    pub competitive: bool,
+    /// Color-grade LUT blob. `None` is identity.
+    pub lut: Option<BlobId>,
+}
+
+impl PostFlags {
+    /// Hearth unlit+lambert. Pixel goldens stay on this path.
+    pub const UNLIT: Self = Self {
+        taa: false,
+        bloom: false,
+        gi: false,
+        competitive: false,
+        lut: None,
+    };
+
+    /// Adventure presentation (probes + SSGI). Unused by Hearth extract.
+    pub const ADVENTURE: Self = Self {
+        taa: true,
+        bloom: true,
+        gi: true,
+        competitive: false,
+        lut: None,
+    };
+
+    /// Shooter competitive permutation.
+    pub const COMPETITIVE: Self = Self {
+        taa: false,
+        bloom: false,
+        gi: false,
+        competitive: true,
+        lut: None,
+    };
+}
+
+impl Default for PostFlags {
+    fn default() -> Self {
+        Self::UNLIT
+    }
 }
 
 /// Dumb visual buffer. The presenter borrows this; it does not own World.
@@ -65,12 +171,26 @@ pub enum LightKind {
 pub struct VisualManifest {
     /// Cook / hull epoch of the snapshot this was extracted from.
     pub epoch: Epoch,
-    /// Clustered mesh instances.
+    /// Snapshot tick.
+    pub tick: Tick,
+    /// Opaque clustered mesh instances (Hearth unlit path).
     pub clusters: Vec<ClusterRef>,
-    /// Parallel material for each cluster (`materials.len() == clusters.len()`).
+    /// Parallel material for each opaque cluster (`materials.len() == clusters.len()`).
     pub materials: Vec<MaterialRef>,
+    /// Masked / alpha-tested instances.
+    pub masked: Vec<ClusterRef>,
+    /// Parallel material for [`Self::masked`].
+    pub masked_materials: Vec<MaterialRef>,
+    /// Skinned instances.
+    pub skinned: Vec<SkinnedInstance>,
+    /// Skinning palettes indexed by [`SkinnedInstance::palette`].
+    pub palettes: Vec<PaletteSlot>,
     /// Lights. Empty is valid (unlit).
     pub lights: Vec<LightStub>,
+    /// Cook-baked irradiance probes. Empty on Hearth.
+    pub probes: Vec<ProbeGrid>,
+    /// Post permutation. Hearth extract writes [`PostFlags::UNLIT`].
+    pub post: PostFlags,
     /// Debug overlays only. Not the hot identity path.
     pub debug_sigils: Vec<(Sigil, AabbMm)>,
 }
@@ -81,9 +201,16 @@ impl VisualManifest {
     pub const fn empty(epoch: Epoch) -> Self {
         Self {
             epoch,
+            tick: Tick::ZERO,
             clusters: Vec::new(),
             materials: Vec::new(),
+            masked: Vec::new(),
+            masked_materials: Vec::new(),
+            skinned: Vec::new(),
+            palettes: Vec::new(),
             lights: Vec::new(),
+            probes: Vec::new(),
+            post: PostFlags::UNLIT,
             debug_sigils: Vec::new(),
         }
     }
@@ -102,12 +229,55 @@ impl VisualManifest {
         lights: impl IntoIterator<Item = LightStub>,
         debug: impl IntoIterator<Item = (Sigil, AabbMm)>,
     ) -> Self {
+        Self::from_v2(
+            epoch,
+            Tick::ZERO,
+            items,
+            [],
+            [],
+            [],
+            lights,
+            [],
+            PostFlags::UNLIT,
+            debug,
+        )
+    }
+
+    /// Extract v2 lists through the crate-private SoA.
+    #[must_use]
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_v2(
+        epoch: Epoch,
+        tick: Tick,
+        opaque: impl IntoIterator<Item = (BlobId, PoseMm, MaterialRef)>,
+        masked: impl IntoIterator<Item = (BlobId, PoseMm, MaterialRef)>,
+        skinned: impl IntoIterator<Item = SkinnedInstance>,
+        palettes: impl IntoIterator<Item = PaletteSlot>,
+        lights: impl IntoIterator<Item = LightStub>,
+        probes: impl IntoIterator<Item = ProbeGrid>,
+        post: PostFlags,
+        debug: impl IntoIterator<Item = (Sigil, AabbMm)>,
+    ) -> Self {
         let mut t = crate::tables::VisualTables::new();
-        for (blob, pose, material) in items {
+        t.set_tick(tick);
+        t.set_post(post);
+        for (blob, pose, material) in opaque {
             t.push(blob, pose, material);
+        }
+        for (blob, pose, material) in masked {
+            t.push_masked(blob, pose, material);
+        }
+        for slot in palettes {
+            t.push_palette(slot);
+        }
+        for inst in skinned {
+            t.push_skinned(inst);
         }
         for light in lights {
             t.push_light(light);
+        }
+        for probe in probes {
+            t.push_probe(probe);
         }
         for (s, hull) in debug {
             t.push_debug(s, hull);
@@ -118,7 +288,7 @@ impl VisualManifest {
 
 #[cfg(test)]
 mod tests {
-    use klotho_core::{Epoch, Hash, LocusKind, Mm, PoseMm, Sigil, YawMd};
+    use klotho_core::{BlobId, Epoch, Hash, IVec3, LocusKind, Mm, PoseMm, Sigil, Tick, YawMd};
 
     use super::*;
     use crate::tables::VisualTables;
@@ -139,8 +309,69 @@ mod tests {
         assert_eq!(vis.clusters.len(), 1);
         assert_eq!(vis.materials.len(), 1);
         assert!(vis.debug_sigils.is_empty());
+        assert!(vis.masked.is_empty());
+        assert!(vis.skinned.is_empty());
+        assert!(vis.palettes.is_empty());
+        assert!(vis.probes.is_empty());
+        assert_eq!(vis.post, PostFlags::UNLIT);
+        assert_eq!(vis.tick, Tick::ZERO);
         assert!(!vis.clusters[0].gpu.is_uploaded());
         let _eye: Observer = Observer::origin();
+    }
+
+    #[test]
+    fn extract_v2_lists_stay_crate_private_soa() {
+        let mut t = VisualTables::new();
+        t.set_tick(Tick(9));
+        t.push_masked(
+            BlobId(*Hash::ZERO.as_bytes()),
+            PoseMm::new(Mm(1), Mm(0), Mm(0), YawMd::ZERO),
+            MaterialRef {
+                tag: MaterialTag::Metal,
+                palette: 1,
+            },
+        );
+        t.push_palette(PaletteSlot {
+            gpu: GpuHandle::NONE,
+            bones: 32,
+        });
+        t.push_skinned(SkinnedInstance {
+            blob: BlobId(*Hash::ZERO.as_bytes()),
+            gpu: GpuHandle::NONE,
+            pose: PoseMm::new(Mm(2), Mm(0), Mm(0), YawMd::ZERO),
+            palette: 0,
+            material: MaterialRef {
+                tag: MaterialTag::Organic,
+                palette: 0,
+            },
+        });
+        t.push_probe(ProbeGrid {
+            blob: BlobId(*Hash::ZERO.as_bytes()),
+            origin: IVec3 { x: 0, y: 0, z: 0 },
+            spacing_mm: 2000,
+            dim: (4, 2, 4),
+        });
+        t.set_post(PostFlags::ADVENTURE);
+        t.push_light(LightStub {
+            pos: IVec3 {
+                x: 0,
+                y: 1000,
+                z: 0,
+            },
+            kind: LightKind::Sun {
+                dir: IVec3 { x: 1, y: 2, z: 1 },
+                intensity_milli: 1000,
+            },
+        });
+        let vis = t.extract(Epoch(1));
+        assert_eq!(vis.tick, Tick(9));
+        assert_eq!(vis.masked.len(), 1);
+        assert_eq!(vis.masked_materials.len(), 1);
+        assert_eq!(vis.skinned.len(), 1);
+        assert_eq!(vis.palettes[0].bones, 32);
+        assert_eq!(vis.probes.len(), 1);
+        assert!(vis.post.gi);
+        assert!(matches!(vis.lights[0].kind, LightKind::Sun { .. }));
     }
 
     #[test]

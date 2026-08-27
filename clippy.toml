@@ -3,7 +3,8 @@
 # `forbidden_gameplay_imports` (HLD K2 / PR 11a): gameplay crates and slices
 # must not import `klotho-manifest::tables`. That lint is enforced by
 # `scripts/ci/forbidden-imports.sh` until a custom dylint exists. Only
-# `klotho-render`, `klotho-audio`, and `klotho-compile` may touch those tables.
+# `klotho-render`, `klotho-audio`, `klotho-compile`, `klotho-vfx`, and
+# `klotho-cinematic` may touch those tables.
 #
 # K25: no unordered container iteration on the commit path. Enforced here so
 # `klotho-core` (and later kernel crates) cannot silently HashMap-iterate.

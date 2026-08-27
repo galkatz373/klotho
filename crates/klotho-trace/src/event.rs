@@ -137,7 +137,8 @@ pub enum TraceBody {
         /// Quantum that fired (`heat` = 10).
         quantum: i32,
     },
-    /// 10 Hz (or sleep/interact) island physics snapshot. Not 60 Hz into the log.
+    /// Coarse 2 Hz island physics snapshot (awake islands). Replay between
+    /// epoch blobs; not the net pose stream.
     IslandSnap(IslandSnap),
     /// Interaction-rate semantic pose.
     PoseCommitted {
@@ -194,6 +195,9 @@ pub enum TraceBody {
         fact_ids: Vec<u16>,
     },
 }
+
+/// Ticks between coarse [`IslandSnap`] events at Hearth 60 Hz (2 Hz).
+pub const ISLAND_SNAP_PERIOD_TICKS: u64 = 30;
 
 /// Parallel-array island snapshot. Lengths must match.
 #[derive(Clone, Eq, PartialEq, Debug)]

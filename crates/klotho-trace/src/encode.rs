@@ -392,10 +392,10 @@ impl Reader<'_> {
 
 #[cfg(test)]
 mod tests {
-    use klotho_core::{LocusKind, PoseMm, YawMd};
+    use klotho_core::{LocusKind, Mm, PoseMm, YawMd};
 
     use super::*;
-    use crate::event::TraceBody;
+    use crate::event::{PoseReason, TraceBody};
 
     fn actor(id: u128) -> Sigil {
         Sigil::pack(LocusKind::Actor, 0, id).unwrap()
@@ -422,6 +422,25 @@ mod tests {
         let bytes = encode_event(&e);
         assert_eq!(&bytes[1..9], &[1, 0, 0, 0, 0, 0, 0, 0]);
         assert_eq!(bytes[9], TAG_SAVE_REQUESTED);
+    }
+
+    #[test]
+    fn pose_committed_land_still_round_trips() {
+        let e = TraceEvent::new(
+            Tick(1),
+            TraceBody::PoseCommitted {
+                s: actor(1),
+                xz: (Mm(1), Mm(2)),
+                yaw: YawMd(3),
+                reason: PoseReason::Land,
+            },
+        );
+        assert_eq!(decode_event(&encode_event(&e)).unwrap(), e);
+    }
+
+    #[test]
+    fn island_snap_period_is_two_hz_at_hearth_sixty() {
+        assert_eq!(crate::ISLAND_SNAP_PERIOD_TICKS, 30);
     }
 
     #[test]

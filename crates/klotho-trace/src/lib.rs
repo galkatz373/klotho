@@ -21,6 +21,9 @@ mod log;
 pub use delta::TraceDelta;
 pub use encode::{EVENT_VERSION, decode_event, encode_event};
 pub use error::TraceError;
-pub use event::{IslandSnap, PoseReason, ProposalKind, RelTag, RiteEnd, TraceBody, TraceEvent};
+pub use event::{
+    ISLAND_SNAP_PERIOD_TICKS, IslandSnap, PoseReason, ProposalKind, RelTag, RiteEnd, TraceBody,
+    TraceEvent,
+};
 pub use klotho_core::Hash;
 pub use log::{GENESIS_DOMAIN, TraceLog, fold_prefix, genesis_hash};

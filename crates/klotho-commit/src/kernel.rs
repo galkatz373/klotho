@@ -4,10 +4,10 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use klotho_canon::Canon;
-use klotho_core::{Budget, KernelFault, PlayerId, RejectReason, Sigil, Tick};
+use klotho_core::{Budget, KernelFault, PlayerId, RejectReason, Sigil, Tick, VelFx};
 use klotho_ir::{Channel, IntentTarget, SourceKind, Verb};
-use klotho_trace::{PoseReason, TraceBody, TraceDelta, TraceEvent};
-use klotho_world::{World, WorldMut, WorldSnapshot};
+use klotho_trace::{ISLAND_SNAP_PERIOD_TICKS, IslandSnap, TraceBody, TraceDelta, TraceEvent};
+use klotho_world::{World, WorldMut, WorldSnapshot, WorldView};
 
 use crate::admit::{AdmitBuf, SyncProposer};
 use crate::laws::admit_laws;
@@ -100,6 +100,13 @@ impl CommitKernel {
             }
         }
 
+        if tick.0 % ISLAND_SNAP_PERIOD_TICKS == 0 {
+            for ev in island_snaps(self.world.view(), tick) {
+                self.world.mutate().append(ev.clone());
+                delta.events.push(ev);
+            }
+        }
+
         let snap = self.world.snapshot();
         delta.snap_bytes = u32::try_from(snap.approx_bytes()).unwrap_or(u32::MAX);
         let _ = budget.us_sim;
@@ -165,15 +172,6 @@ impl CommitKernel {
                     .map_err(|_| RejectReason::Budget)?;
                 spec.set_island(*mover, *island, *sleep_ticks)
                     .map_err(|_| RejectReason::Budget)?;
-                spec.push(TraceEvent::new(
-                    tick,
-                    TraceBody::PoseCommitted {
-                        s: *mover,
-                        xz: (pose.x, pose.z),
-                        yaw: pose.yaw,
-                        reason: PoseReason::Land,
-                    },
-                ));
             }
         }
 
@@ -325,4 +323,37 @@ fn write_cells(p: &Proposal, actor: Sigil) -> Vec<(u128, u8)> {
             vec![(mover.raw(), 0)]
         }
     }
+}
+
+fn island_snaps(view: WorldView<'_>, tick: Tick) -> Vec<TraceEvent> {
+    let mut by_island: BTreeMap<u16, IslandSnap> = BTreeMap::new();
+    for s in view.loci() {
+        let Some((island, sleep)) = view.island(s) else {
+            continue;
+        };
+        if sleep != 0 {
+            continue;
+        }
+        let Some(pose) = view.pose(s) else {
+            continue;
+        };
+        let (vx, vz, yaw_rate) = view.vel(s).unwrap_or((VelFx::ZERO, VelFx::ZERO, 0));
+        let snap = by_island.entry(island).or_insert_with(|| IslandSnap {
+            island,
+            members: Vec::new(),
+            poses: Vec::new(),
+            vels: Vec::new(),
+            yaw_rates: Vec::new(),
+            sleep_ticks: Vec::new(),
+        });
+        snap.members.push(s);
+        snap.poses.push(pose);
+        snap.vels.push((vx, vz));
+        snap.yaw_rates.push(yaw_rate);
+        snap.sleep_ticks.push(0);
+    }
+    by_island
+        .into_values()
+        .map(|snap| TraceEvent::new(tick, TraceBody::IslandSnap(snap)))
+        .collect()
 }

@@ -29,10 +29,14 @@ mod tests {
     use std::sync::Arc;
 
     use klotho_canon::cook_diffs;
-    use klotho_core::{Budget, Hash, LocusKind, PlayerId, ResourceId, Sigil, Tick};
+    use klotho_core::{
+        AabbMm, BlobId, Budget, Hash, HullWitness, IVec3, LocusKind, Mm, PlayerId, PoseMm,
+        ResourceId, Sigil, Tick, VelFx, YawMd,
+    };
     use klotho_ir::{
         Agency, Analog, CanonDiff, Channel, IntentTarget, MindIntent, PlayerIntent, Verb, from_ron,
     };
+    use klotho_trace::{ISLAND_SNAP_PERIOD_TICKS, TraceBody};
 
     use super::*;
 
@@ -245,5 +249,174 @@ mod tests {
         let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
         assert!(d.rejects.is_empty(), "{d:?}");
         assert!(k.world().view().first_rite(s).is_none());
+    }
+
+    fn relic(id: u128) -> Sigil {
+        Sigil::pack(LocusKind::Relic, 0, id).unwrap()
+    }
+
+    fn hull_id(n: u8) -> BlobId {
+        let mut b = [0u8; 32];
+        b[0] = n;
+        BlobId::from_bytes(b)
+    }
+
+    fn box_xz(hx: i32, hy: i32, hz: i32) -> AabbMm {
+        AabbMm::new(
+            IVec3 {
+                x: -hx,
+                y: 0,
+                z: -hz,
+            },
+            IVec3 {
+                x: hx,
+                y: hy,
+                z: hz,
+            },
+        )
+    }
+
+    fn empty_kernel() -> CommitKernel {
+        CommitKernel::new(klotho_world::World::new(Arc::new(cook("[]")), Hash::ZERO))
+    }
+
+    fn plant_mover(k: &mut CommitKernel, s: Sigil, pose: PoseMm, island: u16, sleep: u16) {
+        let mut w = k.world_mut();
+        w.insert_locus(s, LocusKind::Relic).unwrap();
+        w.set_hull(s, box_xz(100, 1800, 100), hull_id(1)).unwrap();
+        w.set_pose(s, pose).unwrap();
+        w.set_island(s, island, sleep).unwrap();
+    }
+
+    fn space_delta(mover: Sigil, pose: PoseMm) -> Proposal {
+        Proposal::SpaceDelta {
+            mover,
+            pose,
+            vel_x: VelFx::ZERO,
+            vel_z: VelFx::ZERO,
+            yaw_rate: 0,
+            island: 0,
+            sleep_ticks: 0,
+            hull: hull_id(1),
+            witness: HullWitness::new(mover, pose, false),
+        }
+    }
+
+    fn motion_delta(mover: Sigil, pose: PoseMm) -> Proposal {
+        Proposal::MotionDelta {
+            mover,
+            pose,
+            vel_x: VelFx::ZERO,
+            vel_z: VelFx::ZERO,
+            yaw_rate: 0,
+            island: 0,
+            sleep_ticks: 0,
+            clip: 0,
+            root: IVec3::ZERO,
+            hull: hull_id(1),
+            witness: HullWitness::new(mover, pose, false),
+        }
+    }
+
+    fn pose_committed(events: &[klotho_trace::TraceEvent]) -> bool {
+        events
+            .iter()
+            .any(|e| matches!(e.body, TraceBody::PoseCommitted { .. }))
+    }
+
+    fn island_snaps(events: &[klotho_trace::TraceEvent]) -> Vec<&klotho_trace::IslandSnap> {
+        events
+            .iter()
+            .filter_map(|e| match &e.body {
+                TraceBody::IslandSnap(s) => Some(s),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn space_admit_writes_pose_without_pose_committed() {
+        let mut k = empty_kernel();
+        let s = relic(1);
+        let start = PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0));
+        let next = PoseMm::new(Mm(40), Mm(0), Mm(0), YawMd(0));
+        plant_mover(&mut k, s, start, 0, 0);
+        k.ingest(space_delta(s, next));
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(d.rejects.is_empty(), "{d:?}");
+        assert_eq!(k.world().view().pose(s).unwrap(), next);
+        assert!(!pose_committed(&d.events), "{d:?}");
+        assert!(island_snaps(&d.events).is_empty(), "{d:?}");
+    }
+
+    #[test]
+    fn motion_admit_writes_pose_without_pose_committed() {
+        let mut k = empty_kernel();
+        let s = relic(1);
+        let start = PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0));
+        let next = PoseMm::new(Mm(0), Mm(0), Mm(20), YawMd(0));
+        plant_mover(&mut k, s, start, 0, 0);
+        k.ingest(motion_delta(s, next));
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(d.rejects.is_empty(), "{d:?}");
+        assert_eq!(k.world().view().pose(s).unwrap(), next);
+        assert!(!pose_committed(&d.events), "{d:?}");
+    }
+
+    #[test]
+    fn island_snap_two_hz_awake_posed_only() {
+        let mut k = empty_kernel();
+        let awake = relic(1);
+        let sleeper = relic(2);
+        let no_pose = relic(3);
+        let other = relic(4);
+        plant_mover(
+            &mut k,
+            awake,
+            PoseMm::new(Mm(10), Mm(0), Mm(0), YawMd(0)),
+            0,
+            0,
+        );
+        plant_mover(
+            &mut k,
+            sleeper,
+            PoseMm::new(Mm(20), Mm(0), Mm(0), YawMd(0)),
+            0,
+            12,
+        );
+        {
+            let mut w = k.world_mut();
+            w.insert_locus(no_pose, LocusKind::Relic).unwrap();
+            w.set_island(no_pose, 0, 0).unwrap();
+        }
+        plant_mover(
+            &mut k,
+            other,
+            PoseMm::new(Mm(30), Mm(0), Mm(5), YawMd(90)),
+            2,
+            0,
+        );
+
+        for _ in 0..(ISLAND_SNAP_PERIOD_TICKS - 1) {
+            let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+            assert!(island_snaps(&d.events).is_empty(), "{d:?}");
+            assert!(!pose_committed(&d.events), "{d:?}");
+        }
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert_eq!(d.tick.0 % ISLAND_SNAP_PERIOD_TICKS, 0);
+        let snaps = island_snaps(&d.events);
+        assert_eq!(snaps.len(), 2, "{d:?}");
+        assert_eq!(snaps[0].island, 0);
+        assert_eq!(snaps[0].members, vec![awake]);
+        assert_eq!(snaps[0].sleep_ticks, vec![0]);
+        assert_eq!(snaps[1].island, 2);
+        assert_eq!(snaps[1].members, vec![other]);
+        assert!(
+            k.world()
+                .trace()
+                .events()
+                .iter()
+                .any(|e| matches!(e.body, TraceBody::IslandSnap(_)))
+        );
     }
 }

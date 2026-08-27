@@ -12,7 +12,7 @@
 
 use std::collections::BTreeMap;
 
-use klotho_commit::{AdmitBuf, Proposal, SyncProposer};
+use klotho_commit::{AdmitBuf, IslandProposer, Proposal, SyncProposer};
 use klotho_core::{LocusKind, PoseMm, ResourceId, Sigil, Tick};
 use klotho_ir::{IntentTarget, MindIntent, MindSpec, Name, Rel, Verb};
 use klotho_world::WorldView;
@@ -123,6 +123,21 @@ impl SyncProposer for Mind {
 
     fn propose(&mut self, view: &WorldView, _dt: Tick, out: &mut AdmitBuf) {
         for intent in self.plan(view) {
+            out.push(Proposal::Mind(intent));
+        }
+    }
+}
+
+impl IslandProposer for Mind {
+    fn name(&self) -> &'static str {
+        "mind"
+    }
+
+    fn propose_island(&self, island: u16, view: &WorldView, out: &mut AdmitBuf) {
+        for intent in self.plan(view) {
+            if view.island(intent.locus).map(|(id, _)| id) != Some(island) {
+                continue;
+            }
             out.push(Proposal::Mind(intent));
         }
     }
@@ -275,7 +290,8 @@ mod tests {
 
     #[test]
     fn name_is_mind() {
-        assert_eq!(Mind::new().name(), "mind");
+        assert_eq!(SyncProposer::name(&Mind::new()), "mind");
+        assert_eq!(IslandProposer::name(&Mind::new()), "mind");
     }
 
     #[test]

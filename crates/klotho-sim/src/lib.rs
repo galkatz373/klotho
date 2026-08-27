@@ -1,5 +1,6 @@
-//! Sim-thread phase loop. Does **not** depend on infer, render, mind, space, or
-//! motion. `klotho-runtime` supplies `&mut [&mut dyn SyncProposer]`.
+//! Sim-thread phase loop. Does **not** depend on infer, render, mind, space,
+//! motion, or jobs. `klotho-runtime` supplies `&mut [&mut dyn SyncProposer]`
+//! and wires `klotho-jobs`.
 //!
 //! `#![forbid(unsafe_code)]`.
 
@@ -16,12 +17,22 @@ use klotho_trace::TraceDelta;
 pub const METRIC_SNAP_BYTES: &str = "klotho.snap.bytes";
 /// Metric name for projection/step wall time.
 pub const METRIC_PROJ_US: &str = "klotho.proj.us";
+/// Metric name for island propose / join wall time.
+pub const METRIC_PROPOSE_US: &str = "klotho.propose.us";
 
 /// One host-tick phase. Present is on the render thread (PR 12), not here.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum Phase {
     /// PlayerIntent and polled InferIntent enter the heap.
     Ingest,
+    /// Interest / SimLod marker. `klotho-interest` lands in AAA-05.
+    Interest,
+    /// K58: this-tick union-find writes `island: u16`.
+    Partition,
+    /// `propose_island` per sorted island. Runtime jobs; sim does not call jobs.
+    ProposeJobs,
+    /// Concat per-worker buffers in island-id order.
+    Join,
     /// `CommitKernel::step` (K21) then snapshot publish.
     Step,
     /// Kick async infer against the **previous** snapshot.
@@ -42,7 +53,9 @@ pub struct FrameReport {
     pub snap_bytes: u32,
     /// [`METRIC_PROJ_US`].
     pub proj_us: u32,
-    /// True when `proj_us` exceeded [`Budget::us_sim`].
+    /// [`METRIC_PROPOSE_US`]. Runtime jobs path fills this; Hearth sync is 0.
+    pub us_propose: u32,
+    /// True when admit wall time exceeded [`Budget::us_sim`].
     pub over_budget: bool,
 }
 
@@ -93,16 +106,43 @@ impl Sim {
         self.kernel.ingest(p);
     }
 
-    /// One host tick: Step → InferKick → NetFlush. Returns the Step report.
+    /// One host tick: Interest → Partition → Step → InferKick → NetFlush.
+    /// ProposeJobs / Join are runtime jobs; Hearth keeps sync proposers in Step.
     pub fn tick(
         &mut self,
         dt: Tick,
         sync: &mut [&mut dyn SyncProposer],
     ) -> Result<FrameReport, KernelFault> {
+        self.phase_interest();
+        self.phase_partition();
         let report = self.phase_step(dt, sync)?;
         self.phase_infer_kick();
         self.phase_net_flush();
         Ok(report)
+    }
+
+    /// [`Phase::Interest`] marker. Interest crate is AAA-05.
+    pub fn phase_interest(&self) {
+        profile_enter("klotho.interest");
+        let _ = Phase::Interest;
+    }
+
+    /// [`Phase::Partition`]: write this-tick island ids (K58).
+    pub fn phase_partition(&mut self) -> Vec<(u16, Vec<klotho_core::Sigil>)> {
+        profile_enter("klotho.partition");
+        self.kernel.partition()
+    }
+
+    /// [`Phase::ProposeJobs`] marker. Runtime calls `klotho-jobs`.
+    pub fn phase_propose_jobs(&self) {
+        profile_enter("klotho.propose_jobs");
+        let _ = Phase::ProposeJobs;
+    }
+
+    /// [`Phase::Join`] marker. Runtime concatenates per-worker buffers.
+    pub fn phase_join(&self) {
+        profile_enter("klotho.join");
+        let _ = Phase::Join;
     }
 
     /// [`Phase::Step`]: kernel `step` + snapshot publish + timers.
@@ -123,6 +163,7 @@ impl Sim {
             delta,
             snap_bytes,
             proj_us,
+            us_propose: 0,
             over_budget: proj_us > self.budget.us_sim,
         })
     }
@@ -214,11 +255,23 @@ mod tests {
         assert_eq!(sim.last_snap_bytes(), r.snap_bytes);
         assert_eq!(METRIC_SNAP_BYTES, "klotho.snap.bytes");
         assert_eq!(METRIC_PROJ_US, "klotho.proj.us");
+        assert_eq!(r.us_propose, 0);
     }
 
     #[test]
-    fn phases_are_four_and_present_is_not_here() {
-        assert_ne!(Phase::Ingest, Phase::Step);
+    fn phases_are_eight_and_present_is_not_here() {
+        assert_ne!(Phase::Ingest, Phase::Interest);
+        assert_ne!(Phase::Partition, Phase::ProposeJobs);
+        assert_ne!(Phase::Join, Phase::Step);
         assert_ne!(Phase::InferKick, Phase::NetFlush);
+        assert_eq!(METRIC_PROPOSE_US, "klotho.propose.us");
+    }
+
+    #[test]
+    fn tick_runs_partition() {
+        let mut sim = sim_with("[]");
+        let r = sim.tick(Tick(1), &mut []).unwrap();
+        assert_eq!(r.phase, Phase::Step);
+        assert_eq!(r.us_propose, 0);
     }
 }

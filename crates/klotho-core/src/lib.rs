@@ -9,7 +9,7 @@
 //!
 //! `#![forbid(unsafe_code)]` — all other kernel crates inherit this rule.
 //! Unsafe is allowed only in `klotho-infer`, `klotho-render`, `klotho-audio`,
-//! and `klotho-platform`.
+//! `klotho-platform`, and `klotho-jobs` (steal queues).
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -26,8 +26,8 @@ mod units;
 pub use budget::Budget;
 pub use hash::{BlobId, Hash};
 pub use id::{
-    AffordanceId, LawId, LocusKind, MAX_LOCI_HEARTH, MAX_LOCI_PROCESS, PackedIx, PlayerId,
-    ResourceId, Sigil, SimLod,
+    AffordanceId, LawId, LocusKind, MAX_ISLANDS, MAX_LOCI_HEARTH, MAX_LOCI_PROCESS, PackedIx,
+    PlayerId, ResourceId, Sigil, SimLod,
 };
 pub use reject::{KernelFault, RejectReason};
 pub use rng::Rng;

@@ -66,6 +66,7 @@ klotho/
   crates/klotho-world/    # Private World, Projection, space_ix, snapshot
   crates/klotho-commit/   # CommitKernel, Proposal, AdmitBuf, rite VM
   crates/klotho-sim/      # phase loop, budget timers, profile hook
+  crates/klotho-jobs/     # steal queues, island propose (K34)
   crates/klotho-input/    # device sample → PlayerIntent
   crates/klotho-space/    # 2.5D AABB / swept-capsule SyncProposer (non-Actor)
   crates/klotho-motion/   # verb→clip + root-motion SyncProposer (Actors)
@@ -88,4 +89,4 @@ klotho/
   docs/pred-lang.md       # Predicate / Rite RFC (PR 04a)
 ```
 
-Further crates land in the order of the HLD PR plan. `klotho-sim` will never depend on `klotho-infer`. Unsafe is forbidden except in `klotho-infer`, `klotho-render`, `klotho-audio`, and `klotho-platform`.
+Further crates land in the order of the HLD PR plan. `klotho-sim` will never depend on `klotho-infer` or `klotho-jobs`. Unsafe is forbidden except in `klotho-infer`, `klotho-render`, `klotho-audio`, `klotho-platform`, and `klotho-jobs`.

@@ -2,15 +2,17 @@
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use std::time::Instant;
 
 use klotho_canon::Canon;
 use klotho_core::{Budget, KernelFault, PlayerId, RejectReason, Sigil, Tick, Vel3};
-use klotho_ir::{Channel, IntentTarget, SourceKind, Verb};
+use klotho_ir::{Channel, IntentTarget, Rel, SourceKind, Verb};
 use klotho_trace::{ISLAND_SNAP_PERIOD_TICKS, IslandSnap, TraceBody, TraceDelta, TraceEvent};
 use klotho_world::{World, WorldMut, WorldSnapshot, WorldView};
 
 use crate::admit::{AdmitBuf, SyncProposer};
 use crate::laws::admit_laws;
+use crate::partition::partition_islands;
 use crate::proposal::Proposal;
 use crate::rite::drive_rite;
 use crate::swept::check_space;
@@ -18,7 +20,7 @@ use crate::swept::check_space;
 /// Only this type commits. Everyone else proposes.
 pub struct CommitKernel {
     world: World,
-    heap: Vec<Proposal>,
+    heap: Vec<(Proposal, u8)>,
     players: BTreeMap<PlayerId, Sigil>,
 }
 
@@ -57,7 +59,39 @@ impl CommitKernel {
 
     /// Enqueue a proposal for the next [`Self::step`].
     pub fn ingest(&mut self, p: Proposal) {
-        self.heap.push(p);
+        self.ingest_from(p, 0);
+    }
+
+    /// Enqueue a proposal tagged with its static proposer registration index.
+    pub fn ingest_from(&mut self, p: Proposal, proposer_reg_ix: u8) {
+        self.heap.push((p, proposer_reg_ix));
+    }
+
+    /// K58: rewrite this-tick `island` ids from the live view. Not an admit.
+    pub fn partition(&mut self) -> Vec<(u16, Vec<Sigil>)> {
+        let islands = partition_islands(&self.world.view());
+        let writes: Vec<(Sigil, u16, u16)> = {
+            let view = self.world.view();
+            let mut assigned: BTreeMap<Sigil, u16> = BTreeMap::new();
+            for (id, members) in &islands {
+                for s in members {
+                    assigned.insert(*s, *id);
+                }
+            }
+            view.loci()
+                .map(|s| {
+                    let sleep = view.island(s).map(|(_, t)| t).unwrap_or(0);
+                    let island = assigned.get(&s).copied().unwrap_or(0);
+                    (s, island, sleep)
+                })
+                .collect()
+        };
+        let mut w = self.world.mutate();
+        for (s, island, sleep) in writes {
+            w.set_island(s, island, sleep)
+                .expect("partition: packed locus vanished");
+        }
+        islands
     }
 
     /// Publish a snapshot.
@@ -76,24 +110,30 @@ impl CommitKernel {
         let tick = self.world.tick().saturating_add(dt.0.max(1));
         self.world.mutate().set_tick(tick);
 
-        let mut buf = AdmitBuf::new();
+        let mut batch = core::mem::take(&mut self.heap);
         {
             let view = self.world.view();
-            for p in sync.iter_mut() {
+            for (ix, p) in sync.iter_mut().enumerate() {
+                let mut buf = AdmitBuf::new();
                 p.propose(&view, dt, &mut buf);
+                let reg = u8::try_from(ix).unwrap_or(u8::MAX);
+                batch.extend(buf.drain().into_iter().map(|prop| (prop, reg)));
             }
         }
-        let mut batch = core::mem::take(&mut self.heap);
-        batch.extend(buf.drain());
-        batch.sort_by_key(|p| p.order_key());
+        batch.sort_by_key(|(p, ix)| p.admit_key(*ix));
 
         let mut delta = TraceDelta::empty(tick);
         let mut written: BTreeMap<(u128, u8), ()> = BTreeMap::new();
         let mut pred_ops = budget.pred_ops;
         let mut rite_steps = budget.rite_steps;
+        let t_admit = Instant::now();
 
-        for p in batch {
+        for (p, _) in batch {
             let kind = p.kind();
+            if t_admit.elapsed().as_micros() >= u128::from(budget.us_sim) {
+                delta.rejects.push((kind, RejectReason::Budget));
+                continue;
+            }
             match self.admit_one(p, tick, &mut pred_ops, &mut rite_steps, &mut written) {
                 Ok(events) => delta.events.extend(events),
                 Err(r) => delta.rejects.push((kind, r)),
@@ -109,7 +149,6 @@ impl CommitKernel {
 
         let snap = self.world.snapshot();
         delta.snap_bytes = u32::try_from(snap.approx_bytes()).unwrap_or(u32::MAX);
-        let _ = budget.us_sim;
         Ok(delta)
     }
 
@@ -123,7 +162,7 @@ impl CommitKernel {
     ) -> Result<Vec<TraceEvent>, RejectReason> {
         let (actor, target, verb, source, claimed, swept_hits) = self.preflight(&p, tick)?;
 
-        let cells = write_cells(&p, actor);
+        let cells = write_cells(&p, actor, &self.world.view());
         for c in &cells {
             if written.contains_key(c) {
                 return Err(RejectReason::Conflict);
@@ -312,15 +351,32 @@ fn resolve_target(t: &IntentTarget, canon: &Canon) -> Option<Sigil> {
     }
 }
 
-fn write_cells(p: &Proposal, actor: Sigil) -> Vec<(u128, u8)> {
+fn write_cells(p: &Proposal, actor: Sigil, view: &WorldView<'_>) -> Vec<(u128, u8)> {
     match p {
         Proposal::Player(_) | Proposal::Mind(_) | Proposal::Infer(_) => {
             vec![(actor.raw(), 1)]
         }
         Proposal::SpaceDelta { mover, .. } | Proposal::MotionDelta { mover, .. } => {
-            vec![(mover.raw(), 0)]
+            let mut cells = vec![(mover.raw(), 0)];
+            for child in attached_children(view, *mover) {
+                cells.push((child.raw(), 0));
+            }
+            cells
         }
     }
+}
+
+fn attached_children(view: &WorldView<'_>, parent: Sigil) -> Vec<Sigil> {
+    let mut out: Vec<Sigil> = view
+        .loci()
+        .filter(|&s| {
+            s != parent
+                && (view.has_rel(s, Rel::PilotedBy, parent)
+                    || view.has_rel(s, Rel::AttachedTo, parent))
+        })
+        .collect();
+    out.sort_unstable();
+    out
 }
 
 fn island_snaps(view: WorldView<'_>, tick: Tick) -> Vec<TraceEvent> {

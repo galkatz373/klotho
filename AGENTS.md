@@ -8,13 +8,13 @@ Greenfield Rust engine. The programming model is **Canon + Intent + Trace + Proj
 - Only `CommitKernel` commits. Everyone else emits `Proposal`s. Partial writes are never visible (K21).
 - `World` is a view of `(canon_hash, trace_prefix_hash)` plus the live Intent heap. Not a source.
 - No `Update()` on loci. No `&mut World` in `klotho-infer`. No `InferToken`. No HashMap iteration on the commit path (K25).
-- `#![forbid(unsafe_code)]` on every crate except `klotho-infer`, `klotho-render`, `klotho-audio`, `klotho-platform`.
+- `#![forbid(unsafe_code)]` on every crate except `klotho-infer`, `klotho-render`, `klotho-audio`, `klotho-platform`, `klotho-jobs` (steal queues).
 - Number types are frozen in `klotho-core` (K20): `Mm(i32)`, `VelFx` 16.16, `YawMd` millidegrees. Do not introduce `f32` on the commit path.
 - One `klotho_core::Rng`, seeded from `canon_hash ⊕ tick`. No other RNG.
 
 ## Crate graph (do not violate)
 
-- `klotho-sim` does **not** depend on infer, render, mind, space, or motion.
+- `klotho-sim` does **not** depend on infer, render, mind, space, motion, or jobs.
 - `klotho-commit` does **not** depend on space/motion/mind types. `HullWitness` lives in `klotho-core`.
 - `klotho-infer` does **not** depend on `klotho-commit`. It returns `InferIntent`.
 - `klotho-world` feature `mutate` is enabled **only** by `klotho-commit`.

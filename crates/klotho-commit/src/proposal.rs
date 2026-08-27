@@ -58,16 +58,50 @@ pub enum Proposal {
 }
 
 impl Proposal {
-    /// K18 sort key. Lower runs first: Player → Space → Motion → Mind → Infer.
+    /// K18 class. Lower runs first.
+    ///
+    /// Player 0, Residency 1, Phys 2, Space 3, Motion 4, Mind 5, Infer 6.
+    /// Residency / Phys variants land in later PRs; the holes stay reserved.
     #[must_use]
     pub fn order_key(&self) -> u8 {
         match self {
             Self::Player(_) => 0,
-            Self::SpaceDelta { .. } => 1,
-            Self::MotionDelta { .. } => 2,
-            Self::Mind(_) => 3,
-            Self::Infer(_) => 4,
+            Self::SpaceDelta { .. } => 3,
+            Self::MotionDelta { .. } => 4,
+            Self::Mind(_) => 5,
+            Self::Infer(_) => 6,
         }
+    }
+
+    /// Mover identity for the total admit key. Player uses the local slot.
+    #[must_use]
+    pub fn mover_raw(&self) -> u128 {
+        match self {
+            Self::Player(p) => u128::from(p.player.0),
+            Self::Mind(m) => m.locus.raw(),
+            Self::Infer(i) => i.locus.map(klotho_core::Sigil::raw).unwrap_or(0),
+            Self::SpaceDelta { mover, .. } | Self::MotionDelta { mover, .. } => mover.raw(),
+        }
+    }
+
+    /// Island id on spatial proposals; 0 for intent grains.
+    #[must_use]
+    pub fn island(&self) -> u16 {
+        match self {
+            Self::SpaceDelta { island, .. } | Self::MotionDelta { island, .. } => *island,
+            Self::Player(_) | Self::Mind(_) | Self::Infer(_) => 0,
+        }
+    }
+
+    /// Total admit comparator (K18 / K34). Not insertion order.
+    #[must_use]
+    pub fn admit_key(&self, proposer_reg_ix: u8) -> (u8, u128, u16, u8) {
+        (
+            self.order_key(),
+            self.mover_raw(),
+            self.island(),
+            proposer_reg_ix,
+        )
     }
 
     /// Net / reject kind.

@@ -23,7 +23,20 @@ impl AdmitBuf {
         self.inner.push(p);
     }
 
-    pub(crate) fn drain(&mut self) -> Vec<Proposal> {
+    /// Number of queued proposals.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.inner.len()
+    }
+
+    /// True when nothing has been pushed.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
+    /// Take queued proposals. Jobs / runtime fill the kernel heap from this.
+    pub fn drain(&mut self) -> Vec<Proposal> {
         core::mem::take(&mut self.inner)
     }
 }
@@ -34,4 +47,12 @@ pub trait SyncProposer: Send {
     fn name(&self) -> &'static str;
     /// Write proposals for this tick.
     fn propose(&mut self, view: &WorldView, dt: Tick, out: &mut AdmitBuf);
+}
+
+/// Parallel island proposer (K34). `&self` — no hidden integrator state (K22).
+pub trait IslandProposer: Send + Sync {
+    /// Stable name for debug / Trace.
+    fn name(&self) -> &'static str;
+    /// Write proposals for one this-tick island.
+    fn propose_island(&self, island: u16, view: &WorldView, out: &mut AdmitBuf);
 }

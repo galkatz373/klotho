@@ -22,7 +22,7 @@ mod yaw;
 pub use clip::{Clip, ClipSet, WALK_MM_PER_TICK};
 pub use yaw::rotate_xz;
 
-use klotho_commit::{AdmitBuf, Proposal, SyncProposer};
+use klotho_commit::{AdmitBuf, IslandProposer, Proposal, SyncProposer};
 use klotho_core::{BlobId, HullWitness, IVec3, LocusKind, Mm, PoseMm, Sigil, Tick, Vel3, VelFx};
 use klotho_ir::Verb;
 use klotho_world::{WorldView, world_aabb};
@@ -68,6 +68,23 @@ impl SyncProposer for Motion {
 
     fn propose(&mut self, view: &WorldView, _dt: Tick, out: &mut AdmitBuf) {
         for s in view.loci() {
+            if let Some(delta) = propose_one(&self.clips, view, s) {
+                out.push(delta);
+            }
+        }
+    }
+}
+
+impl IslandProposer for Motion {
+    fn name(&self) -> &'static str {
+        "motion"
+    }
+
+    fn propose_island(&self, island: u16, view: &WorldView, out: &mut AdmitBuf) {
+        for s in view.loci() {
+            if view.island(s).map(|(id, _)| id) != Some(island) {
+                continue;
+            }
             if let Some(delta) = propose_one(&self.clips, view, s) {
                 out.push(delta);
             }

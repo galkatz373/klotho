@@ -14,14 +14,16 @@
 mod admit;
 mod kernel;
 mod laws;
+mod partition;
 mod proposal;
 mod rite;
 mod swept;
 
-pub use admit::{AdmitBuf, SyncProposer};
+pub use admit::{AdmitBuf, IslandProposer, SyncProposer};
 pub use kernel::CommitKernel;
 pub use klotho_core::{KernelFault, RejectReason};
 pub use klotho_trace::TraceDelta;
+pub use partition::partition_islands;
 pub use proposal::Proposal;
 
 #[cfg(test)]
@@ -472,5 +474,124 @@ mod tests {
         assert_eq!(req.lin.x, 3);
         assert_eq!(req.ang.y, 1);
         assert_eq!(k.world().view().qty(s, ResourceId(0)), 0);
+    }
+
+    #[test]
+    fn admit_key_is_total_and_reserves_phys_residency() {
+        let s0 = relic(1);
+        let s1 = relic(2);
+        let space = space_delta(s1, PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)));
+        let motion = motion_delta(s0, PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)));
+        assert_eq!(Proposal::Player(player_use()).order_key(), 0);
+        assert_eq!(space.order_key(), 3);
+        assert_eq!(motion.order_key(), 4);
+        assert_eq!(
+            Proposal::Mind(klotho_ir::MindIntent {
+                locus: s0,
+                verb: Verb::Look,
+                target: IntentTarget::None,
+                utility: 0,
+            })
+            .order_key(),
+            5
+        );
+        assert!(Proposal::Player(player_use()).admit_key(9) < space.admit_key(0));
+        assert!(space.admit_key(0) < motion.admit_key(0));
+        let a = space_delta(s0, PoseMm::new(Mm(1), Mm(0), Mm(0), YawMd(0)));
+        let mut b = space_delta(s0, PoseMm::new(Mm(2), Mm(0), Mm(0), YawMd(0)));
+        if let Proposal::SpaceDelta { island, .. } = &mut b {
+            *island = 1;
+        }
+        assert!(a.admit_key(0) < b.admit_key(0));
+        assert!(a.admit_key(0) < a.admit_key(1));
+    }
+
+    #[test]
+    fn space_then_motion_same_mover_is_conflict() {
+        let mut k = empty_kernel();
+        let s = relic(1);
+        let start = PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0));
+        plant_mover(&mut k, s, start, 0, 0);
+        k.ingest(space_delta(s, PoseMm::new(Mm(10), Mm(0), Mm(0), YawMd(0))));
+        k.ingest(motion_delta(s, PoseMm::new(Mm(20), Mm(0), Mm(0), YawMd(0))));
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(
+            d.rejects.iter().any(|(_, r)| *r == RejectReason::Conflict),
+            "{d:?}"
+        );
+        assert_eq!(k.world().view().pose(s).unwrap().x, Mm(10));
+    }
+
+    #[test]
+    fn parent_spatial_nacks_attached_child_motion() {
+        let mut k = empty_kernel();
+        let parent = relic(1);
+        let child = relic(2);
+        let start = PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0));
+        plant_mover(&mut k, parent, start, 0, 0);
+        plant_mover(
+            &mut k,
+            child,
+            PoseMm::new(Mm(50_000), Mm(0), Mm(0), YawMd(0)),
+            0,
+            0,
+        );
+        k.world_mut()
+            .add_rel(child, klotho_ir::Rel::AttachedTo, parent)
+            .unwrap();
+        k.ingest(space_delta(
+            parent,
+            PoseMm::new(Mm(10), Mm(0), Mm(0), YawMd(0)),
+        ));
+        k.ingest(motion_delta(
+            child,
+            PoseMm::new(Mm(50_020), Mm(0), Mm(0), YawMd(0)),
+        ));
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(
+            d.rejects
+                .iter()
+                .any(|(kind, r)| *kind == klotho_trace::ProposalKind::Motion
+                    && *r == RejectReason::Conflict),
+            "{d:?}"
+        );
+        assert_eq!(k.world().view().pose(parent).unwrap().x, Mm(10));
+        assert_eq!(k.world().view().pose(child).unwrap().x, Mm(50_000));
+    }
+
+    #[test]
+    fn us_sim_zero_nacks_remaining_budget() {
+        let mut k = empty_kernel();
+        let s = relic(1);
+        plant_mover(&mut k, s, PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)), 0, 0);
+        k.ingest(space_delta(s, PoseMm::new(Mm(10), Mm(0), Mm(0), YawMd(0))));
+        let mut budget = Budget::HEARTH;
+        budget.us_sim = 0;
+        let d = k.step(Tick(1), budget, &mut []).unwrap();
+        assert!(
+            d.rejects.iter().any(|(_, r)| *r == RejectReason::Budget),
+            "{d:?}"
+        );
+        assert!(d.events.is_empty(), "{d:?}");
+        assert_eq!(k.world().view().pose(s).unwrap().x, Mm(0));
+    }
+
+    #[test]
+    fn partition_writes_live_island_ids() {
+        let mut k = empty_kernel();
+        let a = relic(1);
+        let b = relic(2);
+        plant_mover(&mut k, a, PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)), 9, 0);
+        plant_mover(
+            &mut k,
+            b,
+            PoseMm::new(Mm(50_000), Mm(0), Mm(0), YawMd(0)),
+            9,
+            0,
+        );
+        let islands = k.partition();
+        assert_eq!(islands.len(), 2);
+        assert_eq!(k.world().view().island(a), Some((0, 0)));
+        assert_eq!(k.world().view().island(b), Some((1, 0)));
     }
 }

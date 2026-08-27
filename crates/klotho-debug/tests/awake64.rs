@@ -65,7 +65,11 @@ fn awake64_is_under_four_ms() {
     }
     let mut space = Space;
     let t0 = Instant::now();
-    let d = k.step(Tick(1), Budget::HEARTH, &mut [&mut space]).unwrap();
+    // Kernel `us_sim` is a fail-closed admit gate; this bench still measures
+    // 4 ms via BudgetMode (debug hosts can exceed HEARTH.us_sim).
+    let mut budget = Budget::HEARTH;
+    budget.us_sim = u32::MAX;
+    let d = k.step(Tick(1), budget, &mut [&mut space]).unwrap();
     let us = t0.elapsed().as_micros();
     assert!(d.rejects.is_empty(), "{d:?}");
     BudgetMode::from_env().enforce(us);
@@ -98,8 +102,10 @@ fn awake64_120_tick_trace_bytes_drop_by_orders_of_magnitude() {
     let mut space = Space;
     let mut new_bytes = 0usize;
     let mut snap_ticks = 0u32;
+    let mut budget = Budget::HEARTH;
+    budget.us_sim = u32::MAX;
     for _ in 0..120 {
-        let d = k.step(Tick(1), Budget::HEARTH, &mut [&mut space]).unwrap();
+        let d = k.step(Tick(1), budget, &mut [&mut space]).unwrap();
         assert!(d.rejects.is_empty(), "{d:?}");
         for e in &d.events {
             assert!(

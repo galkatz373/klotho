@@ -29,6 +29,28 @@ check_gameplay_tables examples/hearth-slice
 check_gameplay_tables examples/ash-slice
 check_gameplay_tables crates/klotho-author
 
+# Gameplay never schedules jobs (K46).
+check_gameplay_jobs() {
+  local dir="$1"
+  if [[ ! -d "$dir" ]]; then
+    return 0
+  fi
+  if command -v rg >/dev/null 2>&1; then
+    if rg -n --glob '!target/**' 'klotho_jobs::|klotho-jobs' "$dir"; then
+      echo "forbidden_gameplay_imports: $dir must not import klotho-jobs" >&2
+      fail=1
+    fi
+  else
+    if grep -RIn -E 'klotho_jobs::|klotho-jobs' "$dir" >/dev/null 2>&1; then
+      echo "forbidden_gameplay_imports: $dir must not import klotho-jobs" >&2
+      fail=1
+    fi
+  fi
+}
+check_gameplay_jobs examples/hearth-slice
+check_gameplay_jobs examples/ash-slice
+check_gameplay_jobs crates/klotho-author
+
 # InferHost::{new,submit,poll} may appear only in klotho-runtime and klotho-infer.
 if [[ -d crates ]]; then
   hits=""

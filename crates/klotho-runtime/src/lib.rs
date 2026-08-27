@@ -3,8 +3,10 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod jobs;
 mod warp;
 
+pub use jobs::ingest_island_jobs;
 pub use warp::{kernel_from_cooked, load_cooked_warp, load_cooked_warp_capped, load_warp};
 
 #[cfg(feature = "net")]

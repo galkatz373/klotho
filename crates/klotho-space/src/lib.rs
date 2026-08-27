@@ -15,7 +15,7 @@ mod overlap;
 
 pub use overlap::{CapsuleMm, aabb_overlaps, capsule_overlaps_aabb, swept_aabb};
 
-use klotho_commit::{AdmitBuf, Proposal, SyncProposer};
+use klotho_commit::{AdmitBuf, IslandProposer, Proposal, SyncProposer};
 use klotho_core::{BlobId, HullWitness, LocusKind, PoseMm, Sigil, Tick, Vel3};
 use klotho_world::{WorldView, world_aabb};
 
@@ -41,6 +41,23 @@ impl SyncProposer for Space {
 
     fn propose(&mut self, view: &WorldView, _dt: Tick, out: &mut AdmitBuf) {
         for s in view.loci() {
+            if let Some(delta) = propose_one(view, s) {
+                out.push(delta);
+            }
+        }
+    }
+}
+
+impl IslandProposer for Space {
+    fn name(&self) -> &'static str {
+        "space"
+    }
+
+    fn propose_island(&self, island: u16, view: &WorldView, out: &mut AdmitBuf) {
+        for s in view.loci() {
+            if view.island(s).map(|(id, _)| id) != Some(island) {
+                continue;
+            }
             if let Some(delta) = propose_one(view, s) {
                 out.push(delta);
             }
@@ -325,7 +342,9 @@ mod tests {
         }
         let mut space = Space;
         let t0 = Instant::now();
-        let d = k.step(Tick(1), Budget::HEARTH, &mut [&mut space]).unwrap();
+        let mut budget = Budget::HEARTH;
+        budget.us_sim = u32::MAX;
+        let d = k.step(Tick(1), budget, &mut [&mut space]).unwrap();
         let us = t0.elapsed().as_micros();
         assert!(d.rejects.is_empty(), "{d:?}");
         // Warn in local debug so a slow host does not flake; CI/release fails.

@@ -32,6 +32,7 @@ klotho-ir.workspace = true
 klotho-manifest.workspace = true
 klotho-platform.workspace = true
 klotho-sim.workspace = true
+klotho-jobs.workspace = true
 klotho-world.workspace = true
 klotho-space.workspace = true
 klotho-motion.workspace = true

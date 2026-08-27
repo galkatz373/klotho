@@ -1038,6 +1038,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "klotho-jobs"
+version = "0.1.0"
+dependencies = [
+ "ash-slice",
+ "klotho-commit",
+ "klotho-core",
+ "klotho-ir",
+ "klotho-world",
+]
+
+[[package]]
 name = "klotho-manifest"
 version = "0.1.0"
 dependencies = [
@@ -1128,6 +1139,7 @@ dependencies = [
  "klotho-infer",
  "klotho-input",
  "klotho-ir",
+ "klotho-jobs",
  "klotho-manifest",
  "klotho-mind",
  "klotho-motion",

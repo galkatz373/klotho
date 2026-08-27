@@ -1,0 +1,29 @@
+[package]
+name = "klotho-jobs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Klotho jobs: steal queues for island propose (K34 / K46)"
+readme = false
+publish = false
+
+[dependencies]
+klotho-commit.workspace = true
+klotho-core.workspace = true
+klotho-world.workspace = true
+
+[dev-dependencies]
+ash-slice = { path = "../../examples/ash-slice" }
+klotho-ir.workspace = true
+
+[lints.rust]
+unsafe_code = "allow"
+missing_docs = "warn"
+
+[lints.clippy]
+dbg_macro = "deny"
+disallowed_methods = "deny"
+todo = "warn"
+unimplemented = "warn"

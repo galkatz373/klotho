@@ -120,7 +120,7 @@ pub fn partition_islands(view: &WorldView<'_>) -> Vec<(u16, Vec<Sigil>)> {
 
     ranked
         .into_iter()
-        .take(usize::from(MAX_ISLANDS).saturating_add(1))
+        .take(usize::from(MAX_ISLANDS))
         .enumerate()
         .map(|(i, (_, members))| (i as u16, members))
         .collect()

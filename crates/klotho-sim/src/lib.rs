@@ -25,7 +25,7 @@ pub const METRIC_PROPOSE_US: &str = "klotho.propose.us";
 pub enum Phase {
     /// PlayerIntent and polled InferIntent enter the heap.
     Ingest,
-    /// Interest / SimLod marker. `klotho-interest` lands in AAA-05.
+    /// Interest / SimLod marker.
     Interest,
     /// K58: this-tick union-find writes `island: u16`.
     Partition,

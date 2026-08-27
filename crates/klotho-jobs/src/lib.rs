@@ -91,7 +91,9 @@ fn propose_one(
     for (ix, p) in proposers.iter().enumerate() {
         let mut buf = AdmitBuf::new();
         p.propose_island(island, view, &mut buf);
-        let reg = u8::try_from(ix).unwrap_or(u8::MAX);
+        let Some(reg) = u8::try_from(ix).ok() else {
+            break;
+        };
         out.extend(buf.drain().into_iter().map(|prop| (prop, reg)));
     }
     out

@@ -116,7 +116,9 @@ impl CommitKernel {
             for (ix, p) in sync.iter_mut().enumerate() {
                 let mut buf = AdmitBuf::new();
                 p.propose(&view, dt, &mut buf);
-                let reg = u8::try_from(ix).unwrap_or(u8::MAX);
+                let Some(reg) = u8::try_from(ix).ok() else {
+                    break;
+                };
                 batch.extend(buf.drain().into_iter().map(|prop| (prop, reg)));
             }
         }

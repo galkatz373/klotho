@@ -17,7 +17,12 @@ path = "src/lib.rs"
 name = "klotho-runtime"
 path = "src/main.rs"
 
+[features]
+default = []
+net = ["dep:klotho-net"]
+
 [dependencies]
+klotho-net = { workspace = true, optional = true }
 hearth-slice = { path = "../../examples/hearth-slice" }
 klotho-commit.workspace = true
 klotho-compile.workspace = true

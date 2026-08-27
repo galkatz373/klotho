@@ -6,3 +6,8 @@
 mod warp;
 
 pub use warp::{kernel_from_cooked, load_cooked_warp, load_cooked_warp_capped, load_warp};
+
+#[cfg(feature = "net")]
+mod net;
+#[cfg(feature = "net")]
+pub use net::listen_pair;

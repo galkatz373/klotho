@@ -23,6 +23,7 @@ members = [
     "crates/klotho-author",
     "crates/klotho-debug",
     "crates/klotho-runtime",
+    "crates/klotho-net",
     "examples/hearth-slice",
     "examples/ash-slice",
 ]
@@ -58,6 +59,7 @@ klotho-audio = { path = "crates/klotho-audio" }
 klotho-ui = { path = "crates/klotho-ui" }
 klotho-author = { path = "crates/klotho-author" }
 klotho-debug = { path = "crates/klotho-debug" }
+klotho-net = { path = "crates/klotho-net" }
 ron = "0.11.0"
 serde = { version = "1.0.228", features = ["derive"] }
 

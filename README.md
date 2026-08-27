@@ -39,7 +39,7 @@ PR 16 — Distaff (`klotho-author`: RON + kdown, CLI cook/preview, cook-time Pin
 PR 17 — Minds + infer isolator (`klotho-mind` GOAP, `klotho-infer` stub).
 PR 18 — Debug + determinism CI (`klotho-debug` Trace player, replay.yml).
 PR 19 — `.warp` packaging (`klotho-compile` pack, `klotho-runtime` load, caps + license gate).
-Next: PR 20 net listen-server (optional).
+PR 20 — `klotho-net` listen-server (ed25519, TraceDelta, 2-player local). Optional; Hearth local play is unchanged.
 
 ## Build
 
@@ -80,6 +80,7 @@ klotho/
   crates/klotho-author/   # Distaff: RON/kdown, cook-time Pin, CLI cook/preview
   crates/klotho-debug/    # Trace player, reject inspector, 4 ms budget gate
   crates/klotho-runtime/  # headless Intent-script / .warp player
+  crates/klotho-net/      # listen-server packets, ed25519, TraceDelta
   examples/hearth-slice/  # Appendix A goldens (PR 07b)
   examples/ash-slice/     # Appendix B goldens (PR 07c)
   data/kitbash/           # hashed, licensed, affordance-tagged library

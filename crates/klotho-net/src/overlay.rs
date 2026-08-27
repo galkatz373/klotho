@@ -88,8 +88,8 @@ fn lerp_i32(a: i32, b: i32, t_permille: u16) -> i32 {
 
 #[cfg(test)]
 mod tests {
-    use klotho_core::{LocusKind, Mm, PoseMm, Tick, YawMd};
-    use klotho_trace::{PoseReason, fold_prefix, genesis_hash};
+    use klotho_core::{LocusKind, Mm, PoseMm, Tick, Vel3, YawMd};
+    use klotho_trace::{IslandSnap, PoseReason, fold_prefix, genesis_hash};
 
     use super::*;
 

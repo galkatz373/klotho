@@ -84,8 +84,16 @@ fn awake64_120_tick_trace_bytes_drop_by_orders_of_magnitude() {
             .unwrap();
         w.set_pose(s, PoseMm::new(Mm(i as i32 * 400), Mm(0), Mm(0), YawMd(0)))
             .unwrap();
-        w.set_vel(s, VelFx::from_mm_per_tick(WALK_MM_PER_TICK), VelFx::ZERO, 0)
-            .unwrap();
+        w.set_vel(
+            s,
+            Vel3::new(
+                VelFx::from_mm_per_tick(WALK_MM_PER_TICK),
+                VelFx::ZERO,
+                VelFx::ZERO,
+            ),
+            0,
+        )
+        .unwrap();
     }
     let mut space = Space;
     let mut new_bytes = 0usize;

@@ -2,8 +2,8 @@
 //! (`klotho-commit` only). Always compiled so projection writers stay linked.
 
 use klotho_core::{
-    AabbMm, AffordanceId, BlobId, LocusKind, PackedIx, PhysRequest, PoseMm, ResourceId, Sigil, Tick,
-    Vel3,
+    AabbMm, AffordanceId, BlobId, LocusKind, PackedIx, PhysRequest, PoseMm, ResourceId, Sigil,
+    Tick, Vel3,
 };
 use klotho_ir::{PlayerIntent, Rel};
 use klotho_trace::TraceEvent;

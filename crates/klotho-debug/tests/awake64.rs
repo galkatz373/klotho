@@ -108,8 +108,7 @@ fn awake64_120_tick_trace_bytes_drop_by_orders_of_magnitude() {
         Tick(1),
         TraceBody::PoseCommitted {
             s: relic(10),
-            xz: (Mm(0), Mm(0)),
-            yaw: YawMd(0),
+            pose: PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)),
             reason: PoseReason::Land,
         },
     );

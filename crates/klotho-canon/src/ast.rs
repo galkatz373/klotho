@@ -1,7 +1,7 @@
 //! Cooked bytecode types. `PredOp` / `PredChunk` / `RiteChunk` shapes are frozen;
 //! the compiler fills them and wraps atoms in [`PredProgram`].
 
-use klotho_core::{AffordanceId, Mm, ResourceId};
+use klotho_core::{AffordanceId, IVec3, Mm, ResourceId, SimLod};
 use klotho_ir::{Channel, Cmp, Rel, RiteOp, SourceKind, Verb};
 
 /// Pred ops allowed in one predicate eval.
@@ -93,6 +93,21 @@ pub enum Atom {
     TargetIs(CookedSlot),
     /// Slot equals the scan-bound Other.
     OtherIs(CookedSlot),
+    /// Hitscan vs hulls. Eval is false until phys.
+    RayHits {
+        /// Ray origin.
+        from: CookedSlot,
+        /// Direction, millimetres.
+        dir: IVec3,
+        /// Maximum length.
+        max: Mm,
+        /// Hull mask.
+        mask: u8,
+    },
+    /// Sim LOD. Missing column is `Full`.
+    SimLodIs(CookedSlot, SimLod),
+    /// Place membership (`Rel::In` until the place column exists).
+    InPlace(CookedSlot, CookedSlot),
 }
 
 /// Payload for [`PredOp::ExistsRelated`] / [`PredOp::CountRelated`].

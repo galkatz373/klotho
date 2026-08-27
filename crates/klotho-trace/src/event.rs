@@ -1,6 +1,6 @@
 //! Admitted Trace events. Rejected proposals never land here.
 
-use klotho_core::{Mm, PoseMm, ResourceId, Sigil, Tick, Vel3, YawMd};
+use klotho_core::{PoseMm, ResourceId, Sigil, Tick, Vel3};
 
 use crate::error::TraceError;
 
@@ -18,6 +18,33 @@ pub enum ProposalKind {
     Motion = 4,
     /// `InferIntent`.
     Infer = 5,
+    /// Phys proposer.
+    Phys = 6,
+    /// Place load / evict.
+    Residency = 7,
+}
+
+impl ProposalKind {
+    /// Frozen discriminant.
+    #[must_use]
+    pub const fn as_u8(self) -> u8 {
+        self as u8
+    }
+
+    /// Inverse of [`Self::as_u8`].
+    #[must_use]
+    pub const fn from_u8(v: u8) -> Option<Self> {
+        match v {
+            1 => Some(Self::Player),
+            2 => Some(Self::Mind),
+            3 => Some(Self::Space),
+            4 => Some(Self::Motion),
+            5 => Some(Self::Infer),
+            6 => Some(Self::Phys),
+            7 => Some(Self::Residency),
+            _ => None,
+        }
+    }
 }
 
 /// Why a semantic pose was committed (interaction rate, not 60 Hz).
@@ -46,6 +73,28 @@ pub enum RiteEnd {
     Fail = 1,
     /// Per-rite or per-tick step cap exceeded.
     FailBudget = 2,
+    /// Locus left the live prefix (streaming). Not [`Self::FailBudget`].
+    Evicted = 3,
+}
+
+impl RiteEnd {
+    /// Frozen discriminant.
+    #[must_use]
+    pub const fn as_u8(self) -> u8 {
+        self as u8
+    }
+
+    /// Inverse of [`Self::as_u8`]. Unknown tags are `None`.
+    #[must_use]
+    pub const fn from_u8(v: u8) -> Option<Self> {
+        match v {
+            0 => Some(Self::Success),
+            1 => Some(Self::Fail),
+            2 => Some(Self::FailBudget),
+            3 => Some(Self::Evicted),
+            _ => None,
+        }
+    }
 }
 
 /// Relation tag. Values match `klotho_ir::Rel` declaration order (0 = `In`).
@@ -75,6 +124,10 @@ impl RelTag {
     pub const LOCKED_BY: Self = Self(9);
     /// `Dead`.
     pub const DEAD: Self = Self(10);
+    /// `PilotedBy`.
+    pub const PILOTED_BY: Self = Self(11);
+    /// `AttachedTo`.
+    pub const ATTACHED_TO: Self = Self(12);
 }
 
 /// One admitted event, stamped with the tick it committed on.
@@ -139,14 +192,12 @@ pub enum TraceBody {
     },
     /// Coarse 2 Hz snapshot of awake posed island members.
     IslandSnap(IslandSnap),
-    /// Interaction-rate semantic pose.
+    /// Interaction-rate semantic pose (6DOF).
     PoseCommitted {
         /// Locus.
         s: Sigil,
-        /// Ground-plane millimetres.
-        xz: (Mm, Mm),
-        /// Yaw.
-        yaw: YawMd,
+        /// Committed pose.
+        pose: PoseMm,
         /// Why this pose is in Trace.
         reason: PoseReason,
     },
@@ -192,6 +243,34 @@ pub enum TraceBody {
         speaker: Sigil,
         /// Interned fact ids claimed.
         fact_ids: Vec<u16>,
+    },
+    /// Place rows inserted this tick.
+    PlaceLoaded {
+        /// Place locus.
+        place: Sigil,
+        /// Row count admitted.
+        n: u32,
+    },
+    /// Place rows dropped this tick.
+    PlaceEvicted {
+        /// Place locus.
+        place: Sigil,
+    },
+    /// Template spawn recorded. Locus apply may be later.
+    Spawned {
+        /// Interned template id.
+        template: u16,
+        /// Spawned (or acting) sigil.
+        sigil: Sigil,
+        /// Pose at emit.
+        at: PoseMm,
+    },
+    /// Locus left the live prefix. Generation bump is recorded here.
+    Despawned {
+        /// Retired sigil.
+        sigil: Sigil,
+        /// Generation after bump.
+        generation: u8,
     },
 }
 

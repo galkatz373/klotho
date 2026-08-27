@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use klotho_canon::RiteId;
 use klotho_core::{
-    AabbMm, AffordanceId, BlobId, LocusKind, PackedIx, PoseMm, ResourceId, Sigil, Vel3,
+    AabbMm, AffordanceId, BlobId, LocusKind, PackedIx, PhysRequest, PoseMm, ResourceId, Sigil, Vel3,
 };
 use klotho_ir::{Channel, Rel};
 use klotho_trace::{RelTag, TraceBody, TraceEvent};
@@ -34,6 +34,7 @@ pub struct Projection {
     rels: Arc<BTreeMap<(PackedIx, u8), Vec<Sigil>>>,
     rel_triples: Arc<BTreeSet<(PackedIx, u8, Sigil)>>,
     qty: Arc<BTreeMap<(PackedIx, ResourceId), i32>>,
+    phys_req: Arc<BTreeMap<PackedIx, PhysRequest>>,
     rites: Arc<BTreeMap<(PackedIx, u16), RiteMachine>>,
     knows: Arc<BTreeSet<(PackedIx, u16)>>,
     space_ix: Arc<PlaceIndex>,
@@ -79,6 +80,7 @@ impl Projection {
             rels: Arc::new(BTreeMap::new()),
             rel_triples: Arc::new(BTreeSet::new()),
             qty: Arc::new(BTreeMap::new()),
+            phys_req: Arc::new(BTreeMap::new()),
             rites: Arc::new(BTreeMap::new()),
             knows: Arc::new(BTreeSet::new()),
             space_ix: Arc::new(PlaceIndex::new()),
@@ -211,6 +213,19 @@ impl Projection {
         Ok(())
     }
 
+    pub(crate) fn set_phys_req(&mut self, s: Sigil, req: PhysRequest) -> Result<(), WorldError> {
+        let i = self.packed(s).ok_or(WorldError::UnknownLocus)?;
+        Arc::make_mut(&mut self.phys_req).insert(i, req);
+        Ok(())
+    }
+
+    /// Current `PHYS_REQ` write, if any.
+    #[must_use]
+    pub fn phys_req(&self, s: Sigil) -> Option<PhysRequest> {
+        let i = self.packed(s)?;
+        self.phys_req.get(&i).copied()
+    }
+
     pub(crate) fn add_rel(&mut self, a: Sigil, r: Rel, b: Sigil) -> Result<(), WorldError> {
         let ia = self.packed(a).ok_or(WorldError::UnknownLocus)?;
         let key = rel_key(r);
@@ -302,27 +317,19 @@ impl Projection {
                     self.reindex_ix(i);
                 }
             }
-            TraceBody::PoseCommitted { s, xz, yaw, .. } => {
+            TraceBody::PoseCommitted { s, pose, .. } => {
                 if let Some(i) = self.packed(*s) {
-                    let prev = self.pose.get(i as usize).copied().flatten();
-                    let y = prev.map(|p| p.y).unwrap_or(klotho_core::Mm::ZERO);
-                    let pitch = prev.map(|p| p.pitch).unwrap_or(klotho_core::YawMd::ZERO);
-                    let roll = prev.map(|p| p.roll).unwrap_or(klotho_core::YawMd::ZERO);
-                    self.pose.set(
-                        i as usize,
-                        Some(PoseMm {
-                            x: xz.0,
-                            y,
-                            z: xz.1,
-                            yaw: *yaw,
-                            pitch,
-                            roll,
-                        }),
-                    );
+                    self.pose.set(i as usize, Some(*pose));
                     self.reindex_ix(i);
                 }
             }
-            TraceBody::SaveRequested | TraceBody::Emitted { .. } | TraceBody::Uttered { .. } => {}
+            TraceBody::SaveRequested
+            | TraceBody::Emitted { .. }
+            | TraceBody::Uttered { .. }
+            | TraceBody::PlaceLoaded { .. }
+            | TraceBody::PlaceEvicted { .. }
+            | TraceBody::Spawned { .. }
+            | TraceBody::Despawned { .. } => {}
             TraceBody::Learned { mind, fact } => {
                 if let Some(i) = self.packed(*mind) {
                     Arc::make_mut(&mut self.knows).insert((i, *fact));
@@ -572,6 +579,7 @@ impl Projection {
             bytes += v.len() * 16;
         }
         bytes += self.qty.len() * 8;
+        bytes += self.phys_req.len() * 24;
         bytes += self.rites.len() * 16;
         bytes += self.knows.len() * 4;
         bytes += self.space_ix.approx_bytes();
@@ -586,34 +594,9 @@ impl Default for Projection {
 }
 
 pub(crate) fn rel_key(r: Rel) -> u8 {
-    match r {
-        Rel::In => RelTag::IN.0,
-        Rel::OwnedBy => RelTag::OWNED_BY.0,
-        Rel::WieldedBy => RelTag::WIELDED_BY.0,
-        Rel::KeyedBy => RelTag::KEYED_BY.0,
-        Rel::Knows => RelTag::KNOWS.0,
-        Rel::Owes => RelTag::OWES.0,
-        Rel::Fears => RelTag::FEARS.0,
-        Rel::PartOf => RelTag::PART_OF.0,
-        Rel::DerivedFrom => RelTag::DERIVED_FROM.0,
-        Rel::LockedBy => RelTag::LOCKED_BY.0,
-        Rel::Dead => RelTag::DEAD.0,
-    }
+    r.as_u8()
 }
 
 fn rel_from_tag(t: RelTag) -> Option<Rel> {
-    Some(match t.0 {
-        0 => Rel::In,
-        1 => Rel::OwnedBy,
-        2 => Rel::WieldedBy,
-        3 => Rel::KeyedBy,
-        4 => Rel::Knows,
-        5 => Rel::Owes,
-        6 => Rel::Fears,
-        7 => Rel::PartOf,
-        8 => Rel::DerivedFrom,
-        9 => Rel::LockedBy,
-        10 => Rel::Dead,
-        _ => return None,
-    })
+    Rel::from_u8(t.0)
 }

@@ -50,6 +50,37 @@ impl LocusKind {
     }
 }
 
+/// Simulation LOD. Missing projection column is treated as [`Self::Full`].
+#[repr(u8)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Serialize, Deserialize)]
+pub enum SimLod {
+    /// Every authoritative tick.
+    Full = 0,
+    /// Every `lod_period` ticks.
+    Far = 1,
+    /// No Space/Phys/Mind propose.
+    Dormant = 2,
+}
+
+impl SimLod {
+    /// Packed discriminant.
+    #[must_use]
+    pub const fn as_u8(self) -> u8 {
+        self as u8
+    }
+
+    /// Inverse of [`Self::as_u8`].
+    #[must_use]
+    pub const fn from_u8(v: u8) -> Option<Self> {
+        match v {
+            0 => Some(Self::Full),
+            1 => Some(Self::Far),
+            2 => Some(Self::Dormant),
+            _ => None,
+        }
+    }
+}
+
 /// Stable typed id (`u128`).
 ///
 /// Layout, high to low: `8 bit kind | 8 bit generation | 112 bit id-space`.

@@ -27,10 +27,10 @@ pub use budget::Budget;
 pub use hash::{BlobId, Hash};
 pub use id::{
     AffordanceId, LawId, LocusKind, MAX_LOCI_HEARTH, MAX_LOCI_PROCESS, PackedIx, PlayerId,
-    ResourceId, Sigil,
+    ResourceId, Sigil, SimLod,
 };
 pub use reject::{KernelFault, RejectReason};
 pub use rng::Rng;
-pub use space::{AabbMm, HullWitness, IVec3, PoseMm, Vel3};
+pub use space::{AabbMm, HullWitness, IVec3, PhysRequest, PoseMm, Vel3};
 pub use tick::{Epoch, Tick};
 pub use units::{Mm, VelFx, YawMd};

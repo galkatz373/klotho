@@ -269,8 +269,12 @@ mod tests {
                 Tick(1),
                 TraceBody::PoseCommitted {
                     s,
-                    xz: (Mm(11), Mm(21)),
-                    yaw: YawMd(31),
+                    pose: {
+                        let mut q = PoseMm::new(Mm(11), Mm(50), Mm(21), YawMd(31));
+                        q.pitch = YawMd(1_000);
+                        q.roll = YawMd(2_000);
+                        q
+                    },
                     reason: PoseReason::Land,
                 },
             ));

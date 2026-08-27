@@ -21,6 +21,10 @@ const TAG_REL_ADD: u8 = 9;
 const TAG_REL_DEL: u8 = 10;
 const TAG_EMITTED: u8 = 11;
 const TAG_UTTERED: u8 = 12;
+const TAG_PLACE_LOADED: u8 = 13;
+const TAG_PLACE_EVICTED: u8 = 14;
+const TAG_SPAWNED: u8 = 15;
+const TAG_DESPAWNED: u8 = 16;
 
 /// Encode one event to canonical LE bytes.
 #[must_use]
@@ -59,7 +63,7 @@ pub fn encode_event(e: &TraceEvent) -> Vec<u8> {
             b.u8(TAG_RITE_ENDED);
             b.sigil(*actor);
             b.u16_le(*rite);
-            b.u8(*status as u8);
+            b.u8(status.as_u8());
         }
         TraceBody::QtyChanged {
             id,
@@ -77,12 +81,15 @@ pub fn encode_event(e: &TraceEvent) -> Vec<u8> {
             b.u8(TAG_ISLAND_SNAP);
             encode_snap(&mut b, s);
         }
-        TraceBody::PoseCommitted { s, xz, yaw, reason } => {
+        TraceBody::PoseCommitted { s, pose, reason } => {
             b.u8(TAG_POSE_COMMITTED);
             b.sigil(*s);
-            b.i32_le(xz.0.0);
-            b.i32_le(xz.1.0);
-            b.i32_le(yaw.0);
+            b.i32_le(pose.x.0);
+            b.i32_le(pose.z.0);
+            b.i32_le(pose.yaw.0);
+            b.i32_le(pose.y.0);
+            b.i32_le(pose.pitch.0);
+            b.i32_le(pose.roll.0);
             b.u8(*reason as u8);
         }
         TraceBody::SaveRequested => b.u8(TAG_SAVE_REQUESTED),
@@ -117,6 +124,30 @@ pub fn encode_event(e: &TraceEvent) -> Vec<u8> {
                 b.u16_le(*f);
             }
         }
+        TraceBody::PlaceLoaded { place, n } => {
+            b.u8(TAG_PLACE_LOADED);
+            b.sigil(*place);
+            b.u32_le(*n);
+        }
+        TraceBody::PlaceEvicted { place } => {
+            b.u8(TAG_PLACE_EVICTED);
+            b.sigil(*place);
+        }
+        TraceBody::Spawned {
+            template,
+            sigil,
+            at,
+        } => {
+            b.u8(TAG_SPAWNED);
+            b.u16_le(*template);
+            b.sigil(*sigil);
+            encode_pose(&mut b, *at);
+        }
+        TraceBody::Despawned { sigil, generation } => {
+            b.u8(TAG_DESPAWNED);
+            b.sigil(*sigil);
+            b.u8(*generation);
+        }
     }
     b.bytes
 }
@@ -145,12 +176,7 @@ pub fn decode_event(bytes: &[u8]) -> Result<TraceEvent, TraceError> {
         TAG_RITE_ENDED => TraceBody::RiteEnded {
             actor: r.sigil()?,
             rite: r.u16_le()?,
-            status: match r.u8()? {
-                0 => RiteEnd::Success,
-                1 => RiteEnd::Fail,
-                2 => RiteEnd::FailBudget,
-                _ => return Err(TraceError::BadEvent),
-            },
+            status: RiteEnd::from_u8(r.u8()?).ok_or(TraceError::BadEvent)?,
         },
         TAG_QTY_CHANGED => TraceBody::QtyChanged {
             id: r.sigil()?,
@@ -159,19 +185,37 @@ pub fn decode_event(bytes: &[u8]) -> Result<TraceEvent, TraceError> {
             quantum: r.i32_le()?,
         },
         TAG_ISLAND_SNAP => TraceBody::IslandSnap(decode_snap(&mut r)?),
-        TAG_POSE_COMMITTED => TraceBody::PoseCommitted {
-            s: r.sigil()?,
-            xz: (Mm(r.i32_le()?), Mm(r.i32_le()?)),
-            yaw: YawMd(r.i32_le()?),
-            reason: match r.u8()? {
-                1 => PoseReason::Interact,
-                2 => PoseReason::Land,
-                3 => PoseReason::Pick,
-                4 => PoseReason::Drop,
-                5 => PoseReason::Hinge,
+        TAG_POSE_COMMITTED => {
+            let s = r.sigil()?;
+            let x = Mm(r.i32_le()?);
+            let z = Mm(r.i32_le()?);
+            let yaw = YawMd(r.i32_le()?);
+            // Tail 1 = reason only; 13 = y/pitch/roll + reason.
+            let (y, pitch, roll) = match r.remaining() {
+                13 => (Mm(r.i32_le()?), YawMd(r.i32_le()?), YawMd(r.i32_le()?)),
+                1 => (Mm::ZERO, YawMd::ZERO, YawMd::ZERO),
                 _ => return Err(TraceError::BadEvent),
-            },
-        },
+            };
+            TraceBody::PoseCommitted {
+                s,
+                pose: PoseMm {
+                    x,
+                    y,
+                    z,
+                    yaw,
+                    pitch,
+                    roll,
+                },
+                reason: match r.u8()? {
+                    1 => PoseReason::Interact,
+                    2 => PoseReason::Land,
+                    3 => PoseReason::Pick,
+                    4 => PoseReason::Drop,
+                    5 => PoseReason::Hinge,
+                    _ => return Err(TraceError::BadEvent),
+                },
+            }
+        }
         TAG_SAVE_REQUESTED => TraceBody::SaveRequested,
         TAG_LEARNED => TraceBody::Learned {
             mind: r.sigil()?,
@@ -201,6 +245,20 @@ pub fn decode_event(bytes: &[u8]) -> Result<TraceEvent, TraceError> {
             }
             TraceBody::Uttered { speaker, fact_ids }
         }
+        TAG_PLACE_LOADED => TraceBody::PlaceLoaded {
+            place: r.sigil()?,
+            n: r.u32_le()?,
+        },
+        TAG_PLACE_EVICTED => TraceBody::PlaceEvicted { place: r.sigil()? },
+        TAG_SPAWNED => TraceBody::Spawned {
+            template: r.u16_le()?,
+            sigil: r.sigil()?,
+            at: decode_pose(&mut r, true)?,
+        },
+        TAG_DESPAWNED => TraceBody::Despawned {
+            sigil: r.sigil()?,
+            generation: r.u8()?,
+        },
         _ => return Err(TraceError::BadEvent),
     };
     if r.pos != r.bytes.len() {
@@ -447,7 +505,7 @@ mod tests {
     use klotho_core::{LocusKind, Mm, PoseMm, YawMd};
 
     use super::*;
-    use crate::event::{PoseReason, TraceBody};
+    use crate::event::{PoseReason, ProposalKind, RelTag, RiteEnd, TraceBody};
 
     fn actor(id: u128) -> Sigil {
         Sigil::pack(LocusKind::Actor, 0, id).unwrap()
@@ -482,8 +540,7 @@ mod tests {
             Tick(1),
             TraceBody::PoseCommitted {
                 s: actor(1),
-                xz: (Mm(1), Mm(2)),
-                yaw: YawMd(3),
+                pose: PoseMm::new(Mm(1), Mm(0), Mm(2), YawMd(3)),
                 reason: PoseReason::Land,
             },
         );
@@ -587,5 +644,128 @@ mod tests {
         bytes.extend_from_slice(&0u16.to_le_bytes());
         bytes.extend_from_slice(&u32::MAX.to_le_bytes());
         assert_eq!(decode_event(&bytes), Err(TraceError::BadEvent));
+    }
+
+    #[test]
+    fn pose_committed_six_dof_round_trip() {
+        let mut pose = PoseMm::new(Mm(10), Mm(50), Mm(20), YawMd(7));
+        pose.pitch = YawMd(1_000);
+        pose.roll = YawMd(2_000);
+        let e = TraceEvent::new(
+            Tick(1),
+            TraceBody::PoseCommitted {
+                s: actor(1),
+                pose,
+                reason: PoseReason::Land,
+            },
+        );
+        let got = decode_event(&encode_event(&e)).unwrap();
+        assert_eq!(got, e);
+        let TraceBody::PoseCommitted { pose: p, .. } = got.body else {
+            panic!("expected pose");
+        };
+        assert_eq!(p.y, Mm(50));
+        assert_eq!(p.pitch, YawMd(1_000));
+        assert_eq!(p.roll, YawMd(2_000));
+    }
+
+    #[test]
+    fn pose_committed_old_xz_yaw_missing_axes_are_zero() {
+        let s = actor(1);
+        let mut bytes = vec![EVENT_VERSION];
+        bytes.extend_from_slice(&0u64.to_le_bytes());
+        bytes.push(TAG_POSE_COMMITTED);
+        bytes.extend_from_slice(&s.raw().to_le_bytes());
+        for v in [10i32, 20, 7] {
+            bytes.extend_from_slice(&v.to_le_bytes());
+        }
+        bytes.push(PoseReason::Land as u8);
+        let e = decode_event(&bytes).unwrap();
+        let TraceBody::PoseCommitted { pose, reason, .. } = e.body else {
+            panic!("expected pose");
+        };
+        assert_eq!(pose.x, Mm(10));
+        assert_eq!(pose.z, Mm(20));
+        assert_eq!(pose.yaw, YawMd(7));
+        assert_eq!(pose.y, Mm::ZERO);
+        assert_eq!(pose.pitch, YawMd::ZERO);
+        assert_eq!(pose.roll, YawMd::ZERO);
+        assert_eq!(reason, PoseReason::Land);
+    }
+
+    #[test]
+    fn rite_end_evicted_round_trip_unknown_is_bad_event() {
+        let e = TraceEvent::new(
+            Tick(2),
+            TraceBody::RiteEnded {
+                actor: actor(1),
+                rite: 3,
+                status: RiteEnd::Evicted,
+            },
+        );
+        assert_eq!(decode_event(&encode_event(&e)).unwrap(), e);
+        assert_eq!(RiteEnd::Evicted.as_u8(), 3);
+        let mut bytes = encode_event(&e);
+        let last = bytes.len() - 1;
+        bytes[last] = 4;
+        assert_eq!(decode_event(&bytes), Err(TraceError::BadEvent));
+        bytes[last] = 99;
+        assert_eq!(decode_event(&bytes), Err(TraceError::BadEvent));
+    }
+
+    #[test]
+    fn rel_tags_zero_through_twelve_round_trip() {
+        for tag in 0u8..=12 {
+            let e = TraceEvent::new(
+                Tick(0),
+                TraceBody::RelAdd {
+                    a: actor(1),
+                    rel: RelTag(tag),
+                    b: actor(2),
+                },
+            );
+            let got = decode_event(&encode_event(&e)).unwrap();
+            assert_eq!(got, e, "rel tag {tag}");
+        }
+        assert_eq!(RelTag::PILOTED_BY.0, 11);
+        assert_eq!(RelTag::ATTACHED_TO.0, 12);
+        assert_eq!(RelTag::DEAD.0, 10);
+    }
+
+    #[test]
+    fn place_spawn_despawn_round_trip() {
+        let mut at = PoseMm::new(Mm(1), Mm(2), Mm(3), YawMd(4));
+        at.pitch = YawMd(5);
+        at.roll = YawMd(6);
+        for body in [
+            TraceBody::PlaceLoaded {
+                place: actor(8),
+                n: 12,
+            },
+            TraceBody::PlaceEvicted { place: actor(8) },
+            TraceBody::Spawned {
+                template: 7,
+                sigil: actor(9),
+                at,
+            },
+            TraceBody::Despawned {
+                sigil: actor(9),
+                generation: 2,
+            },
+        ] {
+            let e = TraceEvent::new(Tick(4), body);
+            assert_eq!(decode_event(&encode_event(&e)).unwrap(), e);
+        }
+    }
+
+    #[test]
+    fn proposal_kind_discriminants() {
+        assert_eq!(ProposalKind::Player.as_u8(), 1);
+        assert_eq!(ProposalKind::Infer.as_u8(), 5);
+        assert_eq!(ProposalKind::Phys.as_u8(), 6);
+        assert_eq!(ProposalKind::Residency.as_u8(), 7);
+        assert_eq!(ProposalKind::from_u8(6), Some(ProposalKind::Phys));
+        assert_eq!(ProposalKind::from_u8(7), Some(ProposalKind::Residency));
+        assert_eq!(ProposalKind::from_u8(8), None);
     }
 }

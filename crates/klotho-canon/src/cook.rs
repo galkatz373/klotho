@@ -297,6 +297,9 @@ fn cook_rite(
             RiteOp::Spend(res, _, _) | RiteOp::Setq(_, res, _) => {
                 intern.intern_resource(res)?;
             }
+            RiteOp::Spawn(n) => {
+                intern.intern_fact(n)?;
+            }
             _ => {}
         }
         instrs.push(RiteInstr { pc, op: op.clone() });

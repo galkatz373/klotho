@@ -261,9 +261,9 @@ fn verb_rank(v: Verb) -> u8 {
         Verb::Carry => 3,
         Verb::Drop => 4,
         Verb::Pay => 5,
-        Verb::Fire => 6,
+        Verb::Fire | Verb::Reload => 6,
         Verb::Investigate => 7,
-        Verb::Move | Verb::Look => 8,
+        Verb::Move | Verb::Look | Verb::Steer => 8,
     }
 }
 

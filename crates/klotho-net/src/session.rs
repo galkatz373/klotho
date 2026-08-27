@@ -459,7 +459,9 @@ impl Client {
             ProposalKind::Space
             | ProposalKind::Motion
             | ProposalKind::Mind
-            | ProposalKind::Infer => Err(NetError::HostOnly),
+            | ProposalKind::Infer
+            | ProposalKind::Phys
+            | ProposalKind::Residency => Err(NetError::HostOnly),
         }
     }
 
@@ -579,7 +581,7 @@ pub fn memory_session(canon_hash: Hash) -> Result<(Host, Client), NetError> {
 
 #[cfg(test)]
 mod tests {
-    use klotho_core::{LocusKind, Mm, Sigil, YawMd};
+    use klotho_core::{LocusKind, Mm, PoseMm, Sigil, YawMd};
     use klotho_ir::{Agency, Analog, IntentTarget, Verb};
     use klotho_trace::{PoseReason, TraceBody, fold_prefix, genesis_hash};
 
@@ -827,8 +829,7 @@ mod tests {
             Tick(1),
             TraceBody::PoseCommitted {
                 s,
-                xz: (Mm(5), Mm(6)),
-                yaw: YawMd(0),
+                pose: PoseMm::new(Mm(5), Mm(0), Mm(6), YawMd(0)),
                 reason: PoseReason::Land,
             },
         )];

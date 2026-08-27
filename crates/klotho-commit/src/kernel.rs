@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use klotho_canon::Canon;
-use klotho_core::{Budget, KernelFault, PlayerId, RejectReason, Sigil, Tick, VelFx};
+use klotho_core::{Budget, KernelFault, PlayerId, RejectReason, Sigil, Tick, Vel3};
 use klotho_ir::{Channel, IntentTarget, SourceKind, Verb};
 use klotho_trace::{ISLAND_SNAP_PERIOD_TICKS, IslandSnap, TraceBody, TraceDelta, TraceEvent};
 use klotho_world::{World, WorldMut, WorldSnapshot, WorldView};
@@ -335,7 +335,7 @@ fn island_snaps(view: WorldView<'_>, tick: Tick) -> Vec<TraceEvent> {
         let Some(pose) = view.pose(s) else {
             continue;
         };
-        let (vx, vz, yaw_rate) = view.vel(s).unwrap_or((VelFx::ZERO, VelFx::ZERO, 0));
+        let (vel, yaw_rate) = view.vel(s).unwrap_or((Vel3::ZERO, 0));
         let snap = by_island.entry(island).or_insert_with(|| IslandSnap {
             island,
             members: Vec::new(),
@@ -346,7 +346,7 @@ fn island_snaps(view: WorldView<'_>, tick: Tick) -> Vec<TraceEvent> {
         });
         snap.members.push(s);
         snap.poses.push(pose);
-        snap.vels.push((vx, vz));
+        snap.vels.push(vel);
         snap.yaw_rates.push(yaw_rate);
         snap.sleep_ticks.push(0);
     }

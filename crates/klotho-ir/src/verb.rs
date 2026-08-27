@@ -29,6 +29,10 @@ pub enum Verb {
     Talk,
     /// Mind: investigate NoiseHigh.
     Investigate,
+    /// Analog heading / vehicle steer.
+    Steer,
+    /// Weapon reload.
+    Reload,
 }
 
 impl Verb {
@@ -53,6 +57,8 @@ impl Verb {
             8 => Some(Self::Open),
             9 => Some(Self::Talk),
             10 => Some(Self::Investigate),
+            11 => Some(Self::Steer),
+            12 => Some(Self::Reload),
             _ => None,
         }
     }
@@ -67,7 +73,11 @@ mod tests {
         assert_eq!(Verb::Look.as_u8(), 0);
         assert_eq!(Verb::Move.as_u8(), 1);
         assert_eq!(Verb::Investigate.as_u8(), 10);
+        assert_eq!(Verb::Steer.as_u8(), 11);
+        assert_eq!(Verb::Reload.as_u8(), 12);
         assert_eq!(Verb::from_u8(1), Some(Verb::Move));
-        assert_eq!(Verb::from_u8(11), None);
+        assert_eq!(Verb::from_u8(11), Some(Verb::Steer));
+        assert_eq!(Verb::from_u8(12), Some(Verb::Reload));
+        assert_eq!(Verb::from_u8(13), None);
     }
 }

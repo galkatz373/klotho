@@ -44,7 +44,7 @@ pub use decl::{
 pub use doc::IntentDoc;
 pub use error::IrError;
 pub use infer::{FactId, InferIntent, ModelId};
-pub use klotho_core::{LocusKind, PlayerId, PoseMm, Sigil, Tick};
+pub use klotho_core::{LocusKind, PlayerId, PoseMm, Sigil, SimLod, Tick};
 pub use klotho_prove::ProvenanceId;
 pub use mind::{MindIntent, MindSpec};
 pub use name::Name;

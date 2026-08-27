@@ -2,7 +2,7 @@
 #![allow(clippy::too_many_arguments)]
 
 use klotho_canon::{Canon, CookedRite, EvalCtx, eval_pred};
-use klotho_core::{RejectReason, ResourceId, Sigil, Tick};
+use klotho_core::{PhysRequest, RejectReason, ResourceId, Sigil, Tick};
 use klotho_ir::{BindSrc, Channel, Rel, RiteOp, Slot, SourceKind, Status, Verb};
 use klotho_trace::{RelTag, RiteEnd, TraceBody, TraceEvent};
 use klotho_world::{RiteMachine, SpecDelta};
@@ -212,6 +212,34 @@ pub fn run_burst(
                 }
                 pc = next.ok_or(RejectReason::Budget)?;
             }
+            RiteOp::Spawn(name) => {
+                let template = canon
+                    .facts
+                    .iter()
+                    .position(|n| n.as_str() == name.as_str())
+                    .unwrap_or(0) as u16;
+                let at = spec.view().pose(actor).unwrap_or_default();
+                spec.push(TraceEvent::new(
+                    tick,
+                    TraceBody::Spawned {
+                        template,
+                        sigil: actor,
+                        at,
+                    },
+                ));
+                pc = next.ok_or(RejectReason::Budget)?;
+            }
+            RiteOp::PhysReq { lin, ang } => {
+                spec.set_phys_req(
+                    actor,
+                    PhysRequest {
+                        lin: *lin,
+                        ang: *ang,
+                    },
+                )
+                .map_err(|_| RejectReason::Budget)?;
+                pc = next.ok_or(RejectReason::Budget)?;
+            }
         }
     }
 }
@@ -280,19 +308,7 @@ fn resolve_slot(
 }
 
 fn rel_tag(r: Rel) -> RelTag {
-    match r {
-        Rel::In => RelTag::IN,
-        Rel::OwnedBy => RelTag::OWNED_BY,
-        Rel::WieldedBy => RelTag::WIELDED_BY,
-        Rel::KeyedBy => RelTag::KEYED_BY,
-        Rel::Knows => RelTag::KNOWS,
-        Rel::Owes => RelTag::OWES,
-        Rel::Fears => RelTag::FEARS,
-        Rel::PartOf => RelTag::PART_OF,
-        Rel::DerivedFrom => RelTag::DERIVED_FROM,
-        Rel::LockedBy => RelTag::LOCKED_BY,
-        Rel::Dead => RelTag::DEAD,
-    }
+    RelTag(r.as_u8())
 }
 
 /// Resume: a `WAIT.channel` may only be advanced by a Player. Mind/Infer →

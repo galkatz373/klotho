@@ -50,6 +50,15 @@ impl IVec3 {
     }
 }
 
+/// Linear/angular request written by `PHYS_REQ`. Not a quantity row.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Serialize, Deserialize)]
+pub struct PhysRequest {
+    /// Linear request, millimetres.
+    pub lin: IVec3,
+    /// Angular request, millidegrees.
+    pub ang: IVec3,
+}
+
 const fn min_i32(a: i32, b: i32) -> i32 {
     if a < b { a } else { b }
 }

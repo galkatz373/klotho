@@ -1,6 +1,6 @@
 //! Predicate interpreter. Caps exceeded → [`RejectReason::Budget`].
 
-use klotho_core::{AabbMm, AffordanceId, Mm, RejectReason, ResourceId, Sigil};
+use klotho_core::{AabbMm, AffordanceId, Mm, RejectReason, ResourceId, Sigil, SimLod};
 use klotho_ir::{Channel, Cmp, Rel, SourceKind, Verb};
 
 use crate::ast::{
@@ -203,6 +203,12 @@ fn eval_atom<S: PredStore + ?Sized>(
         Atom::SelfIs(s) => resolve(s, ctx, other) == Some(ctx.this),
         Atom::TargetIs(s) => ctx.target.is_some() && resolve(s, ctx, other) == ctx.target,
         Atom::OtherIs(s) => other.is_some() && resolve(s, ctx, other) == other,
+        Atom::RayHits { .. } => false,
+        Atom::SimLodIs(s, lod) => resolve(s, ctx, other).is_some() && lod == SimLod::Full,
+        Atom::InPlace(s, p) => match (resolve(s, ctx, other), resolve(p, ctx, other)) {
+            (Some(a), Some(b)) => ctx.store.has_rel(a, Rel::In, b),
+            _ => false,
+        },
     }
 }
 
@@ -396,7 +402,7 @@ impl PredStore for MemStore {
 
 #[cfg(test)]
 mod tests {
-    use klotho_core::{IVec3, LocusKind};
+    use klotho_core::{IVec3, LocusKind, SimLod};
     use klotho_ir::{Channel, Pred, Rel, Slot, SourceKind, Verb};
 
     use super::*;
@@ -522,5 +528,34 @@ mod tests {
         );
         assert!(aabb_near(a, b, Mm(10)));
         assert!(!aabb_near(a, b, Mm(9)));
+    }
+
+    #[test]
+    fn sim_lod_defaults_full_ray_hits_false_inplace_is_rel_in() {
+        let mut store = MemStore::new();
+        let this = actor(1);
+        let place = relic(2);
+        store.add_rel(this, Rel::In, place);
+        let claimed = [];
+        let pins = [];
+        let c = ctx(&store, this, Some(place), &pins, Verb::Use, &claimed);
+        let mut tick = PRED_OPS_PER_TICK;
+        let full = compile_pred(&Pred::SimLodIs(Slot::This, SimLod::Full)).unwrap();
+        assert!(eval_pred(&full, &c, &mut tick).unwrap());
+        tick = PRED_OPS_PER_TICK;
+        let far = compile_pred(&Pred::SimLodIs(Slot::This, SimLod::Far)).unwrap();
+        assert!(!eval_pred(&far, &c, &mut tick).unwrap());
+        tick = PRED_OPS_PER_TICK;
+        let ray = compile_pred(&Pred::RayHits {
+            from: Slot::This,
+            dir: IVec3 { x: 0, y: 0, z: 1 },
+            max: Mm(1000),
+            mask: 0,
+        })
+        .unwrap();
+        assert!(!eval_pred(&ray, &c, &mut tick).unwrap());
+        tick = PRED_OPS_PER_TICK;
+        let here = compile_pred(&Pred::InPlace(Slot::This, Slot::Target)).unwrap();
+        assert!(eval_pred(&here, &c, &mut tick).unwrap());
     }
 }

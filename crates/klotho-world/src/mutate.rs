@@ -2,7 +2,8 @@
 //! (`klotho-commit` only). Always compiled so projection writers stay linked.
 
 use klotho_core::{
-    AabbMm, AffordanceId, BlobId, LocusKind, PackedIx, PoseMm, ResourceId, Sigil, Tick, Vel3,
+    AabbMm, AffordanceId, BlobId, LocusKind, PackedIx, PhysRequest, PoseMm, ResourceId, Sigil, Tick,
+    Vel3,
 };
 use klotho_ir::{PlayerIntent, Rel};
 use klotho_trace::TraceEvent;
@@ -66,6 +67,11 @@ impl WorldMut<'_> {
     /// Set a quantity row.
     pub fn set_qty(&mut self, s: Sigil, r: ResourceId, v: i32) -> Result<(), WorldError> {
         self.world.projection_mut().set_qty(s, r, v)
+    }
+
+    /// Write a `PHYS_REQ` column. Not a quantity.
+    pub fn set_phys_req(&mut self, s: Sigil, req: PhysRequest) -> Result<(), WorldError> {
+        self.world.projection_mut().set_phys_req(s, req)
     }
 
     /// Insert a relation. Reindexes `space_ix` when Place membership or

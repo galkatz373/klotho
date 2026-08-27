@@ -635,8 +635,7 @@ mod tests {
                 Tick(1),
                 TraceBody::PoseCommitted {
                     s: actor,
-                    xz: (Mm(1), Mm(2)),
-                    yaw: YawMd(0),
+                    pose: PoseMm::new(Mm(1), Mm(0), Mm(2), YawMd(0)),
                     reason: PoseReason::Land,
                 },
             ),

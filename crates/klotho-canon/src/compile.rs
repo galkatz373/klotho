@@ -287,6 +287,19 @@ fn cook_atom(pred: &Pred, intern: &mut Interner) -> Result<Atom, CookError> {
         Pred::SelfIs(s) => Ok(Atom::SelfIs(intern.cook_slot(s)?)),
         Pred::TargetIs(s) => Ok(Atom::TargetIs(intern.cook_slot(s)?)),
         Pred::OtherIs(s) => Ok(Atom::OtherIs(intern.cook_slot(s)?)),
+        Pred::RayHits {
+            from,
+            dir,
+            max,
+            mask,
+        } => Ok(Atom::RayHits {
+            from: intern.cook_slot(from)?,
+            dir: *dir,
+            max: *max,
+            mask: *mask,
+        }),
+        Pred::SimLodIs(s, lod) => Ok(Atom::SimLodIs(intern.cook_slot(s)?, *lod)),
+        Pred::InPlace(s, p) => Ok(Atom::InPlace(intern.cook_slot(s)?, intern.cook_slot(p)?)),
         Pred::And(_, _)
         | Pred::Or(_, _)
         | Pred::Not(_)

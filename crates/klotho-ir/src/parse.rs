@@ -41,6 +41,8 @@ fn unquote_rel_names(s: &str) -> String {
         "DerivedFrom",
         "LockedBy",
         "Dead",
+        "PilotedBy",
+        "AttachedTo",
     ] {
         out = out.replace(&format!("\"{name}\""), name);
     }
@@ -513,5 +515,40 @@ AddRite(RiteGraph(
             }
             other => panic!("{other:?}"),
         }
+    }
+
+    #[test]
+    fn spawn_and_phys_req_parse() {
+        let src = r#"
+AddRite(RiteGraph(
+    id: "ember.spawn",
+    cap_steps: 8,
+    cap_ticks: 8,
+    entry: 0,
+    nodes: [
+        Spawn("ember"),
+        PhysReq(lin: IVec3(x: 1, y: 0, z: 0), ang: IVec3(x: 0, y: 0, z: 0)),
+        Complete(Success),
+    ],
+))
+"#;
+        let d: CanonDiff = from_ron(src).unwrap();
+        match d {
+            CanonDiff::AddRite(g) => {
+                assert!(matches!(g.nodes[0], RiteNode::Op(RiteOp::Spawn(_))));
+                assert!(matches!(g.nodes[1], RiteNode::Op(RiteOp::PhysReq { .. })));
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn new_pred_atoms_parse() {
+        let src = r#"
+And(SimLodIs(Self, Full), And(InPlace(Self, Target), RayHits(from: Self, dir: IVec3(x: 0, y: 0, z: 1), max: Mm(1000), mask: 0)))
+"#;
+        let p: Pred = from_ron(src).unwrap();
+        p.check().unwrap();
+        assert!(matches!(p, Pred::And(_, _)));
     }
 }

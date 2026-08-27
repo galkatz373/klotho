@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use klotho_core::Mm;
+use klotho_core::{IVec3, Mm, SimLod};
 
 use crate::agency::Channel;
 use crate::error::IrError;
@@ -39,6 +39,10 @@ pub enum SourceKind {
     Motion,
     /// `Proposal::Infer`.
     Infer,
+    /// Phys proposer (`ProposalKind::Phys`).
+    Phys,
+    /// Place load/evict (`ProposalKind::Residency`).
+    Residency,
 }
 
 /// Closed-world predicate. Combinators are binary `And` / `Or`.
@@ -78,6 +82,21 @@ pub enum Pred {
     TargetIs(Slot),
     /// Slot equality.
     OtherIs(Slot),
+    /// Hitscan vs hulls. Eval is false until phys (AAA-08).
+    RayHits {
+        /// Ray origin.
+        from: Slot,
+        /// Direction, millimetres.
+        dir: IVec3,
+        /// Maximum length.
+        max: Mm,
+        /// Hull mask (engine bits).
+        mask: u8,
+    },
+    /// Sim LOD. Missing column evaluates as `Full`.
+    SimLodIs(Slot, SimLod),
+    /// Place membership. Until the place column exists, this is `Rel(s, In, p)`.
+    InPlace(Slot, Slot),
     /// Conjunction.
     And(Box<Pred>, Box<Pred>),
     /// Disjunction.
@@ -119,10 +138,11 @@ impl Pred {
                 s.check()?;
                 n.check()
             }
-            Self::Rel(a, _, b) | Self::AabbNear(a, b, _) => {
+            Self::Rel(a, _, b) | Self::AabbNear(a, b, _) | Self::InPlace(a, b) => {
                 a.check()?;
                 b.check()
             }
+            Self::RayHits { from, .. } => from.check(),
             Self::EqVerb(_)
             | Self::SourceIs(_)
             | Self::AgencyClaimed(_)
@@ -134,7 +154,8 @@ impl Pred {
             | Self::IslandAwake(s)
             | Self::SelfIs(s)
             | Self::TargetIs(s)
-            | Self::OtherIs(s) => s.check(),
+            | Self::OtherIs(s)
+            | Self::SimLodIs(s, _) => s.check(),
             Self::And(a, b) | Self::Or(a, b) => {
                 a.check_inner(in_quant)?;
                 b.check_inner(in_quant)

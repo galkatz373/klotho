@@ -1,7 +1,7 @@
 //! Speculative projection + event list (K21). Drop = rollback.
 
 use klotho_canon::RiteId;
-use klotho_core::{AabbMm, BlobId, PoseMm, ResourceId, Sigil, Tick, Vel3};
+use klotho_core::{AabbMm, BlobId, PhysRequest, PoseMm, ResourceId, Sigil, Tick, Vel3};
 use klotho_ir::Rel;
 use klotho_trace::TraceEvent;
 
@@ -60,6 +60,11 @@ impl SpecDelta {
     /// Write a quantity without a Trace event (tests / Conserve pre-read).
     pub fn set_qty(&mut self, s: Sigil, r: ResourceId, v: i32) -> Result<(), WorldError> {
         self.proj.set_qty(s, r, v)
+    }
+
+    /// Write a `PHYS_REQ` column. Not a quantity.
+    pub fn set_phys_req(&mut self, s: Sigil, req: PhysRequest) -> Result<(), WorldError> {
+        self.proj.set_phys_req(s, req)
     }
 
     /// Relation write.

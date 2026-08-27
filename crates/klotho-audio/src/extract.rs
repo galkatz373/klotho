@@ -55,17 +55,10 @@ fn cue(body: &TraceBody) -> Option<(&'static str, CuePos)> {
             Some((KNOCK, CuePos::Locus(*a)))
         }
         TraceBody::PoseCommitted {
-            xz,
+            pose,
             reason: PoseReason::Hinge | PoseReason::Pick | PoseReason::Drop,
             ..
-        } => Some((
-            KNOCK,
-            CuePos::Xz(IVec3 {
-                x: xz.0.0,
-                y: 0,
-                z: xz.1.0,
-            }),
-        )),
+        } => Some((KNOCK, CuePos::Xz(pose.translation()))),
         TraceBody::QtyChanged { id, .. } => Some((CRACKLE, CuePos::Locus(*id))),
         TraceBody::Emitted { a, .. } => Some((KNOCK, CuePos::Locus(*a))),
         _ => None,
@@ -74,7 +67,7 @@ fn cue(body: &TraceBody) -> Option<(&'static str, CuePos)> {
 
 #[cfg(test)]
 mod tests {
-    use klotho_core::{LocusKind, Mm, ResourceId, Tick, YawMd};
+    use klotho_core::{LocusKind, Mm, PoseMm, ResourceId, Tick, YawMd};
     use klotho_trace::{IslandSnap, PoseReason, RelTag, RiteEnd, TraceBody, TraceEvent};
 
     use super::*;
@@ -151,8 +144,7 @@ mod tests {
                 Tick(3),
                 TraceBody::PoseCommitted {
                     s: a,
-                    xz: (Mm(50), Mm(70)),
-                    yaw: YawMd::ZERO,
+                    pose: PoseMm::new(Mm(50), Mm(0), Mm(70), YawMd::ZERO),
                     reason: PoseReason::Hinge,
                 },
             ),
@@ -193,8 +185,7 @@ mod tests {
                 Tick(1),
                 TraceBody::PoseCommitted {
                     s: a,
-                    xz: (Mm(1), Mm(2)),
-                    yaw: YawMd::ZERO,
+                    pose: PoseMm::new(Mm(1), Mm(0), Mm(2), YawMd::ZERO),
                     reason: PoseReason::Pick,
                 },
             ),
@@ -202,8 +193,7 @@ mod tests {
                 Tick(2),
                 TraceBody::PoseCommitted {
                     s: a,
-                    xz: (Mm(3), Mm(4)),
-                    yaw: YawMd::ZERO,
+                    pose: PoseMm::new(Mm(3), Mm(0), Mm(4), YawMd::ZERO),
                     reason: PoseReason::Drop,
                 },
             ),
@@ -255,8 +245,7 @@ mod tests {
                 Tick(1),
                 TraceBody::PoseCommitted {
                     s: a,
-                    xz: (Mm(0), Mm(0)),
-                    yaw: YawMd::ZERO,
+                    pose: PoseMm::default(),
                     reason: PoseReason::Land,
                 },
             ),
@@ -272,8 +261,7 @@ mod tests {
                 Tick(1),
                 TraceBody::PoseCommitted {
                     s: a,
-                    xz: (Mm(0), Mm(0)),
-                    yaw: YawMd::ZERO,
+                    pose: PoseMm::default(),
                     reason: PoseReason::Interact,
                 },
             ),

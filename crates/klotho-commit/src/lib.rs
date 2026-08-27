@@ -31,7 +31,7 @@ mod tests {
     use klotho_canon::cook_diffs;
     use klotho_core::{
         AabbMm, BlobId, Budget, Hash, HullWitness, IVec3, LocusKind, Mm, PlayerId, PoseMm,
-        ResourceId, Sigil, Tick, VelFx, YawMd,
+        ResourceId, Sigil, Tick, Vel3, YawMd,
     };
     use klotho_ir::{
         Agency, Analog, CanonDiff, Channel, IntentTarget, MindIntent, PlayerIntent, Verb, from_ron,
@@ -292,8 +292,7 @@ mod tests {
         Proposal::SpaceDelta {
             mover,
             pose,
-            vel_x: VelFx::ZERO,
-            vel_z: VelFx::ZERO,
+            vel: Vel3::ZERO,
             yaw_rate: 0,
             island: 0,
             sleep_ticks: 0,
@@ -306,8 +305,7 @@ mod tests {
         Proposal::MotionDelta {
             mover,
             pose,
-            vel_x: VelFx::ZERO,
-            vel_z: VelFx::ZERO,
+            vel: Vel3::ZERO,
             yaw_rate: 0,
             island: 0,
             sleep_ticks: 0,
@@ -412,7 +410,7 @@ mod tests {
             snaps[0].poses,
             vec![PoseMm::new(Mm(10), Mm(0), Mm(0), YawMd(0))]
         );
-        assert_eq!(snaps[0].vels, vec![(VelFx::ZERO, VelFx::ZERO)]);
+        assert_eq!(snaps[0].vels, vec![Vel3::ZERO]);
         assert_eq!(snaps[0].yaw_rates, vec![0]);
         assert_eq!(snaps[0].sleep_ticks, vec![0]);
         assert_eq!(snaps[1].island, 2);
@@ -446,5 +444,31 @@ mod tests {
             assert!(!pose_committed(&d.events), "{d:?}");
         }
         assert_eq!(k.world().tick().0 % ISLAND_SNAP_PERIOD_TICKS, 0);
+    }
+
+    #[test]
+    fn spawn_and_phys_req_commit() {
+        let src = r#"[
+            AddRite(RiteGraph(id: "ember.spawn", cap_steps: 8, cap_ticks: 8, entry: 0, nodes: [
+                Spawn("ember"),
+                PhysReq(lin: IVec3(x: 3, y: 0, z: 0), ang: IVec3(x: 0, y: 1, z: 0)),
+                Complete(Success),
+            ])),
+        ]"#;
+        let (mut k, s, stamina) = kernel_with(src, 0);
+        let _ = stamina;
+        k.ingest(Proposal::Player(player_use()));
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(d.rejects.is_empty(), "{d:?}");
+        assert!(
+            d.events
+                .iter()
+                .any(|e| matches!(e.body, klotho_trace::TraceBody::Spawned { .. })),
+            "{d:?}"
+        );
+        let req = k.world().view().phys_req(s).expect("phys_req");
+        assert_eq!(req.lin.x, 3);
+        assert_eq!(req.ang.y, 1);
+        assert_eq!(k.world().view().qty(s, ResourceId(0)), 0);
     }
 }

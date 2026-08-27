@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use klotho_core::Mm;
+use klotho_core::{IVec3, Mm};
 
 use crate::agency::Channel;
 use crate::error::IrError;
@@ -204,6 +204,15 @@ pub enum RiteOp {
     Awake(Slot),
     /// Alias of Halt with Success/Fail.
     Complete(Status),
+    /// Emit `TraceBody::Spawned`. Locus apply is later (AAA-06).
+    Spawn(Name),
+    /// Write [`klotho_core::PhysRequest`] on the acting locus. Not a `Qty`.
+    PhysReq {
+        /// Linear request, millimetres.
+        lin: IVec3,
+        /// Angular request, millidegrees.
+        ang: IVec3,
+    },
 }
 
 impl RiteOp {
@@ -211,8 +220,9 @@ impl RiteOp {
         match self {
             Self::Halt(_) | Self::Wait(_, _) | Self::Complete(_) => Ok(()),
             Self::Guard(pred, _) | Self::Branch(pred, _, _) => pred.check(),
-            Self::Spend(n, _, _) | Self::Emit(n) => n.check(),
+            Self::Spend(n, _, _) | Self::Emit(n) | Self::Spawn(n) => n.check(),
             Self::Bind(b) => b.check(),
+            Self::PhysReq { .. } => Ok(()),
             Self::Setq(s, n, _) => {
                 s.check()?;
                 n.check()

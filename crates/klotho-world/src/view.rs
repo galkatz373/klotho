@@ -1,7 +1,9 @@
 //! Read path. Same API from live `World` and `WorldSnapshot`.
 
 use klotho_canon::{PredStore, RiteId};
-use klotho_core::{AabbMm, AffordanceId, PackedIx, PoseMm, ResourceId, Sigil, Tick, Vel3};
+use klotho_core::{
+    AabbMm, AffordanceId, PackedIx, PhysRequest, PoseMm, ResourceId, Sigil, Tick, Vel3,
+};
 use klotho_ir::{Channel, Rel};
 
 use crate::proj::Projection;
@@ -63,6 +65,12 @@ impl WorldView<'_> {
     #[must_use]
     pub fn qty(&self, s: Sigil, r: ResourceId) -> i32 {
         self.proj.qty(s, r)
+    }
+
+    /// Current `PHYS_REQ` write, if any.
+    #[must_use]
+    pub fn phys_req(&self, s: Sigil) -> Option<PhysRequest> {
+        self.proj.phys_req(s)
     }
 
     /// Pose.

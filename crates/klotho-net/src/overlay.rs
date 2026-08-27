@@ -26,19 +26,8 @@ impl Overlay {
         self.previous = core::mem::take(&mut self.current);
         for e in events {
             match &e.body {
-                TraceBody::PoseCommitted { s, xz, yaw, .. } => {
-                    let prev = self.previous.get(s).copied();
-                    self.current.insert(
-                        *s,
-                        PoseMm {
-                            x: xz.0,
-                            y: prev.map(|p| p.y).unwrap_or(Mm::ZERO),
-                            z: xz.1,
-                            yaw: *yaw,
-                            pitch: prev.map(|p| p.pitch).unwrap_or(YawMd::ZERO),
-                            roll: prev.map(|p| p.roll).unwrap_or(YawMd::ZERO),
-                        },
-                    );
+                TraceBody::PoseCommitted { s, pose, .. } => {
+                    self.current.insert(*s, *pose);
                 }
                 TraceBody::IslandSnap(snap) => {
                     for (i, s) in snap.members.iter().enumerate() {
@@ -99,8 +88,8 @@ fn lerp_i32(a: i32, b: i32, t_permille: u16) -> i32 {
 
 #[cfg(test)]
 mod tests {
-    use klotho_core::{LocusKind, Tick, Vel3};
-    use klotho_trace::{IslandSnap, PoseReason, fold_prefix, genesis_hash};
+    use klotho_core::{LocusKind, Mm, PoseMm, Tick, YawMd};
+    use klotho_trace::{PoseReason, fold_prefix, genesis_hash};
 
     use super::*;
 
@@ -113,8 +102,7 @@ mod tests {
             Tick(1),
             TraceBody::PoseCommitted {
                 s: actor(),
-                xz: (Mm(x), Mm(0)),
-                yaw: YawMd(0),
+                pose: PoseMm::new(Mm(x), Mm(0), Mm(0), YawMd(0)),
                 reason: PoseReason::Land,
             },
         )
@@ -180,33 +168,26 @@ mod tests {
     }
 
     #[test]
-    fn pose_committed_keeps_previous_height_and_attitude() {
+    fn pose_committed_copies_six_dof() {
         let s = actor();
-        let mut snap_pose = PoseMm::new(Mm(10), Mm(50), Mm(20), YawMd(0));
-        snap_pose.pitch = YawMd(1_000);
-        snap_pose.roll = YawMd(2_000);
-        let snap = TraceEvent::new(
+        let mut pose = PoseMm::new(Mm(40), Mm(50), Mm(20), YawMd(7));
+        pose.pitch = YawMd(1_000);
+        pose.roll = YawMd(2_000);
+        let land = TraceEvent::new(
             Tick(1),
-            TraceBody::IslandSnap(
-                IslandSnap::new(
-                    0,
-                    vec![s],
-                    vec![snap_pose],
-                    vec![Vel3::ZERO],
-                    vec![0],
-                    vec![0],
-                )
-                .unwrap(),
-            ),
+            TraceBody::PoseCommitted {
+                s,
+                pose,
+                reason: PoseReason::Land,
+            },
         );
-        let land = pose_event(40);
         let mut overlay = Overlay::new();
-        overlay.apply_delta(std::slice::from_ref(&snap));
         overlay.apply_delta(std::slice::from_ref(&land));
         let p = overlay.pose(s).unwrap();
         assert_eq!(p.x, Mm(40));
-        assert_eq!(p.z, Mm(0));
         assert_eq!(p.y, Mm(50));
+        assert_eq!(p.z, Mm(20));
+        assert_eq!(p.yaw, YawMd(7));
         assert_eq!(p.pitch, YawMd(1_000));
         assert_eq!(p.roll, YawMd(2_000));
     }

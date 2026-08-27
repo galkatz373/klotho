@@ -94,7 +94,9 @@ fn successors(
         | RiteOp::Setq(_, _, _)
         | RiteOp::RelAdd(_, _, _)
         | RiteOp::RelDel(_, _, _)
-        | RiteOp::Awake(_) => {
+        | RiteOp::Awake(_)
+        | RiteOp::Spawn(_)
+        | RiteOp::PhysReq { .. } => {
             let next = next.ok_or(CookError::FallOff(pc))?;
             Ok(vec![next])
         }
@@ -199,5 +201,27 @@ RiteGraph(id: "x", cap_steps: 8, cap_ticks: 8, entry: 0, nodes: [
 "#,
         );
         assert_eq!(check_rite_cfg(&g), Err(CookError::Cycle));
+    }
+
+    #[test]
+    fn spawn_and_phys_req_need_a_successor() {
+        let g = graph(
+            r#"
+RiteGraph(id: "x", cap_steps: 8, cap_ticks: 8, entry: 0, nodes: [
+    Spawn("ember"),
+])
+"#,
+        );
+        assert_eq!(check_rite_cfg(&g), Err(CookError::FallOff(0)));
+        let g = graph(
+            r#"
+RiteGraph(id: "x", cap_steps: 8, cap_ticks: 8, entry: 0, nodes: [
+    Spawn("ember"),
+    PhysReq(lin: IVec3(x: 0, y: 0, z: 0), ang: IVec3(x: 0, y: 0, z: 0)),
+    Complete(Success),
+])
+"#,
+        );
+        check_rite_cfg(&g).unwrap();
     }
 }

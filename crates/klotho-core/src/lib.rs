@@ -25,7 +25,10 @@ mod units;
 
 pub use budget::Budget;
 pub use hash::{BlobId, Hash};
-pub use id::{AffordanceId, LawId, LocusKind, PlayerId, ResourceId, Sigil};
+pub use id::{
+    AffordanceId, LawId, LocusKind, MAX_LOCI_HEARTH, MAX_LOCI_PROCESS, PackedIx, PlayerId,
+    ResourceId, Sigil,
+};
 pub use reject::{KernelFault, RejectReason};
 pub use rng::Rng;
 pub use space::{AabbMm, HullWitness, IVec3, PoseMm, Vel3};

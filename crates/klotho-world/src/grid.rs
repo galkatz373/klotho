@@ -1,8 +1,11 @@
 //! Kernel spatial index (`space_ix`). Rebuildable; never a source.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
-use klotho_core::{AabbMm, IVec3};
+use klotho_core::{AabbMm, IVec3, PackedIx, Sigil};
+
+use crate::cow::CowCol;
 
 /// Uniform grid cell size, millimetres. Power of two for cheap `div_euclid`.
 pub const CELL_MM: i32 = 1024;
@@ -10,9 +13,9 @@ pub const CELL_MM: i32 = 1024;
 /// Uniform XZ grid of hulls at current pose, tagged `OpaqueClosed`.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct GridIndex {
-    /// `(cell_x, cell_z)` → slot → opaque_closed.
-    cells: BTreeMap<(i32, i32), BTreeMap<u16, bool>>,
-    /// Cells occupied by each slot (for incremental unindex).
+    /// `(cell_x, cell_z)` → packed index → opaque_closed.
+    cells: BTreeMap<(i32, i32), BTreeMap<PackedIx, bool>>,
+    /// Cells occupied by each packed index (for incremental unindex).
     occupied: Vec<Vec<(i32, i32)>>,
 }
 
@@ -23,23 +26,22 @@ impl GridIndex {
         Self::default()
     }
 
-    /// Ensure `occupied` covers `slot`.
-    fn ensure_slot(&mut self, slot: u16) {
-        let n = slot as usize + 1;
+    fn ensure_ix(&mut self, ix: PackedIx) {
+        let n = ix as usize + 1;
         if self.occupied.len() < n {
             self.occupied.resize(n, Vec::new());
         }
     }
 
-    /// Remove a slot from every cell it occupies.
-    pub fn unindex(&mut self, slot: u16) {
-        if (slot as usize) >= self.occupied.len() {
+    /// Remove a packed index from every cell it occupies.
+    pub fn unindex(&mut self, ix: PackedIx) {
+        if (ix as usize) >= self.occupied.len() {
             return;
         }
-        let cells = core::mem::take(&mut self.occupied[slot as usize]);
+        let cells = core::mem::take(&mut self.occupied[ix as usize]);
         for c in cells {
             if let Some(bucket) = self.cells.get_mut(&c) {
-                bucket.remove(&slot);
+                bucket.remove(&ix);
                 if bucket.is_empty() {
                     self.cells.remove(&c);
                 }
@@ -47,45 +49,42 @@ impl GridIndex {
         }
     }
 
-    /// Insert `world` AABB for `slot`. Replaces any previous occupancy.
-    pub fn index(&mut self, slot: u16, world: AabbMm, opaque_closed: bool) {
-        self.unindex(slot);
+    /// Insert `world` AABB for `ix`. Replaces any previous occupancy.
+    pub fn index(&mut self, ix: PackedIx, world: AabbMm, opaque_closed: bool) {
+        self.unindex(ix);
         if world.is_empty() {
             return;
         }
-        self.ensure_slot(slot);
+        self.ensure_ix(ix);
         let cells = cells_of(world);
         for c in &cells {
-            self.cells
-                .entry(*c)
-                .or_default()
-                .insert(slot, opaque_closed);
+            self.cells.entry(*c).or_default().insert(ix, opaque_closed);
         }
-        self.occupied[slot as usize] = cells;
+        self.occupied[ix as usize] = cells;
     }
 
-    /// Drop everything and re-insert from `items` `(slot, world_aabb, opaque_closed)`.
-    pub fn rebuild(&mut self, items: impl IntoIterator<Item = (u16, AabbMm, bool)>) {
+    /// Drop everything and re-insert from `items` `(ix, world_aabb, opaque_closed)`.
+    pub fn rebuild(&mut self, items: impl IntoIterator<Item = (PackedIx, AabbMm, bool)>) {
         self.cells.clear();
         self.occupied.clear();
-        for (slot, aabb, oc) in items {
-            self.index(slot, aabb, oc);
+        for (ix, aabb, oc) in items {
+            self.index(ix, aabb, oc);
         }
     }
 
-    /// Slots whose hull may overlap `swept`. Caller maps slot → Sigil.
+    /// Packed indices whose hull may overlap `swept`. Caller maps index → Sigil.
     /// If `opaque_closed_only`, only tagged closed-opaque hulls.
     #[must_use]
-    pub fn candidates(&self, swept: AabbMm, opaque_closed_only: bool) -> BTreeSet<u16> {
+    pub fn candidates(&self, swept: AabbMm, opaque_closed_only: bool) -> BTreeSet<PackedIx> {
         let mut out = BTreeSet::new();
         if swept.is_empty() {
             return out;
         }
         for c in cells_of(swept) {
             if let Some(bucket) = self.cells.get(&c) {
-                for (&slot, &oc) in bucket {
+                for (&ix, &oc) in bucket {
                     if !opaque_closed_only || oc {
-                        out.insert(slot);
+                        out.insert(ix);
                     }
                 }
             }
@@ -102,11 +101,141 @@ impl GridIndex {
     pub(crate) fn approx_bytes(&self) -> usize {
         let mut n = self.cells.len() * 16;
         for bucket in self.cells.values() {
-            n += bucket.len() * 4;
+            n += bucket.len() * 8;
         }
         for v in &self.occupied {
             n += v.len() * 8;
         }
+        n
+    }
+}
+
+/// Per-Place grids plus a coarse Place AABB map. Unplaced loci use `unplaced`.
+#[derive(Clone, Debug, Default)]
+pub struct PlaceIndex {
+    unplaced: Arc<GridIndex>,
+    places: BTreeMap<Sigil, Arc<GridIndex>>,
+    bounds: BTreeMap<Sigil, AabbMm>,
+    /// Place grid that currently holds each packed index (`None` = unplaced).
+    home: CowCol<Option<Sigil>>,
+}
+
+impl PlaceIndex {
+    /// Empty index.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Grid for loci with no Place.
+    #[must_use]
+    pub fn unplaced(&self) -> &GridIndex {
+        &self.unplaced
+    }
+
+    /// Grid for `place`, if any hulls have been indexed there.
+    #[must_use]
+    pub fn grid(&self, place: Sigil) -> Option<&GridIndex> {
+        self.places.get(&place).map(Arc::as_ref)
+    }
+
+    /// Coarse AABB covering hulls last indexed into `place`.
+    #[must_use]
+    pub fn bounds(&self, place: Sigil) -> Option<AabbMm> {
+        self.bounds.get(&place).copied()
+    }
+
+    /// Number of Place grids that currently hold at least one hull.
+    #[must_use]
+    pub fn place_count(&self) -> usize {
+        self.places.len()
+    }
+
+    pub(crate) fn ensure(&mut self, ix: PackedIx) {
+        while self.home.len() <= ix as usize {
+            self.home.push(None);
+        }
+    }
+
+    /// Remove `ix` from whichever grid currently holds it.
+    pub fn unindex(&mut self, ix: PackedIx) {
+        if (ix as usize) >= self.home.len() {
+            return;
+        }
+        let prev = self.home.get(ix as usize).copied().flatten();
+        self.home.set(ix as usize, None);
+        if let Some(p) = prev {
+            if let Some(g) = self.places.get_mut(&p) {
+                Arc::make_mut(g).unindex(ix);
+            }
+        } else {
+            Arc::make_mut(&mut self.unplaced).unindex(ix);
+        }
+    }
+
+    /// Insert `world` AABB for `ix` into `place` (or the unplaced grid).
+    pub fn index(
+        &mut self,
+        ix: PackedIx,
+        world: AabbMm,
+        opaque_closed: bool,
+        place: Option<Sigil>,
+    ) {
+        self.unindex(ix);
+        if world.is_empty() {
+            return;
+        }
+        self.ensure(ix);
+        if let Some(p) = place {
+            let g = self
+                .places
+                .entry(p)
+                .or_insert_with(|| Arc::new(GridIndex::new()));
+            Arc::make_mut(g).index(ix, world, opaque_closed);
+            self.bounds
+                .entry(p)
+                .and_modify(|b| *b = b.union(world))
+                .or_insert(world);
+            self.home.set(ix as usize, Some(p));
+        } else {
+            Arc::make_mut(&mut self.unplaced).index(ix, world, opaque_closed);
+            self.home.set(ix as usize, None);
+        }
+    }
+
+    /// Drop everything and re-insert from `items`.
+    pub fn rebuild(
+        &mut self,
+        items: impl IntoIterator<Item = (PackedIx, AabbMm, bool, Option<Sigil>)>,
+    ) {
+        *self = Self::default();
+        for (ix, aabb, oc, place) in items {
+            self.index(ix, aabb, oc, place);
+        }
+    }
+
+    /// Packed indices whose hull may overlap `swept`, across unplaced + overlapping Places.
+    #[must_use]
+    pub fn candidates(&self, swept: AabbMm, opaque_closed_only: bool) -> BTreeSet<PackedIx> {
+        let mut out = self.unplaced.candidates(swept, opaque_closed_only);
+        for (place, bounds) in &self.bounds {
+            if bounds.intersects(swept) {
+                if let Some(g) = self.places.get(place) {
+                    out.extend(g.candidates(swept, opaque_closed_only));
+                }
+            }
+        }
+        out
+    }
+
+    pub(crate) fn approx_bytes(&self) -> usize {
+        let mut n = self.unplaced.approx_bytes();
+        n += self.home.approx_bytes();
+        n += self.places.len() * 16;
+        for g in self.places.values() {
+            n += g.approx_bytes();
+        }
+        n += self.bounds.len() * 32;
         n
     }
 }
@@ -137,4 +266,53 @@ fn cells_of(aabb: AabbMm) -> Vec<(i32, i32)> {
         x += 1;
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use klotho_core::LocusKind;
+
+    fn box_at(x: i32) -> AabbMm {
+        AabbMm::new(
+            IVec3 {
+                x: x - 100,
+                y: 0,
+                z: -100,
+            },
+            IVec3 {
+                x: x + 100,
+                y: 500,
+                z: 100,
+            },
+        )
+    }
+
+    #[test]
+    fn grid_index_accepts_packed_ix_above_u16() {
+        let mut g = GridIndex::new();
+        let ix: PackedIx = 70_000;
+        g.index(ix, box_at(0), false);
+        let hits = g.candidates(box_at(0), false);
+        assert!(hits.contains(&ix));
+        g.unindex(ix);
+        assert!(g.candidates(box_at(0), false).is_empty());
+    }
+
+    #[test]
+    fn place_index_keeps_distant_places_apart() {
+        let mut ix = PlaceIndex::new();
+        let a = Sigil::pack(LocusKind::Place, 0, 1).unwrap();
+        let b = Sigil::pack(LocusKind::Place, 0, 2).unwrap();
+        ix.index(0, box_at(0), false, Some(a));
+        ix.index(1, box_at(1_000_000), false, Some(b));
+        assert_eq!(ix.place_count(), 2);
+        let near = ix.candidates(box_at(0), false);
+        assert!(near.contains(&0));
+        assert!(!near.contains(&1));
+        let far = ix.candidates(box_at(1_000_000), false);
+        assert!(far.contains(&1));
+        assert!(!far.contains(&0));
+        assert!(ix.bounds(a).is_some());
+    }
 }

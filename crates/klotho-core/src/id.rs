@@ -183,6 +183,16 @@ pub struct ResourceId(pub u8);
 )]
 pub struct PlayerId(pub u8);
 
+/// Packed Projection row index.
+///
+/// Not a pred-lang `Slot` (`This` / `Target` / `Other` / `Name`).
+pub type PackedIx = u32;
+
+/// Process packed-row cap. Worlds may set a lower cap.
+pub const MAX_LOCI_PROCESS: usize = 200_000;
+/// Hearth / v1 packed-row cap.
+pub const MAX_LOCI_HEARTH: usize = 4_096;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -216,5 +226,15 @@ mod tests {
         assert_eq!(s.generation(), 255);
         assert_eq!(s.id(), 1);
         assert_eq!(s.kind(), Some(LocusKind::Observer));
+    }
+
+    #[test]
+    fn packed_ix_is_u32_not_u16() {
+        assert_eq!(core::mem::size_of::<PackedIx>(), 4);
+        assert_eq!(MAX_LOCI_HEARTH, 4_096);
+        assert_eq!(MAX_LOCI_PROCESS, 200_000);
+        assert!(MAX_LOCI_PROCESS > usize::from(u16::MAX));
+        let beyond_u16: PackedIx = 100_000;
+        assert_ne!(beyond_u16, PackedIx::from(beyond_u16 as u16));
     }
 }

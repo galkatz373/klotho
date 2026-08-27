@@ -6,10 +6,10 @@ use klotho_canon::{Canon, OPAQUE};
 use klotho_core::{Epoch, Hash, Tick};
 use klotho_trace::TraceLog;
 
-use crate::SNAPSHOT_CAP;
 use crate::heap::IntentHeap;
 use crate::proj::Projection;
 use crate::view::WorldView;
+use crate::{MAX_LOCI, SNAPSHOT_CAP};
 
 /// Field whose sources are Canon + Trace + Intent. Projection is derived.
 pub struct World {
@@ -41,20 +41,34 @@ pub struct WorldSnapshot {
 
 impl World {
     /// Empty world on a cooked Canon. `canon_hash` is the cook digest.
+    /// Locus cap is [`MAX_LOCI`] (Hearth).
     #[must_use]
     pub fn new(canon: Arc<Canon>, canon_hash: Hash) -> Self {
+        Self::with_locus_cap(canon, canon_hash, MAX_LOCI)
+    }
+
+    /// Empty world with a packed-row cap. Cap is clamped to
+    /// [`klotho_core::MAX_LOCI_PROCESS`].
+    #[must_use]
+    pub fn with_locus_cap(canon: Arc<Canon>, canon_hash: Hash, cap: usize) -> Self {
         let opaque = canon.affordance_id(OPAQUE);
         Self {
             canon,
             canon_hash,
             trace: TraceLog::new(),
-            view: Projection::new(opaque),
+            view: Projection::with_cap(opaque, cap),
             intents: IntentHeap::new(),
             epoch: Epoch::ZERO,
             tick: Tick::ZERO,
             snaps: [None, None],
             snap_i: 0,
         }
+    }
+
+    /// Packed-row cap for this world.
+    #[must_use]
+    pub fn locus_cap(&self) -> usize {
+        self.view.locus_cap()
     }
 
     /// Live read view. Same query API as [`WorldSnapshot::view`].
@@ -107,7 +121,8 @@ impl World {
 
     /// Publish a snapshot into the double-buffer and return it.
     ///
-    /// Clones projection columns only — not Trace, not Intent, not Manifests.
+    /// Unchanged CoW chunks are shared with the live projection. Does not clone
+    /// Trace, Intent, or Manifests.
     #[must_use]
     pub fn snapshot(&mut self) -> Arc<WorldSnapshot> {
         let i = 1 - self.snap_i;
@@ -161,5 +176,10 @@ impl WorldSnapshot {
     #[must_use]
     pub fn under_cap(&self) -> bool {
         self.approx_bytes() < SNAPSHOT_CAP
+    }
+
+    #[cfg(test)]
+    pub(crate) fn shares_pose_chunk(&self, other: &Self, ix: usize) -> bool {
+        self.blob.shares_pose_chunk(&other.blob, ix)
     }
 }

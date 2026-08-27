@@ -1,7 +1,9 @@
 //! Write path. Public via [`World::mutate`] when feature `mutate` is on
 //! (`klotho-commit` only). Always compiled so projection writers stay linked.
 
-use klotho_core::{AabbMm, AffordanceId, BlobId, LocusKind, PoseMm, ResourceId, Sigil, Tick, Vel3};
+use klotho_core::{
+    AabbMm, AffordanceId, BlobId, LocusKind, PackedIx, PoseMm, ResourceId, Sigil, Tick, Vel3,
+};
 use klotho_ir::{PlayerIntent, Rel};
 use klotho_trace::TraceEvent;
 
@@ -27,7 +29,7 @@ impl World {
 #[cfg_attr(not(any(test, feature = "mutate")), allow(dead_code))]
 impl WorldMut<'_> {
     /// Allocate a locus. Existing sigils are returned as-is.
-    pub fn insert_locus(&mut self, s: Sigil, kind: LocusKind) -> Result<u16, WorldError> {
+    pub fn insert_locus(&mut self, s: Sigil, kind: LocusKind) -> Result<PackedIx, WorldError> {
         self.world.projection_mut().insert_locus(s, kind)
     }
 

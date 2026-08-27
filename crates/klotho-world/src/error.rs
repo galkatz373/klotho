@@ -5,7 +5,7 @@ use core::fmt;
 /// Why a World write failed.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum WorldError {
-    /// Hard cap of [`crate::MAX_LOCI`] loci.
+    /// Hard cap of this world's locus budget.
     LocusCap,
     /// Sigil is not in the identity table.
     UnknownLocus,

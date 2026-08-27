@@ -1,7 +1,7 @@
 //! Read path. Same API from live `World` and `WorldSnapshot`.
 
 use klotho_canon::{PredStore, RiteId};
-use klotho_core::{AabbMm, AffordanceId, PoseMm, ResourceId, Sigil, Tick, Vel3};
+use klotho_core::{AabbMm, AffordanceId, PackedIx, PoseMm, ResourceId, Sigil, Tick, Vel3};
 use klotho_ir::{Channel, Rel};
 
 use crate::proj::Projection;
@@ -37,9 +37,9 @@ impl WorldView<'_> {
         self.proj.with_affordance(a)
     }
 
-    /// Every packed locus, slot order (dense, deterministic).
+    /// Every packed locus, packed-index order (dense, deterministic).
     pub fn loci(&self) -> impl Iterator<Item = Sigil> + '_ {
-        (0..self.proj.len() as u16).filter_map(|i| self.proj.sigil(i))
+        (0..self.proj.len() as PackedIx).filter_map(|i| self.proj.sigil(i))
     }
 
     /// Affordance bit.
@@ -102,7 +102,7 @@ impl WorldView<'_> {
             .space_ix()
             .candidates(swept, opaque_closed_only)
             .into_iter()
-            .filter_map(|slot| self.proj.sigil(slot))
+            .filter_map(|ix| self.proj.sigil(ix))
             .collect()
     }
 
@@ -161,9 +161,9 @@ impl PredStore for WorldView<'_> {
     }
 
     fn in_window(&self, rite: RiteId, _ch: Channel) -> bool {
-        (0..self.proj.len() as u16).any(|slot| {
+        (0..self.proj.len() as PackedIx).any(|ix| {
             self.proj
-                .sigil(slot)
+                .sigil(ix)
                 .and_then(|s| self.proj.rite(s, rite))
                 .is_some_and(|m| m.wait_left > 0)
         })

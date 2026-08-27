@@ -9,7 +9,7 @@ use crate::error::WorldError;
 use crate::proj::{Projection, RiteMachine};
 use crate::view::WorldView;
 
-/// Copy-on-write stand-in: a cloned projection plus events not yet on Trace.
+/// Speculative overlay: CoW-cloned projection plus events not yet on Trace.
 #[derive(Clone, Debug)]
 pub struct SpecDelta {
     proj: Projection,

@@ -10,6 +10,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod cow;
 mod error;
 mod grid;
 mod heap;
@@ -20,8 +21,9 @@ mod view;
 mod world;
 
 pub use error::WorldError;
-pub use grid::{CELL_MM, GridIndex, world_aabb};
+pub use grid::{CELL_MM, GridIndex, PlaceIndex, world_aabb};
 pub use heap::IntentHeap;
+pub use klotho_core::{MAX_LOCI_HEARTH, MAX_LOCI_PROCESS, PackedIx};
 #[cfg(any(test, feature = "mutate"))]
 pub use mutate::WorldMut;
 pub use proj::{Projection, RiteMachine};
@@ -30,8 +32,8 @@ pub use spec::SpecDelta;
 pub use view::WorldView;
 pub use world::{World, WorldSnapshot};
 
-/// Hard locus cap (HLD v1 stand-in). Admission still goes through `space_ix`.
-pub const MAX_LOCI: usize = 4_096;
+/// Hearth packed-row cap. Process cap is [`MAX_LOCI_PROCESS`].
+pub const MAX_LOCI: usize = MAX_LOCI_HEARTH;
 /// Snapshot blob cap. Hearth is ~1–2 MB.
 pub const SNAPSHOT_CAP: usize = 16 * 1024 * 1024;
 
@@ -41,8 +43,8 @@ mod tests {
 
     use klotho_canon::cook_diffs;
     use klotho_core::{
-        AabbMm, AffordanceId, BlobId, Hash, IVec3, LocusKind, Mm, PoseMm, ResourceId, Sigil, Tick,
-        YawMd,
+        AabbMm, AffordanceId, BlobId, Hash, IVec3, LocusKind, Mm, PackedIx, PoseMm, ResourceId,
+        Sigil, Tick, YawMd,
     };
     use klotho_ir::{CanonDiff, Rel, from_ron};
     use klotho_trace::{PoseReason, TraceBody, TraceEvent};
@@ -72,13 +74,20 @@ mod tests {
         )
     }
 
-    fn opaque_world() -> World {
+    fn opaque_canon() -> klotho_canon::Canon {
         let diffs: Vec<CanonDiff> = from_ron(
             r#"[AddAffordance(Affordance(id: "Opaque", requires: [], grants: [], conflicts: []))]"#,
         )
         .unwrap();
-        let canon = cook_diffs(&diffs).unwrap();
-        World::new(Arc::new(canon), Hash::ZERO)
+        cook_diffs(&diffs).unwrap()
+    }
+
+    fn opaque_world() -> World {
+        World::new(Arc::new(opaque_canon()), Hash::ZERO)
+    }
+
+    fn opaque_world_cap(cap: usize) -> World {
+        World::with_locus_cap(Arc::new(opaque_canon()), Hash::ZERO, cap)
     }
 
     #[test]
@@ -360,5 +369,143 @@ mod tests {
         );
         assert_eq!(w.view().qty(s, ResourceId(1)), 7);
         assert_eq!(w.view().qty(s, ResourceId(2)), 0);
+    }
+
+    #[test]
+    fn packed_ix_is_u32() {
+        assert_eq!(core::mem::size_of::<PackedIx>(), 4);
+        assert_eq!(MAX_LOCI, 4_096);
+        assert_eq!(MAX_LOCI_HEARTH, 4_096);
+        assert_eq!(MAX_LOCI_PROCESS, 200_000);
+        assert!(MAX_LOCI_PROCESS > usize::from(u16::MAX));
+    }
+
+    #[test]
+    fn process_cap_beyond_hearth() {
+        let extra = 8;
+        let mut w = opaque_world_cap(MAX_LOCI + extra);
+        assert_eq!(w.locus_cap(), MAX_LOCI + extra);
+        let mut m = w.mutate();
+        for i in 0..(MAX_LOCI + extra) as u128 {
+            m.insert_locus(relic(i + 1), LocusKind::Relic).unwrap();
+        }
+        assert_eq!(
+            m.insert_locus(relic(9_999), LocusKind::Relic),
+            Err(WorldError::LocusCap)
+        );
+    }
+
+    #[test]
+    fn locus_cap_clamps_to_process() {
+        let w = opaque_world_cap(MAX_LOCI_PROCESS + 1);
+        assert_eq!(w.locus_cap(), MAX_LOCI_PROCESS);
+    }
+
+    #[test]
+    fn snapshot_cow_shares_clean_chunks() {
+        let mut w = opaque_world();
+        let first = relic(1);
+        let later = relic((crate::cow::COW_CHUNK + 1) as u128);
+        {
+            let mut m = w.mutate();
+            for i in 0..(crate::cow::COW_CHUNK + 2) as u128 {
+                let s = relic(i + 1);
+                m.insert_locus(s, LocusKind::Relic).unwrap();
+                m.set_pose(s, PoseMm::new(Mm(i as i32), Mm(0), Mm(0), YawMd(0)))
+                    .unwrap();
+            }
+        }
+        let snap1 = w.snapshot();
+        w.mutate()
+            .set_pose(first, PoseMm::new(Mm(99), Mm(0), Mm(0), YawMd(0)))
+            .unwrap();
+        let snap2 = w.snapshot();
+        assert_eq!(snap1.view().pose(first).unwrap().x, Mm(0));
+        assert_eq!(snap2.view().pose(first).unwrap().x, Mm(99));
+        assert_eq!(
+            snap1.view().pose(later).unwrap().x,
+            snap2.view().pose(later).unwrap().x
+        );
+        assert!(!snap1.shares_pose_chunk(&snap2, 0));
+        assert!(snap1.shares_pose_chunk(&snap2, crate::cow::COW_CHUNK));
+    }
+
+    #[test]
+    fn per_place_grid_ready() {
+        let mut w = opaque_world();
+        let place_a = Sigil::pack(LocusKind::Place, 0, 10).unwrap();
+        let place_b = Sigil::pack(LocusKind::Place, 0, 11).unwrap();
+        let near = relic(1);
+        let far = relic(2);
+        {
+            let mut m = w.mutate();
+            m.insert_locus(place_a, LocusKind::Place).unwrap();
+            m.insert_locus(place_b, LocusKind::Place).unwrap();
+            m.insert_locus(near, LocusKind::Relic).unwrap();
+            m.insert_locus(far, LocusKind::Relic).unwrap();
+            m.set_hull(near, box_mm(100), BlobId::ZERO).unwrap();
+            m.set_hull(far, box_mm(100), BlobId::ZERO).unwrap();
+            m.set_pose(near, PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)))
+                .unwrap();
+            m.set_pose(far, PoseMm::new(Mm(1_000_000), Mm(0), Mm(0), YawMd(0)))
+                .unwrap();
+            m.add_rel(near, Rel::In, place_a).unwrap();
+            m.add_rel(far, Rel::In, place_b).unwrap();
+        }
+        let space = w.view();
+        let hits = space.space_candidates(
+            AabbMm::new(
+                IVec3 {
+                    x: -200,
+                    y: 0,
+                    z: -200,
+                },
+                IVec3 {
+                    x: 200,
+                    y: 500,
+                    z: 200,
+                },
+            ),
+            false,
+        );
+        assert!(hits.contains(&near));
+        assert!(!hits.contains(&far));
+        assert_eq!(w.projection().space_ix().place_count(), 2);
+        assert!(w.projection().space_ix().grid(place_a).is_some());
+        assert!(w.projection().space_ix().grid(place_b).is_some());
+    }
+
+    #[test]
+    fn publish_50k_rows() {
+        const N: usize = 50_000;
+        let mut w = opaque_world_cap(N);
+        {
+            let mut m = w.mutate();
+            for i in 0..N as u128 {
+                let s = relic(i + 1);
+                m.insert_locus(s, LocusKind::Relic).unwrap();
+                m.set_pose(s, PoseMm::new(Mm(i as i32), Mm(0), Mm(0), YawMd(0)))
+                    .unwrap();
+            }
+        }
+        let t0 = std::time::Instant::now();
+        let snap = w.snapshot();
+        let first_publish = t0.elapsed();
+        assert_eq!(snap.view().loci().count(), N);
+        let first = relic(1);
+        w.mutate()
+            .set_pose(first, PoseMm::new(Mm(7), Mm(0), Mm(0), YawMd(0)))
+            .unwrap();
+        let t1 = std::time::Instant::now();
+        let snap2 = w.snapshot();
+        let second_publish = t1.elapsed();
+        assert_eq!(snap.view().pose(first).unwrap().x, Mm(0));
+        assert_eq!(snap2.view().pose(first).unwrap().x, Mm(7));
+        assert!(snap1_shares_later(&snap, &snap2));
+        let _ = (first_publish, second_publish);
+    }
+
+    fn snap1_shares_later(a: &WorldSnapshot, b: &WorldSnapshot) -> bool {
+        a.shares_pose_chunk(b, crate::cow::COW_CHUNK)
     }
 }

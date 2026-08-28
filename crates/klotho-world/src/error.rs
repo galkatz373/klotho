@@ -9,6 +9,8 @@ pub enum WorldError {
     LocusCap,
     /// Sigil is not in the identity table.
     UnknownLocus,
+    /// PlaceSnap was oversized, duplicated, or otherwise unusable. Not truncated.
+    PlaceSnap,
 }
 
 impl fmt::Display for WorldError {
@@ -16,6 +18,7 @@ impl fmt::Display for WorldError {
         match self {
             Self::LocusCap => write!(f, "LocusCap"),
             Self::UnknownLocus => write!(f, "UnknownLocus"),
+            Self::PlaceSnap => write!(f, "PlaceSnap"),
         }
     }
 }

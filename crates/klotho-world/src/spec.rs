@@ -3,10 +3,11 @@
 use klotho_canon::RiteId;
 use klotho_core::{AabbMm, BlobId, PhysRequest, PoseMm, ResourceId, Sigil, Tick, Vel3};
 use klotho_ir::Rel;
-use klotho_trace::TraceEvent;
+use klotho_trace::{RiteEnd, TraceBody, TraceEvent};
 
 use crate::error::WorldError;
 use crate::proj::{Projection, RiteMachine};
+use crate::snap::PlaceSnap;
 use crate::view::WorldView;
 
 /// Speculative overlay: CoW-cloned projection plus events not yet on Trace.
@@ -85,6 +86,41 @@ impl SpecDelta {
     /// Patch a rite machine (WAIT channel, pc).
     pub fn put_rite(&mut self, actor: Sigil, rite: RiteId, m: RiteMachine) {
         self.proj.put_rite(actor, rite, m);
+    }
+
+    /// Insert every snap row or none, then queue `PlaceLoaded`.
+    pub fn apply_place_snap(&mut self, snap: &PlaceSnap) -> Result<u32, WorldError> {
+        let n = self.proj.apply_place_snap(snap)?;
+        self.push(TraceEvent::new(
+            self.tick,
+            TraceBody::PlaceLoaded {
+                place: snap.place,
+                n,
+            },
+        ));
+        Ok(n)
+    }
+
+    /// Drop place-owned rows, end rites as `Evicted`, queue `PlaceEvicted`.
+    pub fn evict_place(&mut self, place: Sigil) -> Result<(), WorldError> {
+        let plan = self.proj.plan_place_evict(place)?;
+        for (actor, rite) in plan.rites {
+            self.push(TraceEvent::new(
+                self.tick,
+                TraceBody::RiteEnded {
+                    actor,
+                    rite,
+                    status: RiteEnd::Evicted,
+                },
+            ));
+        }
+        self.proj.drop_loci(&plan.drop)?;
+        self.proj.rebuild_space_ix();
+        self.push(TraceEvent::new(
+            self.tick,
+            TraceBody::PlaceEvicted { place },
+        ));
+        Ok(())
     }
 
     pub(crate) fn from_parts(proj: Projection, tick: Tick) -> Self {

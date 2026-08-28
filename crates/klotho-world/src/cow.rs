@@ -66,6 +66,30 @@ impl<T: Clone> CowCol<T> {
         *self.get_mut(i).expect("packed index in range") = v;
     }
 
+    pub(crate) fn swap(&mut self, a: usize, b: usize) {
+        if a == b {
+            return;
+        }
+        let av = self.get(a).expect("packed index in range").clone();
+        let bv = self.get(b).expect("packed index in range").clone();
+        self.set(a, bv);
+        self.set(b, av);
+    }
+
+    pub(crate) fn pop(&mut self) -> Option<T> {
+        if self.len == 0 {
+            return None;
+        }
+        let last = self.len - 1;
+        let c = last / COW_CHUNK;
+        let v = Arc::make_mut(&mut self.chunks[c]).pop()?;
+        if self.chunks[c].is_empty() {
+            self.chunks.pop();
+        }
+        self.len -= 1;
+        Some(v)
+    }
+
     #[cfg(test)]
     #[must_use]
     pub(crate) fn shares_chunk(&self, other: &Self, i: usize) -> bool {

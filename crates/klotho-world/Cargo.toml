@@ -25,5 +25,10 @@ name = "publish"
 harness = false
 required-features = ["mutate"]
 
+[[bench]]
+name = "place_apply"
+harness = false
+required-features = ["mutate"]
+
 [lints]
 workspace = true

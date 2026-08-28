@@ -15,7 +15,7 @@ use klotho_world::{World, WorldMut, WorldSnapshot, WorldView};
 use crate::admit::{AdmitBuf, SyncProposer};
 use crate::laws::admit_laws;
 use crate::partition::partition_islands;
-use crate::proposal::Proposal;
+use crate::proposal::{Proposal, ResidencyOp};
 use crate::rite::drive_rite;
 use crate::swept::check_space;
 
@@ -233,6 +233,18 @@ impl CommitKernel {
                 spec.set_island(*mover, *island, *sleep_ticks)
                     .map_err(|_| RejectReason::Budget)?;
             }
+            Proposal::Residency {
+                place, op, snap, ..
+            } => match op {
+                ResidencyOp::Load => {
+                    spec.apply_place_snap(snap)
+                        .map_err(|_| RejectReason::Residency)?;
+                }
+                ResidencyOp::Evict => {
+                    spec.evict_place(*place)
+                        .map_err(|_| RejectReason::Residency)?;
+                }
+            },
         }
 
         admit_laws(
@@ -357,6 +369,37 @@ impl CommitKernel {
                     hits,
                 ))
             }
+            Proposal::Residency {
+                place,
+                op,
+                prefix,
+                canon_hash,
+                snap,
+            } => {
+                if *canon_hash != self.world.canon_hash()
+                    || *prefix != self.world.trace_prefix_hash()
+                {
+                    return Err(RejectReason::EpochMismatch);
+                }
+                if snap.place != *place || snap.canon_hash != *canon_hash || snap.prefix != *prefix
+                {
+                    return Err(RejectReason::Residency);
+                }
+                if snap.len() > klotho_world::MAX_PLACE_ROWS {
+                    return Err(RejectReason::Residency);
+                }
+                if *op == ResidencyOp::Evict && !self.world.view().contains(*place) {
+                    return Err(RejectReason::Residency);
+                }
+                Ok((
+                    *place,
+                    None,
+                    Verb::Look,
+                    SourceKind::Residency,
+                    Vec::new(),
+                    false,
+                ))
+            }
         }
     }
 
@@ -383,6 +426,22 @@ fn write_cells(p: &Proposal, actor: Sigil, view: &WorldView<'_>) -> Vec<(u128, u
             let mut cells = vec![(mover.raw(), 0)];
             for child in attached_children(view, *mover) {
                 cells.push((child.raw(), 0));
+            }
+            cells
+        }
+        Proposal::Residency {
+            place, op, snap, ..
+        } => {
+            let mut cells = vec![(place.raw(), 0)];
+            for row in snap.rows() {
+                cells.push((row.sigil.raw(), 0));
+            }
+            if *op == ResidencyOp::Evict {
+                for s in view.loci() {
+                    if view.has_rel(s, Rel::In, *place) {
+                        cells.push((s.raw(), 0));
+                    }
+                }
             }
             cells
         }

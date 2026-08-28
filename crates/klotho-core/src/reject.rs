@@ -34,6 +34,10 @@ pub enum RejectReason {
     /// One contact group exceeded [`crate::MAX_ISLAND_SIZE`]. The island is
     /// omitted (not split).
     IslandTooLarge,
+    /// Place load/evict failed closed (hash mismatch, cap, malformed snap, missing place).
+    Residency,
+    /// `canon_hash` or prefix does not match the live world.
+    EpochMismatch,
 }
 
 /// Kernel invariant violation. The only `Err` `step` is allowed to return.
@@ -62,6 +66,8 @@ impl core::fmt::Display for RejectReason {
             Self::Budget => write!(f, "Budget"),
             Self::TooManyIslands => write!(f, "TooManyIslands"),
             Self::IslandTooLarge => write!(f, "IslandTooLarge"),
+            Self::Residency => write!(f, "Residency"),
+            Self::EpochMismatch => write!(f, "EpochMismatch"),
         }
     }
 }
@@ -90,6 +96,8 @@ mod tests {
             RejectReason::Budget,
             RejectReason::TooManyIslands,
             RejectReason::IslandTooLarge,
+            RejectReason::Residency,
+            RejectReason::EpochMismatch,
         ];
         for r in reasons {
             let s = r.to_string();

@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use klotho_canon::RiteId;
 use klotho_core::{
-    AabbMm, AffordanceId, BlobId, LocusKind, PackedIx, PhysRequest, PoseMm, ResourceId, Sigil,
-    SimLod, Vel3,
+    AabbMm, AffordanceId, BlobId, Hash, LocusKind, PackedIx, PhysRequest, PoseMm, ResourceId,
+    Sigil, SimLod, Vel3,
 };
 use klotho_ir::{Channel, Rel};
 use klotho_trace::{RelTag, TraceBody, TraceEvent};
@@ -14,6 +14,7 @@ use klotho_trace::{RelTag, TraceBody, TraceEvent};
 use crate::cow::CowCol;
 use crate::error::WorldError;
 use crate::grid::{PlaceIndex, world_aabb};
+use crate::snap::{MAX_PLACE_ROWS, PlaceRow, PlaceSnap};
 
 /// Derived SoA. Not a source.
 #[derive(Clone, Debug)]
@@ -32,9 +33,10 @@ pub struct Projection {
     island_id: CowCol<u16>,
     sleep_ticks: CowCol<u16>,
     sim_lod: CowCol<SimLod>,
-    /// `(packed, rel_u8)` → neighbors.
-    rels: Arc<BTreeMap<(PackedIx, u8), Vec<Sigil>>>,
-    rel_triples: Arc<BTreeSet<(PackedIx, u8, Sigil)>>,
+    /// Place membership (`Rel::In`). Column so a 10k-row load is not a BTree insert per row.
+    in_place: CowCol<Option<Sigil>>,
+    /// `(packed, rel_u8)` → neighbors. One neighbor is inline (no heap).
+    rels: Arc<BTreeMap<(PackedIx, u8), Neighbors>>,
     qty: Arc<BTreeMap<(PackedIx, ResourceId), i32>>,
     phys_req: Arc<BTreeMap<PackedIx, PhysRequest>>,
     rites: Arc<BTreeMap<(PackedIx, u16), RiteMachine>>,
@@ -54,6 +56,77 @@ pub struct RiteMachine {
     pub target: Option<Sigil>,
     /// Channel that may resume this WAIT (`None` = any).
     pub wait_ch: Option<Channel>,
+}
+
+/// Rows to drop and rites to end before packed-index remap.
+pub(crate) struct PlaceEvictPlan {
+    pub drop: Vec<Sigil>,
+    pub rites: Vec<(Sigil, u16)>,
+}
+
+/// Zero or more neighbors. A single edge does not heap-allocate.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct Neighbors {
+    one: Option<Sigil>,
+    more: Vec<Sigil>,
+}
+
+impl Neighbors {
+    fn as_slice(&self) -> &[Sigil] {
+        if self.more.is_empty() {
+            self.one.as_slice()
+        } else {
+            &self.more
+        }
+    }
+
+    fn len(&self) -> usize {
+        if self.more.is_empty() {
+            usize::from(self.one.is_some())
+        } else {
+            self.more.len()
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    fn push(&mut self, s: Sigil) {
+        if !self.more.is_empty() {
+            self.more.push(s);
+            return;
+        }
+        match self.one {
+            None => self.one = Some(s),
+            Some(first) => {
+                self.more.reserve_exact(2);
+                self.more.push(first);
+                self.more.push(s);
+                self.one = None;
+            }
+        }
+    }
+
+    fn retain<F: FnMut(&Sigil) -> bool>(&mut self, mut f: F) {
+        if !self.more.is_empty() {
+            self.more.retain(f);
+            if self.more.len() == 1 {
+                self.one = self.more.pop();
+                self.more = Vec::new();
+            }
+            return;
+        }
+        if let Some(s) = self.one {
+            if !f(&s) {
+                self.one = None;
+            }
+        }
+    }
+
+    fn iter(&self) -> impl Iterator<Item = Sigil> + '_ {
+        self.as_slice().iter().copied()
+    }
 }
 
 impl Projection {
@@ -80,8 +153,8 @@ impl Projection {
             island_id: CowCol::default(),
             sleep_ticks: CowCol::default(),
             sim_lod: CowCol::default(),
+            in_place: CowCol::default(),
             rels: Arc::new(BTreeMap::new()),
-            rel_triples: Arc::new(BTreeSet::new()),
             qty: Arc::new(BTreeMap::new()),
             phys_req: Arc::new(BTreeMap::new()),
             rites: Arc::new(BTreeMap::new()),
@@ -126,6 +199,12 @@ impl Projection {
         s: Sigil,
         kind: LocusKind,
     ) -> Result<PackedIx, WorldError> {
+        let i = self.insert_locus_at_end(s, kind)?;
+        Arc::make_mut(&mut self.space_ix).ensure(i);
+        Ok(i)
+    }
+
+    fn insert_locus_at_end(&mut self, s: Sigil, kind: LocusKind) -> Result<PackedIx, WorldError> {
         if let Some(&i) = self.by_sigil.get(&s) {
             return Ok(i);
         }
@@ -145,8 +224,367 @@ impl Projection {
         self.island_id.push(0);
         self.sleep_ticks.push(0);
         self.sim_lod.push(SimLod::Full);
-        Arc::make_mut(&mut self.space_ix).ensure(i);
+        self.in_place.push(None);
         Ok(i)
+    }
+
+    /// Insert every snap row or none. Rebuilds `space_ix` once.
+    pub(crate) fn apply_place_snap(&mut self, snap: &PlaceSnap) -> Result<u32, WorldError> {
+        if snap.len() > MAX_PLACE_ROWS {
+            return Err(WorldError::PlaceSnap);
+        }
+        let mut ids: Vec<Sigil> = snap.rows().iter().map(|r| r.sigil).collect();
+        ids.sort_unstable();
+        if ids.windows(2).any(|w| w[0] == w[1]) {
+            return Err(WorldError::PlaceSnap);
+        }
+        let mut new_rows = 0usize;
+        for row in snap.rows() {
+            if self.packed(row.sigil).is_none() {
+                new_rows += 1;
+            }
+        }
+        if self.sigils.len().saturating_add(new_rows) > self.locus_cap {
+            return Err(WorldError::LocusCap);
+        }
+        self.append_snap_rows(snap);
+        for row in snap.rows() {
+            for &(r, b) in &row.rels {
+                if r == Rel::In {
+                    continue;
+                }
+                self.add_rel_raw(row.sigil, r, b)?;
+            }
+        }
+        self.rebuild_space_ix();
+        Ok(u32::try_from(snap.len()).unwrap_or(u32::MAX))
+    }
+
+    fn append_snap_rows(&mut self, snap: &PlaceSnap) {
+        for row in snap.rows() {
+            if let Some(i) = self.packed(row.sigil) {
+                self.write_snap_row(i, row);
+                continue;
+            }
+            let i = self.sigils.len() as PackedIx;
+            Arc::make_mut(&mut self.by_sigil).insert(row.sigil, i);
+            self.sigils.push(row.sigil);
+            self.kinds.push(row.kind);
+            self.afford.push(row.afford);
+            self.hull_local.push(row.hull);
+            self.hull_id.push(row.hull_id);
+            self.pose.push(row.pose);
+            self.vel.push(row.vel);
+            self.yaw_rate.push(row.yaw_rate);
+            self.island_id.push(row.island);
+            self.sleep_ticks.push(row.sleep);
+            self.sim_lod.push(row.sim_lod);
+            self.in_place.push(
+                row.rels
+                    .iter()
+                    .find(|(r, _)| *r == Rel::In)
+                    .map(|(_, p)| *p),
+            );
+            for &(res, v) in &row.qty {
+                Arc::make_mut(&mut self.qty).insert((i, res), v);
+            }
+            if let Some(req) = row.phys_req {
+                Arc::make_mut(&mut self.phys_req).insert(i, req);
+            }
+            for &fact in &row.knows {
+                Arc::make_mut(&mut self.knows).insert((i, fact));
+            }
+        }
+    }
+
+    fn write_snap_row(&mut self, i: PackedIx, row: &PlaceRow) {
+        let ix = i as usize;
+        self.kinds.set(ix, row.kind);
+        self.afford.set(ix, row.afford);
+        self.vel.set(ix, row.vel);
+        self.yaw_rate.set(ix, row.yaw_rate);
+        self.island_id.set(ix, row.island);
+        self.sleep_ticks.set(ix, row.sleep);
+        self.sim_lod.set(ix, row.sim_lod);
+        self.pose.set(ix, row.pose);
+        if let Some(local) = row.hull {
+            self.hull_local.set(ix, Some(local));
+            self.hull_id.set(ix, row.hull_id);
+        } else {
+            self.hull_local.set(ix, None);
+            self.hull_id.set(ix, row.hull_id);
+        }
+        self.in_place.set(
+            ix,
+            row.rels
+                .iter()
+                .find(|(r, _)| *r == Rel::In)
+                .map(|(_, p)| *p),
+        );
+        for &(res, v) in &row.qty {
+            Arc::make_mut(&mut self.qty).insert((i, res), v);
+        }
+        if let Some(req) = row.phys_req {
+            Arc::make_mut(&mut self.phys_req).insert(i, req);
+        }
+        if !row.knows.is_empty() {
+            let knows = Arc::make_mut(&mut self.knows);
+            for fact in &row.knows {
+                knows.insert((i, *fact));
+            }
+        }
+    }
+
+    /// Members with `Rel::In` to `place`, excluding migrating attach/pilot rows.
+    pub(crate) fn plan_place_evict(&self, place: Sigil) -> Result<PlaceEvictPlan, WorldError> {
+        if self.packed(place).is_none() {
+            return Err(WorldError::UnknownLocus);
+        }
+        let members = self.place_members(place);
+        let mut in_place: BTreeSet<Sigil> = members.iter().copied().collect();
+        in_place.insert(place);
+        let mut drop = Vec::new();
+        for s in members {
+            if self.is_migrating(s, &in_place) {
+                continue;
+            }
+            drop.push(s);
+        }
+        let mut rites = Vec::new();
+        for s in &drop {
+            for (rite, _) in self.rites_of(*s) {
+                rites.push((*s, rite));
+            }
+        }
+        Ok(PlaceEvictPlan { drop, rites })
+    }
+
+    pub(crate) fn drop_loci(&mut self, drop: &[Sigil]) -> Result<(), WorldError> {
+        let mut ordered: Vec<(PackedIx, Sigil)> = drop
+            .iter()
+            .copied()
+            .filter_map(|s| self.packed(s).map(|i| (i, s)))
+            .collect();
+        ordered.sort_by_key(|(i, _)| core::cmp::Reverse(*i));
+        for (_, s) in ordered {
+            self.remove_locus(s)?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn remove_locus(&mut self, s: Sigil) -> Result<(), WorldError> {
+        let i = self.packed(s).ok_or(WorldError::UnknownLocus)?;
+        let last = (self.sigils.len() - 1) as PackedIx;
+        self.drop_packed_maps(i);
+        self.scrub_incoming(s);
+        if i != last {
+            self.swap_packed(i, last);
+            self.remap_packed(last, i);
+            let moved = self.sigils.get(i as usize).copied().expect("swapped row");
+            Arc::make_mut(&mut self.by_sigil).insert(moved, i);
+        }
+        self.pop_packed();
+        Arc::make_mut(&mut self.by_sigil).remove(&s);
+        Ok(())
+    }
+
+    fn drop_packed_maps(&mut self, ix: PackedIx) {
+        let rels = Arc::make_mut(&mut self.rels);
+        let rel_keys: Vec<_> = rels.keys().filter(|(p, _)| *p == ix).copied().collect();
+        for k in rel_keys {
+            rels.remove(&k);
+        }
+        let qty = Arc::make_mut(&mut self.qty);
+        let qty_keys: Vec<_> = qty.keys().filter(|(p, _)| *p == ix).copied().collect();
+        for k in qty_keys {
+            qty.remove(&k);
+        }
+        Arc::make_mut(&mut self.phys_req).remove(&ix);
+        let rites = Arc::make_mut(&mut self.rites);
+        let rite_keys: Vec<_> = rites.keys().filter(|(p, _)| *p == ix).copied().collect();
+        for k in rite_keys {
+            rites.remove(&k);
+        }
+        let knows = Arc::make_mut(&mut self.knows);
+        let know_gone: Vec<_> = knows.iter().filter(|(p, _)| *p == ix).copied().collect();
+        for t in know_gone {
+            knows.remove(&t);
+        }
+    }
+
+    fn scrub_incoming(&mut self, s: Sigil) {
+        let rels = Arc::make_mut(&mut self.rels);
+        for v in rels.values_mut() {
+            v.retain(|&x| x != s);
+        }
+        for i in 0..self.in_place.len() {
+            if self.in_place.get(i).copied().flatten() == Some(s) {
+                self.in_place.set(i, None);
+            }
+        }
+    }
+
+    fn swap_packed(&mut self, a: PackedIx, b: PackedIx) {
+        let a = a as usize;
+        let b = b as usize;
+        self.sigils.swap(a, b);
+        self.kinds.swap(a, b);
+        self.afford.swap(a, b);
+        self.hull_local.swap(a, b);
+        self.hull_id.swap(a, b);
+        self.pose.swap(a, b);
+        self.vel.swap(a, b);
+        self.yaw_rate.swap(a, b);
+        self.island_id.swap(a, b);
+        self.sleep_ticks.swap(a, b);
+        self.sim_lod.swap(a, b);
+        self.in_place.swap(a, b);
+    }
+
+    fn remap_packed(&mut self, from: PackedIx, to: PackedIx) {
+        let rels = Arc::make_mut(&mut self.rels);
+        let rel_keys: Vec<_> = rels.keys().filter(|(p, _)| *p == from).copied().collect();
+        for k in rel_keys {
+            if let Some(v) = rels.remove(&k) {
+                rels.insert((to, k.1), v);
+            }
+        }
+        let qty = Arc::make_mut(&mut self.qty);
+        let qty_keys: Vec<_> = qty.keys().filter(|(p, _)| *p == from).copied().collect();
+        for k in qty_keys {
+            if let Some(v) = qty.remove(&k) {
+                qty.insert((to, k.1), v);
+            }
+        }
+        let phys = Arc::make_mut(&mut self.phys_req);
+        if let Some(req) = phys.remove(&from) {
+            phys.insert(to, req);
+        }
+        let rites = Arc::make_mut(&mut self.rites);
+        let rite_keys: Vec<_> = rites.keys().filter(|(p, _)| *p == from).copied().collect();
+        for k in rite_keys {
+            if let Some(m) = rites.remove(&k) {
+                rites.insert((to, k.1), m);
+            }
+        }
+        let knows = Arc::make_mut(&mut self.knows);
+        let know_move: Vec<_> = knows.iter().filter(|(p, _)| *p == from).copied().collect();
+        for (p, f) in know_move {
+            knows.remove(&(p, f));
+            knows.insert((to, f));
+        }
+    }
+
+    fn pop_packed(&mut self) {
+        let _ = self.sigils.pop();
+        let _ = self.kinds.pop();
+        let _ = self.afford.pop();
+        let _ = self.hull_local.pop();
+        let _ = self.hull_id.pop();
+        let _ = self.pose.pop();
+        let _ = self.vel.pop();
+        let _ = self.yaw_rate.pop();
+        let _ = self.island_id.pop();
+        let _ = self.sleep_ticks.pop();
+        let _ = self.sim_lod.pop();
+        let _ = self.in_place.pop();
+    }
+
+    fn place_members(&self, place: Sigil) -> Vec<Sigil> {
+        (0..self.sigils.len() as PackedIx)
+            .filter_map(|i| {
+                let s = self.sigils.get(i as usize).copied()?;
+                (s != place && self.has_rel(s, Rel::In, place)).then_some(s)
+            })
+            .collect()
+    }
+
+    fn is_migrating(&self, s: Sigil, in_place: &BTreeSet<Sigil>) -> bool {
+        self.related_slice(s, Rel::AttachedTo)
+            .iter()
+            .chain(self.related_slice(s, Rel::PilotedBy))
+            .any(|host| !in_place.contains(host))
+    }
+
+    fn rites_of(&self, actor: Sigil) -> Vec<(u16, RiteMachine)> {
+        let Some(i) = self.packed(actor) else {
+            return Vec::new();
+        };
+        self.rites
+            .iter()
+            .filter(|((ix, _), _)| *ix == i)
+            .map(|((_, rite), m)| (*rite, *m))
+            .collect()
+    }
+
+    pub(crate) fn capture_place(
+        &self,
+        place: Sigil,
+        canon_hash: Hash,
+        prefix: Hash,
+    ) -> Option<PlaceSnap> {
+        self.packed(place)?;
+        let mut rows = Vec::new();
+        rows.push(self.capture_row(place)?);
+        for s in self.place_members(place) {
+            rows.push(self.capture_row(s)?);
+        }
+        Some(PlaceSnap::new(place, canon_hash, prefix, rows))
+    }
+
+    fn capture_row(&self, s: Sigil) -> Option<PlaceRow> {
+        let i = self.packed(s)?;
+        let ix = i as usize;
+        let kind = self.kinds.get(ix).copied()?;
+        let qty = self
+            .qty
+            .iter()
+            .filter(|((p, _), _)| *p == i)
+            .map(|((_, r), v)| (*r, *v))
+            .collect();
+        let mut rels: Vec<(Rel, Sigil)> = self
+            .rels
+            .iter()
+            .filter(|((p, _), _)| *p == i)
+            .flat_map(|((_, k), n)| {
+                Rel::from_u8(*k)
+                    .into_iter()
+                    .flat_map(move |r| n.iter().map(move |b| (r, b)))
+            })
+            .collect();
+        if let Some(p) = self.in_place.get(i as usize).copied().flatten() {
+            rels.push((Rel::In, p));
+        }
+        let knows = self
+            .knows
+            .iter()
+            .filter(|(p, _)| *p == i)
+            .map(|(_, f)| *f)
+            .collect();
+        Some(PlaceRow {
+            sigil: s,
+            kind,
+            pose: self.pose.get(ix).copied().flatten(),
+            vel: self.vel.get(ix).copied().unwrap_or(Vel3::ZERO),
+            yaw_rate: self.yaw_rate.get(ix).copied().unwrap_or(0),
+            hull: self.hull_local.get(ix).copied().flatten(),
+            hull_id: self.hull_id.get(ix).copied().unwrap_or(BlobId::ZERO),
+            afford: self.afford.get(ix).copied().unwrap_or(0),
+            qty,
+            rels,
+            island: self.island_id.get(ix).copied().unwrap_or(0),
+            sleep: self.sleep_ticks.get(ix).copied().unwrap_or(0),
+            sim_lod: self.sim_lod.get(ix).copied().unwrap_or(SimLod::Full),
+            phys_req: self.phys_req.get(&i).copied(),
+            knows,
+        })
+    }
+
+    /// Packed kind, if the locus exists.
+    #[must_use]
+    pub fn kind(&self, s: Sigil) -> Option<LocusKind> {
+        let i = self.packed(s)?;
+        self.kinds.get(i as usize).copied()
     }
 
     pub(crate) fn set_affordance(
@@ -237,28 +675,41 @@ impl Projection {
     }
 
     pub(crate) fn add_rel(&mut self, a: Sigil, r: Rel, b: Sigil) -> Result<(), WorldError> {
-        let ia = self.packed(a).ok_or(WorldError::UnknownLocus)?;
-        let key = rel_key(r);
-        if Arc::make_mut(&mut self.rel_triples).insert((ia, key, b)) {
-            Arc::make_mut(&mut self.rels)
-                .entry((ia, key))
-                .or_default()
-                .push(b);
-        }
+        let ia = self.add_rel_raw(a, r, b)?;
         if r == Rel::LockedBy || r == Rel::In {
             self.reindex_ix(ia);
         }
         Ok(())
     }
 
+    fn add_rel_raw(&mut self, a: Sigil, r: Rel, b: Sigil) -> Result<PackedIx, WorldError> {
+        let ia = self.packed(a).ok_or(WorldError::UnknownLocus)?;
+        if r == Rel::In {
+            self.in_place.set(ia as usize, Some(b));
+            return Ok(ia);
+        }
+        let key = rel_key(r);
+        let n = Arc::make_mut(&mut self.rels).entry((ia, key)).or_default();
+        if !n.as_slice().contains(&b) {
+            n.push(b);
+        }
+        Ok(ia)
+    }
+
     pub(crate) fn del_rel(&mut self, a: Sigil, r: Rel, b: Sigil) -> Result<(), WorldError> {
         let ia = self.packed(a).ok_or(WorldError::UnknownLocus)?;
+        if r == Rel::In {
+            if self.in_place.get(ia as usize).copied().flatten() == Some(b) {
+                self.in_place.set(ia as usize, None);
+            }
+            self.reindex_ix(ia);
+            return Ok(());
+        }
         let key = rel_key(r);
-        Arc::make_mut(&mut self.rel_triples).remove(&(ia, key, b));
         if let Some(v) = Arc::make_mut(&mut self.rels).get_mut(&(ia, key)) {
             v.retain(|&x| x != b);
         }
-        if r == Rel::LockedBy || r == Rel::In {
+        if r == Rel::LockedBy {
             self.reindex_ix(ia);
         }
         Ok(())
@@ -393,11 +844,7 @@ impl Projection {
         if self.kinds.get(ix as usize).copied() == Some(LocusKind::Place) {
             return Some(s);
         }
-        self.rels.get(&(ix, RelTag::IN.0)).and_then(|v| {
-            v.iter()
-                .copied()
-                .find(|n| n.kind() == Some(LocusKind::Place))
-        })
+        self.in_place.get(ix as usize).copied().flatten()
     }
 
     fn world_hull(&self, ix: PackedIx) -> Option<AabbMm> {
@@ -436,10 +883,7 @@ impl Projection {
     /// Relation triple.
     #[must_use]
     pub fn has_rel(&self, a: Sigil, r: Rel, b: Sigil) -> bool {
-        let Some(i) = self.packed(a) else {
-            return false;
-        };
-        self.rel_triples.contains(&(i, rel_key(r), b))
+        self.related_slice(a, r).contains(&b)
     }
 
     /// Neighbors along `r`, insert order.
@@ -454,9 +898,15 @@ impl Projection {
         let Some(i) = self.packed(a) else {
             return &[];
         };
+        if r == Rel::In {
+            return match self.in_place.get(i as usize) {
+                Some(Some(p)) => std::slice::from_ref(p),
+                _ => &[],
+            };
+        }
         self.rels
             .get(&(i, rel_key(r)))
-            .map(Vec::as_slice)
+            .map(Neighbors::as_slice)
             .unwrap_or(&[])
     }
 

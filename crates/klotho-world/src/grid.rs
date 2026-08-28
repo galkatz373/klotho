@@ -36,6 +36,7 @@ impl GridIndex {
         }
         let n = ix as usize + 1;
         if self.occupied.len() < n {
+            self.occupied.reserve(n - self.occupied.len());
             self.occupied.resize(n, Vec::new());
         }
     }
@@ -252,7 +253,15 @@ impl PlaceIndex {
                 .or_insert_with(|| Arc::new(GridIndex::new()));
             Arc::make_mut(g).index(ix, world, opaque_closed);
             self.place_hulls.entry(p).or_default().insert(ix, world);
-            self.set_place_bounds(p);
+            // Grow only; unindex rescans remaining hulls to shrink.
+            match self.bounds.get(&p).copied() {
+                Some(b) => {
+                    self.bounds.insert(p, b.union(world));
+                }
+                None => {
+                    self.bounds.insert(p, world);
+                }
+            }
             self.home.set(ix as usize, Some(p));
         } else {
             Arc::make_mut(&mut self.unplaced).index(ix, world, opaque_closed);

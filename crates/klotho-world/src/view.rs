@@ -2,7 +2,8 @@
 
 use klotho_canon::{PredStore, RiteId};
 use klotho_core::{
-    AabbMm, AffordanceId, PackedIx, PhysRequest, PoseMm, ResourceId, Sigil, SimLod, Tick, Vel3,
+    AabbMm, AffordanceId, Hash, LocusKind, PackedIx, PhysRequest, PoseMm, ResourceId, Sigil,
+    SimLod, Tick, Vel3,
 };
 use klotho_ir::{Channel, Rel};
 
@@ -42,6 +43,29 @@ impl WorldView<'_> {
     /// Every packed locus, packed-index order (dense, deterministic).
     pub fn loci(&self) -> impl Iterator<Item = Sigil> + '_ {
         (0..self.proj.len() as PackedIx).filter_map(|i| self.proj.sigil(i))
+    }
+
+    /// True if `s` is in the identity table.
+    #[must_use]
+    pub fn contains(self, s: Sigil) -> bool {
+        self.proj.packed(s).is_some()
+    }
+
+    /// Packed kind, if present.
+    #[must_use]
+    pub fn kind(self, s: Sigil) -> Option<LocusKind> {
+        self.proj.kind(s)
+    }
+
+    /// Capture Place + `Rel::In` members. `None` if `place` is unknown.
+    #[must_use]
+    pub fn capture_place(
+        self,
+        place: Sigil,
+        canon_hash: Hash,
+        prefix: Hash,
+    ) -> Option<crate::PlaceSnap> {
+        self.proj.capture_place(place, canon_hash, prefix)
     }
 
     /// Affordance bit.

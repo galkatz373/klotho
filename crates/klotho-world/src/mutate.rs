@@ -9,6 +9,7 @@ use klotho_ir::{PlayerIntent, Rel};
 use klotho_trace::TraceEvent;
 
 use crate::error::WorldError;
+use crate::snap::PlaceSnap;
 use crate::spec::SpecDelta;
 use crate::world::World;
 
@@ -104,6 +105,26 @@ impl WorldMut<'_> {
     /// Rebuild `space_ix` from hull, pose, OpaqueClosed, and Place membership.
     pub fn rebuild_space_ix(&mut self) {
         self.world.projection_mut().rebuild_space_ix();
+    }
+
+    /// Insert every snap row or none. Does not append Trace.
+    pub fn apply_place_snap(&mut self, snap: &PlaceSnap) -> Result<u32, WorldError> {
+        self.world.projection_mut().apply_place_snap(snap)
+    }
+
+    /// Drop place-owned rows (migrating attach/pilot kept). Does not append Trace.
+    pub fn evict_place(&mut self, place: Sigil) -> Result<(), WorldError> {
+        let drop = self.world.projection().plan_place_evict(place)?.drop;
+        self.world.projection_mut().drop_loci(&drop)?;
+        self.world.projection_mut().rebuild_space_ix();
+        Ok(())
+    }
+
+    /// Swap-remove one packed row and remap maps keyed by [`PackedIx`].
+    pub fn remove_locus(&mut self, s: Sigil) -> Result<(), WorldError> {
+        self.world.projection_mut().remove_locus(s)?;
+        self.world.projection_mut().rebuild_space_ix();
+        Ok(())
     }
 
     /// Enqueue a player intent for this tick.

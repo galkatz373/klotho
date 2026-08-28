@@ -1,8 +1,20 @@
 //! Proposals. Only [`crate::CommitKernel`] commits them.
 
-use klotho_core::{BlobId, HullWitness, IVec3, PoseMm, Sigil, Vel3};
+use std::sync::Arc;
+
+use klotho_core::{BlobId, Hash, HullWitness, IVec3, PoseMm, Sigil, Vel3};
 use klotho_ir::{InferIntent, MindIntent, PlayerIntent};
 use klotho_trace::ProposalKind;
+use klotho_world::PlaceSnap;
+
+/// Place load or evict.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub enum ResidencyOp {
+    /// Insert every snap row or none.
+    Load,
+    /// Drop place-owned rows (migrating attach/pilot kept).
+    Evict,
+}
 
 /// One transaction grain (K21).
 #[derive(Clone, Debug)]
@@ -55,17 +67,31 @@ pub enum Proposal {
         /// K24 hint.
         witness: HullWitness,
     },
+    /// Place load / evict. Conflict set is every snap row plus the Place.
+    Residency {
+        /// Place being loaded or evicted.
+        place: Sigil,
+        /// Load or evict.
+        op: ResidencyOp,
+        /// Prefix stamped on the proposal (must match the snap).
+        prefix: Hash,
+        /// Cook digest stamped on the proposal (must match the live world and snap).
+        canon_hash: Hash,
+        /// Column payload. Shared; not cloned through the admit heap.
+        snap: Arc<PlaceSnap>,
+    },
 }
 
 impl Proposal {
     /// K18 class. Lower runs first.
     ///
     /// Player 0, Residency 1, Phys 2, Space 3, Motion 4, Mind 5, Infer 6.
-    /// Residency / Phys variants land in later PRs; the holes stay reserved.
+    /// Phys stays a reserved hole (no PhysDelta).
     #[must_use]
     pub fn order_key(&self) -> u8 {
         match self {
             Self::Player(_) => 0,
+            Self::Residency { .. } => 1,
             Self::SpaceDelta { .. } => 3,
             Self::MotionDelta { .. } => 4,
             Self::Mind(_) => 5,
@@ -81,6 +107,7 @@ impl Proposal {
             Self::Mind(m) => m.locus.raw(),
             Self::Infer(i) => i.locus.map(klotho_core::Sigil::raw).unwrap_or(0),
             Self::SpaceDelta { mover, .. } | Self::MotionDelta { mover, .. } => mover.raw(),
+            Self::Residency { place, .. } => place.raw(),
         }
     }
 
@@ -89,7 +116,7 @@ impl Proposal {
     pub fn island(&self) -> u16 {
         match self {
             Self::SpaceDelta { island, .. } | Self::MotionDelta { island, .. } => *island,
-            Self::Player(_) | Self::Mind(_) | Self::Infer(_) => 0,
+            Self::Player(_) | Self::Mind(_) | Self::Infer(_) | Self::Residency { .. } => 0,
         }
     }
 
@@ -113,6 +140,7 @@ impl Proposal {
             Self::Infer(_) => ProposalKind::Infer,
             Self::SpaceDelta { .. } => ProposalKind::Space,
             Self::MotionDelta { .. } => ProposalKind::Motion,
+            Self::Residency { .. } => ProposalKind::Residency,
         }
     }
 }

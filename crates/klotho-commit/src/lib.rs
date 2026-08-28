@@ -24,7 +24,7 @@ pub use kernel::CommitKernel;
 pub use klotho_core::{KernelFault, RejectReason};
 pub use klotho_trace::TraceDelta;
 pub use partition::{Partition, partition_islands};
-pub use proposal::Proposal;
+pub use proposal::{Proposal, ResidencyOp};
 
 #[cfg(test)]
 mod tests {
@@ -36,9 +36,11 @@ mod tests {
         PoseMm, ResourceId, Sigil, Tick, Vel3, YawMd,
     };
     use klotho_ir::{
-        Agency, Analog, CanonDiff, Channel, IntentTarget, MindIntent, PlayerIntent, Verb, from_ron,
+        Agency, Analog, CanonDiff, Channel, IntentTarget, MindIntent, PlayerIntent, Rel, Verb,
+        from_ron,
     };
-    use klotho_trace::{ISLAND_SNAP_PERIOD_TICKS, TraceBody};
+    use klotho_trace::{ISLAND_SNAP_PERIOD_TICKS, ProposalKind, RiteEnd, TraceBody, TraceEvent};
+    use klotho_world::{PlaceRow, PlaceSnap};
 
     use super::*;
 
@@ -483,8 +485,20 @@ mod tests {
         let space = space_delta(s1, PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)));
         let motion = motion_delta(s0, PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)));
         assert_eq!(Proposal::Player(player_use()).order_key(), 0);
+        let place = Sigil::pack(LocusKind::Place, 0, 1).unwrap();
+        let load = Proposal::Residency {
+            place,
+            op: ResidencyOp::Load,
+            prefix: Hash::ZERO,
+            canon_hash: Hash::ZERO,
+            snap: Arc::new(PlaceSnap::new(place, Hash::ZERO, Hash::ZERO, Vec::new())),
+        };
+        assert_eq!(load.order_key(), 1);
+        assert!(load.order_key() < space.order_key());
         assert_eq!(space.order_key(), 3);
         assert_eq!(motion.order_key(), 4);
+        assert!(Proposal::Player(player_use()).admit_key(0) < load.admit_key(0));
+        assert!(load.admit_key(0) < space.admit_key(0));
         assert_eq!(
             Proposal::Mind(klotho_ir::MindIntent {
                 locus: s0,
@@ -618,5 +632,308 @@ mod tests {
         assert_eq!(islands, vec![(0, vec![awake])]);
         assert_eq!(k.world().view().island(awake), Some((0, 0)));
         assert_eq!(k.world().view().island(sleeper), Some((NO_ISLAND, 12)));
+    }
+
+    fn place(id: u128) -> Sigil {
+        Sigil::pack(LocusKind::Place, 0, id).unwrap()
+    }
+
+    fn opaque_kernel() -> CommitKernel {
+        let mut h = [0u8; 32];
+        h[0] = 1;
+        CommitKernel::new(klotho_world::World::new(
+            Arc::new(cook(
+                r#"[AddAffordance(Affordance(id: "Opaque", requires: [], grants: [], conflicts: []))]"#,
+            )),
+            Hash::from_bytes(h),
+        ))
+    }
+
+    fn residency(k: &CommitKernel, place: Sigil, op: ResidencyOp, snap: PlaceSnap) -> Proposal {
+        Proposal::Residency {
+            place,
+            op,
+            prefix: k.world().trace_prefix_hash(),
+            canon_hash: k.world().canon_hash(),
+            snap: Arc::new(snap),
+        }
+    }
+
+    fn door_snap(k: &CommitKernel, p: Sigil, door: Sigil) -> PlaceSnap {
+        let opaque = k.canon().affordance_id("Opaque").unwrap();
+        let mut place_row = PlaceRow::new(p, LocusKind::Place);
+        place_row.pose = Some(PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)));
+        let mut door_row = PlaceRow::new(door, LocusKind::Relic);
+        door_row.pose = Some(PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)));
+        door_row.hull = Some(box_xz(400, 500, 400));
+        door_row.afford = 1u64 << opaque.0;
+        door_row.rels = vec![(Rel::In, p), (Rel::LockedBy, door)];
+        PlaceSnap::new(
+            p,
+            k.world().canon_hash(),
+            k.world().trace_prefix_hash(),
+            vec![place_row, door_row],
+        )
+    }
+
+    #[test]
+    fn residency_load_inserts_rows_and_indexes_opaque_closed() {
+        let mut k = opaque_kernel();
+        let p = place(1);
+        let door = relic(2);
+        let snap = door_snap(&k, p, door);
+        k.ingest(residency(&k, p, ResidencyOp::Load, snap));
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(d.rejects.is_empty(), "{d:?}");
+        assert!(
+            d.events.iter().any(|e| matches!(
+                e.body,
+                TraceBody::PlaceLoaded { place, n: 2 } if place == p
+            )),
+            "{d:?}"
+        );
+        assert!(k.world().view().contains(door));
+        assert!(k.world().view().opaque_closed(door));
+        let hits = k.world().view().space_candidates(
+            AabbMm::new(
+                IVec3 {
+                    x: -10,
+                    y: 0,
+                    z: -10,
+                },
+                IVec3 {
+                    x: 10,
+                    y: 100,
+                    z: 10,
+                },
+            ),
+            true,
+        );
+        assert_eq!(hits, vec![door]);
+    }
+
+    #[test]
+    fn residency_hash_mismatch_is_fail_closed() {
+        let mut k = opaque_kernel();
+        let p = place(1);
+        let door = relic(2);
+        let mut snap = door_snap(&k, p, door);
+        snap = PlaceSnap::new(
+            snap.place,
+            snap.canon_hash,
+            Hash::from_bytes([9; 32]),
+            snap.rows().to_vec(),
+        );
+        let before = k.world().view().loci().count();
+        k.ingest(residency(&k, p, ResidencyOp::Load, snap));
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(
+            d.rejects
+                .iter()
+                .any(|(kind, r)| *kind == ProposalKind::Residency && *r == RejectReason::Residency),
+            "{d:?}"
+        );
+        assert!(
+            !d.events
+                .iter()
+                .any(|e| matches!(e.body, TraceBody::PlaceLoaded { .. }))
+        );
+        assert_eq!(k.world().view().loci().count(), before);
+    }
+
+    #[test]
+    fn residency_canon_mismatch_is_epoch() {
+        let mut k = opaque_kernel();
+        let p = place(1);
+        let door = relic(2);
+        let rows = door_snap(&k, p, door).rows().to_vec();
+        let wrong = Hash::from_bytes([7; 32]);
+        let snap = PlaceSnap::new(p, wrong, k.world().trace_prefix_hash(), rows);
+        let before = k.world().view().loci().count();
+        k.ingest(Proposal::Residency {
+            place: p,
+            op: ResidencyOp::Load,
+            prefix: k.world().trace_prefix_hash(),
+            canon_hash: wrong,
+            snap: Arc::new(snap),
+        });
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(
+            d.rejects.iter().any(|(kind, r)| {
+                *kind == ProposalKind::Residency && *r == RejectReason::EpochMismatch
+            }),
+            "{d:?}"
+        );
+        assert!(
+            !d.events
+                .iter()
+                .any(|e| matches!(e.body, TraceBody::PlaceLoaded { .. }))
+        );
+        assert_eq!(k.world().view().loci().count(), before);
+    }
+
+    #[test]
+    fn residency_evict_drops_owned_keeps_migrating_ends_rites() {
+        let mut k = opaque_kernel();
+        let p = place(1);
+        let owned = relic(2);
+        let migrant = relic(3);
+        let host = relic(9);
+        let mut place_row = PlaceRow::new(p, LocusKind::Place);
+        place_row.pose = Some(PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)));
+        let mut owned_row = PlaceRow::new(owned, LocusKind::Relic);
+        owned_row.pose = Some(PoseMm::new(Mm(1), Mm(0), Mm(0), YawMd(0)));
+        owned_row.rels = vec![(Rel::In, p)];
+        let mut migrant_row = PlaceRow::new(migrant, LocusKind::Actor);
+        migrant_row.pose = Some(PoseMm::new(Mm(2), Mm(0), Mm(0), YawMd(0)));
+        migrant_row.rels = vec![(Rel::In, p), (Rel::AttachedTo, host)];
+        let snap = PlaceSnap::new(
+            p,
+            k.world().canon_hash(),
+            k.world().trace_prefix_hash(),
+            vec![place_row, owned_row, migrant_row],
+        );
+        k.world_mut().insert_locus(host, LocusKind::Relic).unwrap();
+        k.ingest(residency(&k, p, ResidencyOp::Load, snap.clone()));
+        k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        k.world_mut().append(TraceEvent::new(
+            Tick(1),
+            TraceBody::RiteBegan {
+                actor: owned,
+                rite: 4,
+                target: None,
+            },
+        ));
+        assert!(k.world().view().first_rite(owned).is_some());
+        let evict = PlaceSnap::new(
+            p,
+            k.world().canon_hash(),
+            k.world().trace_prefix_hash(),
+            snap.rows().to_vec(),
+        );
+        k.ingest(residency(&k, p, ResidencyOp::Evict, evict));
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(d.rejects.is_empty(), "{d:?}");
+        assert!(
+            d.events
+                .iter()
+                .any(|e| matches!(e.body, TraceBody::PlaceEvicted { place } if place == p)),
+            "{d:?}"
+        );
+        assert!(
+            d.events.iter().any(|e| matches!(
+                e.body,
+                TraceBody::RiteEnded {
+                    actor,
+                    rite: 4,
+                    status: RiteEnd::Evicted,
+                } if actor == owned
+            )),
+            "{d:?}"
+        );
+        assert!(!k.world().view().contains(owned));
+        assert!(k.world().view().contains(migrant));
+        assert!(k.world().view().contains(p));
+        assert!(k.world().view().has_rel(migrant, Rel::AttachedTo, host));
+    }
+
+    #[test]
+    fn residency_load_then_space_same_mover_is_conflict() {
+        let mut k = opaque_kernel();
+        let p = place(1);
+        let mover = relic(2);
+        plant_mover(
+            &mut k,
+            mover,
+            PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)),
+            0,
+            0,
+        );
+        let mut place_row = PlaceRow::new(p, LocusKind::Place);
+        place_row.pose = Some(PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)));
+        let mut mover_row = PlaceRow::new(mover, LocusKind::Relic);
+        mover_row.pose = Some(PoseMm::new(Mm(500), Mm(0), Mm(0), YawMd(0)));
+        mover_row.hull = Some(box_xz(100, 1800, 100));
+        mover_row.hull_id = hull_id(1);
+        mover_row.rels = vec![(Rel::In, p)];
+        let snap = PlaceSnap::new(
+            p,
+            k.world().canon_hash(),
+            k.world().trace_prefix_hash(),
+            vec![place_row, mover_row],
+        );
+        k.ingest(residency(&k, p, ResidencyOp::Load, snap));
+        k.ingest(space_delta(
+            mover,
+            PoseMm::new(Mm(10), Mm(0), Mm(0), YawMd(0)),
+        ));
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(
+            d.rejects
+                .iter()
+                .any(|(kind, r)| *kind == ProposalKind::Space && *r == RejectReason::Conflict),
+            "{d:?}"
+        );
+        assert_eq!(k.world().view().pose(mover).unwrap().x, Mm(500));
+    }
+
+    #[test]
+    fn residency_second_load_same_tick_is_epoch() {
+        let mut k = opaque_kernel();
+        let a = place(1);
+        let b = place(2);
+        let snap_a = PlaceSnap::new(
+            a,
+            k.world().canon_hash(),
+            k.world().trace_prefix_hash(),
+            vec![PlaceRow::new(a, LocusKind::Place)],
+        );
+        let snap_b = PlaceSnap::new(
+            b,
+            k.world().canon_hash(),
+            k.world().trace_prefix_hash(),
+            vec![PlaceRow::new(b, LocusKind::Place)],
+        );
+        k.ingest(residency(&k, a, ResidencyOp::Load, snap_a));
+        k.ingest(residency(&k, b, ResidencyOp::Load, snap_b));
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(
+            d.events
+                .iter()
+                .any(|e| matches!(e.body, TraceBody::PlaceLoaded { place, .. } if place == a)),
+            "{d:?}"
+        );
+        assert!(
+            d.rejects.iter().any(|(kind, r)| {
+                *kind == ProposalKind::Residency && *r == RejectReason::EpochMismatch
+            }),
+            "{d:?}"
+        );
+        assert!(!k.world().view().contains(b));
+    }
+
+    #[test]
+    fn residency_missing_place_evict_rejects() {
+        let mut k = opaque_kernel();
+        let p = place(1);
+        let snap = PlaceSnap::new(
+            p,
+            k.world().canon_hash(),
+            k.world().trace_prefix_hash(),
+            vec![PlaceRow::new(p, LocusKind::Place)],
+        );
+        k.ingest(residency(&k, p, ResidencyOp::Evict, snap));
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(
+            d.rejects
+                .iter()
+                .any(|(kind, r)| *kind == ProposalKind::Residency && *r == RejectReason::Residency),
+            "{d:?}"
+        );
+        assert!(
+            !d.events
+                .iter()
+                .any(|e| matches!(e.body, TraceBody::PlaceEvicted { .. }))
+        );
     }
 }

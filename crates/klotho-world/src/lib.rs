@@ -16,6 +16,7 @@ mod grid;
 mod heap;
 mod mutate;
 mod proj;
+mod snap;
 mod spec;
 mod view;
 mod world;
@@ -27,6 +28,7 @@ pub use klotho_core::{MAX_LOCI_HEARTH, MAX_LOCI_PROCESS, PackedIx};
 #[cfg(any(test, feature = "mutate"))]
 pub use mutate::WorldMut;
 pub use proj::{Projection, RiteMachine};
+pub use snap::{MAX_PLACE_ROWS, PlaceRow, PlaceSnap};
 #[cfg(any(test, feature = "mutate"))]
 pub use spec::SpecDelta;
 pub use view::WorldView;
@@ -592,5 +594,187 @@ mod tests {
 
     fn snap1_shares_later(a: &WorldSnapshot, b: &WorldSnapshot) -> bool {
         a.shares_pose_chunk(b, crate::cow::COW_CHUNK)
+    }
+
+    fn place(id: u128) -> Sigil {
+        Sigil::pack(LocusKind::Place, 0, id).unwrap()
+    }
+
+    #[test]
+    fn apply_place_snap_inserts_and_indexes_opaque_closed() {
+        let mut w = opaque_world();
+        let p = place(1);
+        let door = relic(2);
+        let opaque = w.canon().affordance_id("Opaque").unwrap();
+        let mut door_row = PlaceRow::new(door, LocusKind::Relic);
+        door_row.pose = Some(PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)));
+        door_row.hull = Some(box_mm(400));
+        door_row.afford = 1u64 << opaque.0;
+        door_row.rels = vec![(Rel::In, p), (Rel::LockedBy, door)];
+        let mut place_row = PlaceRow::new(p, LocusKind::Place);
+        place_row.pose = Some(PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)));
+        let snap = PlaceSnap::new(
+            p,
+            w.canon_hash(),
+            w.trace_prefix_hash(),
+            vec![place_row, door_row],
+        );
+        let n = w.mutate().apply_place_snap(&snap).unwrap();
+        assert_eq!(n, 2);
+        assert!(w.view().contains(p));
+        assert!(w.view().contains(door));
+        assert!(w.view().has_rel(door, Rel::In, p));
+        assert!(w.view().opaque_closed(door));
+        let hits = w.view().space_candidates(
+            AabbMm::new(
+                IVec3 {
+                    x: -10,
+                    y: 0,
+                    z: -10,
+                },
+                IVec3 {
+                    x: 10,
+                    y: 100,
+                    z: 10,
+                },
+            ),
+            true,
+        );
+        assert_eq!(hits, vec![door]);
+    }
+
+    #[test]
+    fn apply_place_snap_rejects_oversize_and_duplicates_with_zero_rows() {
+        let mut w = opaque_world();
+        let p = place(1);
+        let too_big = vec![PlaceRow::new(relic(1), LocusKind::Relic); MAX_PLACE_ROWS + 1];
+        let snap = PlaceSnap::new(p, Hash::ZERO, Hash::ZERO, too_big);
+        assert_eq!(
+            w.mutate().apply_place_snap(&snap),
+            Err(WorldError::PlaceSnap)
+        );
+        assert_eq!(w.view().loci().count(), 0);
+
+        let row = PlaceRow::new(relic(1), LocusKind::Relic);
+        let dup = PlaceSnap::new(p, Hash::ZERO, Hash::ZERO, vec![row.clone(), row]);
+        assert_eq!(
+            w.mutate().apply_place_snap(&dup),
+            Err(WorldError::PlaceSnap)
+        );
+        assert_eq!(w.view().loci().count(), 0);
+    }
+
+    #[test]
+    fn apply_place_snap_cap_is_fail_closed() {
+        let mut w = opaque_world_cap(4);
+        let p = place(1);
+        let rows: Vec<_> = (0..5u128)
+            .map(|i| PlaceRow::new(relic(i + 1), LocusKind::Relic))
+            .collect();
+        let snap = PlaceSnap::new(p, Hash::ZERO, Hash::ZERO, rows);
+        assert_eq!(
+            w.mutate().apply_place_snap(&snap),
+            Err(WorldError::LocusCap)
+        );
+        assert_eq!(w.view().loci().count(), 0);
+    }
+
+    #[test]
+    fn evict_place_keeps_migrating_and_remaps_packed() {
+        let mut w = opaque_world();
+        let p = place(1);
+        let a = relic(1);
+        let b = relic(2);
+        let c = relic(3);
+        let host = relic(9);
+        {
+            let mut m = w.mutate();
+            m.insert_locus(p, LocusKind::Place).unwrap();
+            m.insert_locus(a, LocusKind::Relic).unwrap();
+            m.insert_locus(b, LocusKind::Relic).unwrap();
+            m.insert_locus(c, LocusKind::Relic).unwrap();
+            m.insert_locus(host, LocusKind::Relic).unwrap();
+            m.set_pose(a, PoseMm::new(Mm(1), Mm(0), Mm(0), YawMd(0)))
+                .unwrap();
+            m.set_pose(b, PoseMm::new(Mm(2), Mm(0), Mm(0), YawMd(0)))
+                .unwrap();
+            m.set_pose(c, PoseMm::new(Mm(3), Mm(0), Mm(0), YawMd(0)))
+                .unwrap();
+            m.add_rel(a, Rel::OwnedBy, c).unwrap();
+            m.add_rel(b, Rel::In, p).unwrap();
+            m.add_rel(c, Rel::In, p).unwrap();
+            m.add_rel(c, Rel::AttachedTo, host).unwrap();
+        }
+        w.mutate().evict_place(p).unwrap();
+        assert!(w.view().contains(p));
+        assert!(w.view().contains(a));
+        assert!(!w.view().contains(b));
+        assert!(w.view().contains(c));
+        assert_eq!(w.view().pose(a).unwrap().x, Mm(1));
+        assert_eq!(w.view().pose(c).unwrap().x, Mm(3));
+        assert!(w.view().has_rel(a, Rel::OwnedBy, c));
+        assert!(w.view().has_rel(c, Rel::AttachedTo, host));
+    }
+
+    #[test]
+    fn capture_place_round_trip() {
+        let mut w = opaque_world();
+        let p = place(1);
+        let r = relic(2);
+        {
+            let mut m = w.mutate();
+            m.insert_locus(p, LocusKind::Place).unwrap();
+            m.insert_locus(r, LocusKind::Relic).unwrap();
+            m.set_pose(r, PoseMm::new(Mm(8), Mm(0), Mm(0), YawMd(0)))
+                .unwrap();
+            m.set_qty(r, ResourceId(1), 4).unwrap();
+            m.add_rel(r, Rel::In, p).unwrap();
+        }
+        let snap = w
+            .view()
+            .capture_place(p, w.canon_hash(), w.trace_prefix_hash())
+            .unwrap();
+        assert_eq!(snap.place, p);
+        assert_eq!(snap.len(), 2);
+        let mut w2 = opaque_world();
+        w2.mutate().apply_place_snap(&snap).unwrap();
+        assert_eq!(w2.view().pose(r).unwrap().x, Mm(8));
+        assert_eq!(w2.view().qty(r, ResourceId(1)), 4);
+        assert!(w2.view().has_rel(r, Rel::In, p));
+    }
+
+    #[test]
+    fn apply_place_snap_10k_rows() {
+        const N: usize = 10_000;
+        let mut w = opaque_world_cap(N);
+        let p = place(1);
+        let mut rows = Vec::with_capacity(N);
+        let mut place_row = PlaceRow::new(p, LocusKind::Place);
+        place_row.pose = Some(PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)));
+        rows.push(place_row);
+        for i in 1..N as u128 {
+            let s = relic(i);
+            let mut row = PlaceRow::new(s, LocusKind::Relic);
+            row.pose = Some(PoseMm::new(Mm(i as i32), Mm(0), Mm(0), YawMd(0)));
+            if i < 64 {
+                row.hull = Some(box_mm(100));
+            }
+            row.rels = vec![(Rel::In, p)];
+            rows.push(row);
+        }
+        let snap = PlaceSnap::new(p, w.canon_hash(), w.trace_prefix_hash(), rows);
+        let t = std::time::Instant::now();
+        let n = w.mutate().apply_place_snap(&snap).unwrap();
+        let dt = t.elapsed();
+        assert_eq!(n, N as u32);
+        assert_eq!(w.view().loci().count(), N);
+        assert!(w.view().contains(relic(1)));
+        assert!(w.view().has_rel(relic(N as u128 - 1), Rel::In, p));
+        if !cfg!(debug_assertions) {
+            assert!(
+                dt.as_secs_f64() * 1_000.0 <= 2.0,
+                "10k-row apply took {dt:?}, gate is 2 ms"
+            );
+        }
     }
 }

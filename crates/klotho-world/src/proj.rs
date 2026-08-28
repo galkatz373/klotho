@@ -289,11 +289,15 @@ impl Projection {
             self.pose.push(row.pose);
             self.vel.push(row.vel);
             self.yaw_rate.push(row.yaw_rate);
+            self.pitch_rate.push(0);
+            self.roll_rate.push(0);
             self.island_id.push(row.island);
             self.sleep_ticks.push(row.sleep);
             self.sim_lod.push(row.sim_lod);
             self.in_place
                 .push(row_in_place(&row.rels).expect("validated"));
+            self.support.push(None);
+            self.attach_local.push(None);
             for &(res, v) in &row.qty {
                 Arc::make_mut(&mut self.qty).insert((i, res), v);
             }
@@ -313,6 +317,10 @@ impl Projection {
         self.afford.set(ix, row.afford);
         self.vel.set(ix, row.vel);
         self.yaw_rate.set(ix, row.yaw_rate);
+        self.pitch_rate.set(ix, 0);
+        self.roll_rate.set(ix, 0);
+        self.support.set(ix, None);
+        self.attach_local.set(ix, None);
         self.island_id.set(ix, row.island);
         self.sleep_ticks.set(ix, row.sleep);
         self.sim_lod.set(ix, row.sim_lod);

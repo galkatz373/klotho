@@ -49,6 +49,8 @@ const REJ_CONFLICT: u8 = 10;
 const REJ_BUDGET: u8 = 11;
 const REJ_TOO_MANY_ISLANDS: u8 = 12;
 const REJ_ISLAND_TOO_LARGE: u8 = 13;
+const REJ_RESIDENCY: u8 = 14;
+const REJ_EPOCH_MISMATCH: u8 = 15;
 
 /// blake3 of [`STAMP_TOKEN`]. Hello mismatch on stamp or canon_hash disconnects.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
@@ -419,6 +421,8 @@ fn encode_reject(b: &mut Buf, r: RejectReason) {
         RejectReason::Budget => b.u8(REJ_BUDGET),
         RejectReason::TooManyIslands => b.u8(REJ_TOO_MANY_ISLANDS),
         RejectReason::IslandTooLarge => b.u8(REJ_ISLAND_TOO_LARGE),
+        RejectReason::Residency => b.u8(REJ_RESIDENCY),
+        RejectReason::EpochMismatch => b.u8(REJ_EPOCH_MISMATCH),
     }
 }
 
@@ -437,6 +441,8 @@ fn decode_reject(r: &mut Reader<'_>) -> Result<RejectReason, NetError> {
         REJ_BUDGET => Ok(RejectReason::Budget),
         REJ_TOO_MANY_ISLANDS => Ok(RejectReason::TooManyIslands),
         REJ_ISLAND_TOO_LARGE => Ok(RejectReason::IslandTooLarge),
+        REJ_RESIDENCY => Ok(RejectReason::Residency),
+        REJ_EPOCH_MISMATCH => Ok(RejectReason::EpochMismatch),
         _ => Err(NetError::UnknownTag),
     }
 }
@@ -657,6 +663,14 @@ mod tests {
         round_trip(Packet::Nack {
             tick: Tick(4),
             reason: RejectReason::Law(LawId(7)),
+        });
+        round_trip(Packet::Nack {
+            tick: Tick(4),
+            reason: RejectReason::Residency,
+        });
+        round_trip(Packet::Nack {
+            tick: Tick(4),
+            reason: RejectReason::EpochMismatch,
         });
         round_trip(Packet::Snapshot {
             tick: Tick(2),

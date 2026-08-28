@@ -2,8 +2,8 @@
 
 use klotho_canon::{PredStore, RiteId};
 use klotho_core::{
-    AabbMm, AffordanceId, Hash, IVec3, LocusKind, PackedIx, PhysRequest, PoseMm, ResourceId,
-    Sigil, SimLod, Support, Tick, Vel3,
+    AabbMm, AffordanceId, Hash, IVec3, LocusKind, PackedIx, PhysRequest, PoseMm, ResourceId, Sigil,
+    SimLod, Support, Tick, Vel3,
 };
 use klotho_ir::{Channel, Rel};
 

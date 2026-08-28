@@ -5,7 +5,10 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use klotho_canon::Canon;
-use klotho_core::{Budget, KernelFault, NO_ISLAND, PlayerId, RejectReason, Sigil, Tick, Vel3};
+use klotho_core::{
+    Budget, IVec3, KernelFault, Mm, NO_ISLAND, PlayerId, PoseMm, RejectReason, Sigil, Tick, Vel3,
+    rotate_xz,
+};
 use klotho_ir::{Channel, IntentTarget, Rel, SourceKind, Verb};
 use klotho_trace::{
     ISLAND_SNAP_PERIOD_TICKS, IslandSnap, ProposalKind, TraceBody, TraceDelta, TraceEvent,
@@ -208,6 +211,44 @@ impl CommitKernel {
                     tick,
                 )?;
             }
+            Proposal::PhysDelta {
+                mover,
+                pose,
+                vel,
+                yaw_rate,
+                pitch_rate,
+                roll_rate,
+                island,
+                sleep_ticks,
+                support,
+                ..
+            } => {
+                let children = attached_children(&spec.view(), *mover);
+                let locals: Vec<(Sigil, IVec3)> = children
+                    .iter()
+                    .map(|&child| {
+                        let local = spec
+                            .view()
+                            .attach_local(child)
+                            .unwrap_or_else(|| default_attach_local(&spec.view(), child, *mover));
+                        (child, local)
+                    })
+                    .collect();
+                spec.set_pose(*mover, *pose)
+                    .map_err(|_| RejectReason::Budget)?;
+                spec.set_vel(*mover, *vel, *yaw_rate)
+                    .map_err(|_| RejectReason::Budget)?;
+                spec.set_rates(*mover, *yaw_rate, *pitch_rate, *roll_rate)
+                    .map_err(|_| RejectReason::Budget)?;
+                spec.set_island(*mover, *island, *sleep_ticks)
+                    .map_err(|_| RejectReason::Budget)?;
+                spec.set_support(*mover, *support)
+                    .map_err(|_| RejectReason::Budget)?;
+                for (child, local) in locals {
+                    spec.set_pose(child, compose_yaw_only(*pose, local))
+                        .map_err(|_| RejectReason::Budget)?;
+                }
+            }
             Proposal::SpaceDelta {
                 mover,
                 pose,
@@ -317,6 +358,25 @@ impl CommitKernel {
                     false,
                 ))
             }
+            Proposal::PhysDelta {
+                mover,
+                pose,
+                hull,
+                witness,
+                ..
+            } => {
+                if witness.mover != *mover {
+                    return Err(RejectReason::WrongHull);
+                }
+                let hits = check_space(
+                    &self.world.view(),
+                    *mover,
+                    *pose,
+                    *hull,
+                    witness.overlaps_closed_opaque,
+                )?;
+                Ok((*mover, None, Verb::Move, SourceKind::Phys, Vec::new(), hits))
+            }
             Proposal::SpaceDelta {
                 mover,
                 pose,
@@ -422,7 +482,9 @@ fn write_cells(p: &Proposal, actor: Sigil, view: &WorldView<'_>) -> Vec<(u128, u
         Proposal::Player(_) | Proposal::Mind(_) | Proposal::Infer(_) => {
             vec![(actor.raw(), 1)]
         }
-        Proposal::SpaceDelta { mover, .. } | Proposal::MotionDelta { mover, .. } => {
+        Proposal::PhysDelta { mover, .. }
+        | Proposal::SpaceDelta { mover, .. }
+        | Proposal::MotionDelta { mover, .. } => {
             let mut cells = vec![(mover.raw(), 0)];
             for child in attached_children(view, *mover) {
                 cells.push((child.raw(), 0));
@@ -446,6 +508,29 @@ fn write_cells(p: &Proposal, actor: Sigil, view: &WorldView<'_>) -> Vec<(u128, u
             cells
         }
     }
+}
+
+fn compose_yaw_only(parent: PoseMm, local: IVec3) -> PoseMm {
+    let r = rotate_xz(local, parent.yaw);
+    PoseMm {
+        x: Mm(parent.x.0.wrapping_add(r.x)),
+        y: Mm(parent.y.0.wrapping_add(r.y)),
+        z: Mm(parent.z.0.wrapping_add(r.z)),
+        yaw: parent.yaw,
+        pitch: parent.pitch,
+        roll: parent.roll,
+    }
+}
+
+fn default_attach_local(view: &WorldView<'_>, child: Sigil, parent: Sigil) -> IVec3 {
+    let child_p = view.pose(child).unwrap_or_default();
+    let parent_p = view.pose(parent).unwrap_or_default();
+    let delta = IVec3 {
+        x: child_p.x.0.wrapping_sub(parent_p.x.0),
+        y: child_p.y.0.wrapping_sub(parent_p.y.0),
+        z: child_p.z.0.wrapping_sub(parent_p.z.0),
+    };
+    rotate_xz(delta, -parent_p.yaw)
 }
 
 fn attached_children(view: &WorldView<'_>, parent: Sigil) -> Vec<Sigil> {

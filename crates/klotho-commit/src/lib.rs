@@ -33,7 +33,7 @@ mod tests {
     use klotho_canon::cook_diffs;
     use klotho_core::{
         AabbMm, BlobId, Budget, Hash, HullWitness, IVec3, LocusKind, Mm, NO_ISLAND, PlayerId,
-        PoseMm, ResourceId, Sigil, Tick, Vel3, YawMd,
+        PoseMm, ResourceId, Sigil, Tick, Vel3, YawMd, rotate_xz,
     };
     use klotho_ir::{
         Agency, Analog, CanonDiff, Channel, IntentTarget, MindIntent, PlayerIntent, Rel, Verb,
@@ -320,6 +320,22 @@ mod tests {
         }
     }
 
+    fn phys_delta(mover: Sigil, pose: PoseMm) -> Proposal {
+        Proposal::PhysDelta {
+            mover,
+            pose,
+            vel: Vel3::ZERO,
+            yaw_rate: 0,
+            pitch_rate: 0,
+            roll_rate: 0,
+            island: 0,
+            sleep_ticks: 0,
+            hull: hull_id(1),
+            witness: HullWitness::new(mover, pose, false),
+            support: None,
+        }
+    }
+
     fn pose_committed(events: &[klotho_trace::TraceEvent]) -> bool {
         events
             .iter()
@@ -482,6 +498,7 @@ mod tests {
     fn admit_key_is_total_and_reserves_phys_residency() {
         let s0 = relic(1);
         let s1 = relic(2);
+        let phys = phys_delta(s0, PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)));
         let space = space_delta(s1, PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)));
         let motion = motion_delta(s0, PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)));
         assert_eq!(Proposal::Player(player_use()).order_key(), 0);
@@ -494,6 +511,8 @@ mod tests {
             snap: Arc::new(PlaceSnap::new(place, Hash::ZERO, Hash::ZERO, Vec::new())),
         };
         assert_eq!(load.order_key(), 1);
+        assert_eq!(phys.order_key(), 2);
+        assert!(load.order_key() < phys.order_key());
         assert!(load.order_key() < space.order_key());
         assert_eq!(space.order_key(), 3);
         assert_eq!(motion.order_key(), 4);
@@ -509,7 +528,8 @@ mod tests {
             .order_key(),
             5
         );
-        assert!(Proposal::Player(player_use()).admit_key(9) < space.admit_key(0));
+        assert!(Proposal::Player(player_use()).admit_key(9) < phys.admit_key(0));
+        assert!(phys.admit_key(0) < space.admit_key(0));
         assert!(space.admit_key(0) < motion.admit_key(0));
         let a = space_delta(s0, PoseMm::new(Mm(1), Mm(0), Mm(0), YawMd(0)));
         let mut b = space_delta(s0, PoseMm::new(Mm(2), Mm(0), Mm(0), YawMd(0)));
@@ -534,6 +554,65 @@ mod tests {
             "{d:?}"
         );
         assert_eq!(k.world().view().pose(s).unwrap().x, Mm(10));
+    }
+
+    #[test]
+    fn phys_parent_nacks_attached_child_motion_and_composes_yaw_only() {
+        let mut k = empty_kernel();
+        let parent = relic(1);
+        let child = relic(2);
+        let start = PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0));
+        plant_mover(&mut k, parent, start, 0, 0);
+        plant_mover(
+            &mut k,
+            child,
+            PoseMm::new(Mm(1_000), Mm(200), Mm(0), YawMd(0)),
+            0,
+            0,
+        );
+        k.world_mut()
+            .add_rel(child, klotho_ir::Rel::AttachedTo, parent)
+            .unwrap();
+        assert_eq!(
+            k.world().view().attach_local(child),
+            Some(IVec3 {
+                x: 1_000,
+                y: 200,
+                z: 0
+            })
+        );
+        let mut next = PoseMm::new(Mm(10), Mm(50), Mm(0), YawMd(YawMd::QUARTER_TURN));
+        next.pitch = YawMd(1_000);
+        next.roll = YawMd(2_000);
+        k.ingest(phys_delta(parent, next));
+        k.ingest(motion_delta(
+            child,
+            PoseMm::new(Mm(50_020), Mm(0), Mm(0), YawMd(0)),
+        ));
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(
+            d.rejects
+                .iter()
+                .any(|(kind, r)| *kind == klotho_trace::ProposalKind::Motion
+                    && *r == RejectReason::Conflict),
+            "{d:?}"
+        );
+        assert_eq!(k.world().view().pose(parent).unwrap(), next);
+        let got = k.world().view().pose(child).unwrap();
+        let offset = rotate_xz(
+            IVec3 {
+                x: 1_000,
+                y: 200,
+                z: 0,
+            },
+            next.yaw,
+        );
+        assert_eq!(got.x, Mm(next.x.0.wrapping_add(offset.x)));
+        assert_eq!(got.y, Mm(next.y.0.wrapping_add(offset.y)));
+        assert_eq!(got.z, Mm(next.z.0.wrapping_add(offset.z)));
+        assert_eq!(got.yaw, next.yaw);
+        assert_eq!(got.pitch, next.pitch);
+        assert_eq!(got.roll, next.roll);
     }
 
     #[test]

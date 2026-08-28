@@ -1,7 +1,9 @@
 //! Speculative projection + event list (K21). Drop = rollback.
 
 use klotho_canon::RiteId;
-use klotho_core::{AabbMm, BlobId, PhysRequest, PoseMm, ResourceId, Sigil, Tick, Vel3};
+use klotho_core::{
+    AabbMm, BlobId, IVec3, PhysRequest, PoseMm, ResourceId, Sigil, Support, Tick, Vel3,
+};
 use klotho_ir::Rel;
 use klotho_trace::{RiteEnd, TraceBody, TraceEvent};
 
@@ -51,6 +53,27 @@ impl SpecDelta {
     /// Write vel columns on the spec.
     pub fn set_vel(&mut self, s: Sigil, vel: Vel3, yaw_rate: i32) -> Result<(), WorldError> {
         self.proj.set_vel(s, vel, yaw_rate)
+    }
+
+    /// Write yaw/pitch/roll rates on the spec.
+    pub fn set_rates(
+        &mut self,
+        s: Sigil,
+        yaw_rate: i32,
+        pitch_rate: i32,
+        roll_rate: i32,
+    ) -> Result<(), WorldError> {
+        self.proj.set_rates(s, yaw_rate, pitch_rate, roll_rate)
+    }
+
+    /// Write support on the spec.
+    pub fn set_support(&mut self, s: Sigil, support: Option<Support>) -> Result<(), WorldError> {
+        self.proj.set_support(s, support)
+    }
+
+    /// Write seat offset on the spec.
+    pub fn set_attach_local(&mut self, s: Sigil, local: Option<IVec3>) -> Result<(), WorldError> {
+        self.proj.set_attach_local(s, local)
     }
 
     /// Write island/sleep on the spec.

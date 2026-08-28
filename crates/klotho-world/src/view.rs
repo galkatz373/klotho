@@ -2,8 +2,8 @@
 
 use klotho_canon::{PredStore, RiteId};
 use klotho_core::{
-    AabbMm, AffordanceId, Hash, LocusKind, PackedIx, PhysRequest, PoseMm, ResourceId, Sigil,
-    SimLod, Tick, Vel3,
+    AabbMm, AffordanceId, Hash, IVec3, LocusKind, PackedIx, PhysRequest, PoseMm, ResourceId,
+    Sigil, SimLod, Support, Tick, Vel3,
 };
 use klotho_ir::{Channel, Rel};
 
@@ -107,6 +107,30 @@ impl WorldView<'_> {
     #[must_use]
     pub fn vel(&self, s: Sigil) -> Option<(Vel3, i32)> {
         self.proj.vel(s)
+    }
+
+    /// `(yaw_rate, pitch_rate, roll_rate)`.
+    #[must_use]
+    pub fn rates(&self, s: Sigil) -> Option<(i32, i32, i32)> {
+        self.proj.rates(s)
+    }
+
+    /// Last admitted PhysDelta support, if any.
+    #[must_use]
+    pub fn support(&self, s: Sigil) -> Option<Support> {
+        self.proj.support(s)
+    }
+
+    /// Seat offset in the parent's yaw frame.
+    #[must_use]
+    pub fn attach_local(&self, s: Sigil) -> Option<IVec3> {
+        self.proj.attach_local(s)
+    }
+
+    /// Parent of `PilotedBy` / `AttachedTo`, if any.
+    #[must_use]
+    pub fn attach_parent(&self, s: Sigil) -> Option<Sigil> {
+        self.proj.attach_parent(s)
     }
 
     /// `(island_id, sleep_ticks)`.

@@ -69,6 +69,31 @@ check_gameplay_jobs examples/hearth-slice
 check_gameplay_jobs examples/ash-slice
 check_gameplay_jobs crates/klotho-author
 
+# Gameplay, motion, and sim must not import phys internals.
+check_no_phys() {
+  local dir="$1"
+  if [[ ! -d "$dir" ]]; then
+    return 0
+  fi
+  if command -v rg >/dev/null 2>&1; then
+    if rg -n --glob '!target/**' 'klotho_phys::|klotho-phys' "$dir"; then
+      echo "forbidden_imports: $dir must not import klotho-phys" >&2
+      fail=1
+    fi
+  else
+    if grep -RIn -E 'klotho_phys::|klotho-phys' "$dir" >/dev/null 2>&1; then
+      echo "forbidden_imports: $dir must not import klotho-phys" >&2
+      fail=1
+    fi
+  fi
+}
+check_no_phys examples/hearth-slice
+check_no_phys examples/ash-slice
+check_no_phys crates/klotho-author
+check_no_phys crates/klotho-motion
+check_no_phys crates/klotho-sim
+check_no_phys crates/klotho-commit
+
 # InferHost::{new,submit,poll} may appear only in klotho-runtime and klotho-infer.
 if [[ -d crates ]]; then
   hits=""

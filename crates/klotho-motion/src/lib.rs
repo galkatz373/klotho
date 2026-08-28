@@ -17,10 +17,9 @@
 #![warn(missing_docs)]
 
 mod clip;
-mod yaw;
 
 pub use clip::{Clip, ClipSet, WALK_MM_PER_TICK};
-pub use yaw::rotate_xz;
+pub use klotho_core::rotate_xz;
 
 use klotho_commit::{AdmitBuf, IslandProposer, Proposal, SyncProposer};
 use klotho_core::{BlobId, HullWitness, IVec3, LocusKind, Mm, PoseMm, Sigil, Tick, Vel3, VelFx};
@@ -96,6 +95,9 @@ fn propose_one(clips: &ClipSet, view: &WorldView, s: Sigil) -> Option<Proposal> 
     if s.kind() != Some(LocusKind::Actor) {
         return None;
     }
+    if view.attach_parent(s).is_some() {
+        return None;
+    }
     let sleep = view.island(s).map(|(_, t)| t).unwrap_or(0);
     if sleep > 0 {
         return None;
@@ -103,7 +105,7 @@ fn propose_one(clips: &ClipSet, view: &WorldView, s: Sigil) -> Option<Proposal> 
     let pose = view.pose(s)?;
     let local = view.hull(s)?;
     let (vel, yaw_rate) = view.vel(s).unwrap_or((Vel3::ZERO, 0));
-    let grounded = pose.y.0 <= 0;
+    let grounded = view.support(s).is_some() || pose.y.0 <= 0;
     let verb = if vel.x != VelFx::ZERO || vel.y != VelFx::ZERO || vel.z != VelFx::ZERO {
         Verb::Move
     } else {

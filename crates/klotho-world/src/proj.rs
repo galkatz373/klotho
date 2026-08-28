@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use klotho_canon::RiteId;
 use klotho_core::{
-    AabbMm, AffordanceId, BlobId, Hash, LocusKind, PackedIx, PhysRequest, PoseMm, ResourceId,
-    Sigil, SimLod, Vel3,
+    AabbMm, AffordanceId, BlobId, Hash, IVec3, LocusKind, PackedIx, PhysRequest, PoseMm,
+    ResourceId, Sigil, SimLod, Support, Vel3, rotate_xz,
 };
 use klotho_ir::{Channel, Rel};
 use klotho_trace::{RelTag, TraceBody, TraceEvent};
@@ -30,11 +30,15 @@ pub struct Projection {
     pose: CowCol<Option<PoseMm>>,
     vel: CowCol<Vel3>,
     yaw_rate: CowCol<i32>,
+    pitch_rate: CowCol<i32>,
+    roll_rate: CowCol<i32>,
     island_id: CowCol<u16>,
     sleep_ticks: CowCol<u16>,
     sim_lod: CowCol<SimLod>,
     /// Place membership (`Rel::In`). Column so a 10k-row load is not a BTree insert per row.
     in_place: CowCol<Option<Sigil>>,
+    support: CowCol<Option<Support>>,
+    attach_local: CowCol<Option<IVec3>>,
     /// `(packed, rel_u8)` → neighbors. One neighbor is inline (no heap).
     rels: Arc<BTreeMap<(PackedIx, u8), Neighbors>>,
     qty: Arc<BTreeMap<(PackedIx, ResourceId), i32>>,
@@ -150,10 +154,14 @@ impl Projection {
             pose: CowCol::default(),
             vel: CowCol::default(),
             yaw_rate: CowCol::default(),
+            pitch_rate: CowCol::default(),
+            roll_rate: CowCol::default(),
             island_id: CowCol::default(),
             sleep_ticks: CowCol::default(),
             sim_lod: CowCol::default(),
             in_place: CowCol::default(),
+            support: CowCol::default(),
+            attach_local: CowCol::default(),
             rels: Arc::new(BTreeMap::new()),
             qty: Arc::new(BTreeMap::new()),
             phys_req: Arc::new(BTreeMap::new()),
@@ -221,10 +229,14 @@ impl Projection {
         self.pose.push(None);
         self.vel.push(Vel3::ZERO);
         self.yaw_rate.push(0);
+        self.pitch_rate.push(0);
+        self.roll_rate.push(0);
         self.island_id.push(0);
         self.sleep_ticks.push(0);
         self.sim_lod.push(SimLod::Full);
         self.in_place.push(None);
+        self.support.push(None);
+        self.attach_local.push(None);
         Ok(i)
     }
 
@@ -436,10 +448,14 @@ impl Projection {
         self.pose.swap(a, b);
         self.vel.swap(a, b);
         self.yaw_rate.swap(a, b);
+        self.pitch_rate.swap(a, b);
+        self.roll_rate.swap(a, b);
         self.island_id.swap(a, b);
         self.sleep_ticks.swap(a, b);
         self.sim_lod.swap(a, b);
         self.in_place.swap(a, b);
+        self.support.swap(a, b);
+        self.attach_local.swap(a, b);
     }
 
     fn remap_packed(&mut self, from: PackedIx, to: PackedIx) {
@@ -485,10 +501,14 @@ impl Projection {
         let _ = self.pose.pop();
         let _ = self.vel.pop();
         let _ = self.yaw_rate.pop();
+        let _ = self.pitch_rate.pop();
+        let _ = self.roll_rate.pop();
         let _ = self.island_id.pop();
         let _ = self.sleep_ticks.pop();
         let _ = self.sim_lod.pop();
         let _ = self.in_place.pop();
+        let _ = self.support.pop();
+        let _ = self.attach_local.pop();
     }
 
     fn place_members(&self, place: Sigil) -> Vec<Sigil> {
@@ -638,6 +658,40 @@ impl Projection {
         Ok(())
     }
 
+    pub(crate) fn set_rates(
+        &mut self,
+        s: Sigil,
+        yaw_rate: i32,
+        pitch_rate: i32,
+        roll_rate: i32,
+    ) -> Result<(), WorldError> {
+        let i = self.packed(s).ok_or(WorldError::UnknownLocus)?;
+        self.yaw_rate.set(i as usize, yaw_rate);
+        self.pitch_rate.set(i as usize, pitch_rate);
+        self.roll_rate.set(i as usize, roll_rate);
+        Ok(())
+    }
+
+    pub(crate) fn set_support(
+        &mut self,
+        s: Sigil,
+        support: Option<Support>,
+    ) -> Result<(), WorldError> {
+        let i = self.packed(s).ok_or(WorldError::UnknownLocus)?;
+        self.support.set(i as usize, support);
+        Ok(())
+    }
+
+    pub(crate) fn set_attach_local(
+        &mut self,
+        s: Sigil,
+        local: Option<IVec3>,
+    ) -> Result<(), WorldError> {
+        let i = self.packed(s).ok_or(WorldError::UnknownLocus)?;
+        self.attach_local.set(i as usize, local);
+        Ok(())
+    }
+
     pub(crate) fn set_island(
         &mut self,
         s: Sigil,
@@ -677,6 +731,18 @@ impl Projection {
 
     pub(crate) fn add_rel(&mut self, a: Sigil, r: Rel, b: Sigil) -> Result<(), WorldError> {
         let ia = self.add_rel_raw(a, r, b)?;
+        if (r == Rel::AttachedTo || r == Rel::PilotedBy)
+            && self
+                .attach_local
+                .get(ia as usize)
+                .copied()
+                .flatten()
+                .is_none()
+        {
+            if let Some(local) = default_attach_local(self.pose(a), self.pose(b)) {
+                self.attach_local.set(ia as usize, Some(local));
+            }
+        }
         if r == Rel::LockedBy || r == Rel::In {
             self.reindex_ix(ia);
         }
@@ -709,6 +775,17 @@ impl Projection {
         let key = rel_key(r);
         if let Some(v) = Arc::make_mut(&mut self.rels).get_mut(&(ia, key)) {
             v.retain(|&x| x != b);
+        }
+        if r == Rel::AttachedTo || r == Rel::PilotedBy {
+            let still = self
+                .related_slice(a, Rel::AttachedTo)
+                .iter()
+                .chain(self.related_slice(a, Rel::PilotedBy))
+                .next()
+                .is_some();
+            if !still {
+                self.attach_local.set(ia as usize, None);
+            }
         }
         if r == Rel::LockedBy {
             self.reindex_ix(ia);
@@ -937,6 +1014,41 @@ impl Projection {
         ))
     }
 
+    /// `(yaw_rate, pitch_rate, roll_rate)`.
+    #[must_use]
+    pub fn rates(&self, s: Sigil) -> Option<(i32, i32, i32)> {
+        let i = self.packed(s)?;
+        Some((
+            self.yaw_rate.get(i as usize).copied().unwrap_or(0),
+            self.pitch_rate.get(i as usize).copied().unwrap_or(0),
+            self.roll_rate.get(i as usize).copied().unwrap_or(0),
+        ))
+    }
+
+    /// Last admitted PhysDelta support, if any.
+    #[must_use]
+    pub fn support(&self, s: Sigil) -> Option<Support> {
+        let i = self.packed(s)?;
+        self.support.get(i as usize).copied().flatten()
+    }
+
+    /// Seat offset in the parent's yaw frame. Missing until Rel add or a write.
+    #[must_use]
+    pub fn attach_local(&self, s: Sigil) -> Option<IVec3> {
+        let i = self.packed(s)?;
+        self.attach_local.get(i as usize).copied().flatten()
+    }
+
+    /// Parent of `PilotedBy` / `AttachedTo`, if any.
+    #[must_use]
+    pub fn attach_parent(&self, s: Sigil) -> Option<Sigil> {
+        self.related_slice(s, Rel::PilotedBy)
+            .iter()
+            .copied()
+            .chain(self.related_slice(s, Rel::AttachedTo).iter().copied())
+            .next()
+    }
+
     /// `(island_id, sleep_ticks)`.
     #[must_use]
     pub fn island(&self, s: Sigil) -> Option<(u16, u16)> {
@@ -1047,6 +1159,10 @@ impl Projection {
         bytes += self.pose.approx_bytes();
         bytes += self.vel.approx_bytes();
         bytes += self.yaw_rate.approx_bytes();
+        bytes += self.pitch_rate.approx_bytes();
+        bytes += self.roll_rate.approx_bytes();
+        bytes += self.support.approx_bytes();
+        bytes += self.attach_local.approx_bytes();
         bytes += self.rels.len() * 16;
         for v in self.rels.values() {
             bytes += v.len() * 16;
@@ -1086,4 +1202,15 @@ fn row_in_place(rels: &[(Rel, Sigil)]) -> Result<Option<Sigil>, WorldError> {
 
 fn rel_from_tag(t: RelTag) -> Option<Rel> {
     Rel::from_u8(t.0)
+}
+
+fn default_attach_local(child: Option<PoseMm>, parent: Option<PoseMm>) -> Option<IVec3> {
+    let child = child?;
+    let parent = parent?;
+    let delta = IVec3 {
+        x: child.x.0.wrapping_sub(parent.x.0),
+        y: child.y.0.wrapping_sub(parent.y.0),
+        z: child.z.0.wrapping_sub(parent.z.0),
+    };
+    Some(rotate_xz(delta, -parent.yaw))
 }

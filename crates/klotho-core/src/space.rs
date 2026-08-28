@@ -50,6 +50,9 @@ impl IVec3 {
     }
 }
 
+/// Contact support from an admitted `PhysDelta`: `(nx, ny, nz, depth_mm)`.
+pub type Support = (i16, i16, i16, i32);
+
 /// Linear/angular request written by `PHYS_REQ`. Not a quantity row.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Serialize, Deserialize)]
 pub struct PhysRequest {

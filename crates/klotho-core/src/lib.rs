@@ -22,6 +22,7 @@ mod rng;
 mod space;
 mod tick;
 mod units;
+mod yaw;
 
 pub use budget::Budget;
 pub use hash::{BlobId, Hash};
@@ -31,6 +32,7 @@ pub use id::{
 };
 pub use reject::{KernelFault, RejectReason};
 pub use rng::Rng;
-pub use space::{AabbMm, HullWitness, IVec3, PhysRequest, PoseMm, Vel3};
+pub use space::{AabbMm, HullWitness, IVec3, PhysRequest, PoseMm, Support, Vel3};
 pub use tick::{Epoch, Tick};
 pub use units::{Mm, VelFx, YawMd};
+pub use yaw::rotate_xz;

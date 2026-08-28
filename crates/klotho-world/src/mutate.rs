@@ -2,8 +2,8 @@
 //! (`klotho-commit` only). Always compiled so projection writers stay linked.
 
 use klotho_core::{
-    AabbMm, AffordanceId, BlobId, LocusKind, PackedIx, PhysRequest, PoseMm, ResourceId, Sigil,
-    SimLod, Tick, Vel3,
+    AabbMm, AffordanceId, BlobId, IVec3, LocusKind, PackedIx, PhysRequest, PoseMm, ResourceId,
+    Sigil, SimLod, Support, Tick, Vel3,
 };
 use klotho_ir::{PlayerIntent, Rel};
 use klotho_trace::TraceEvent;
@@ -58,6 +58,29 @@ impl WorldMut<'_> {
     /// Set velocity columns.
     pub fn set_vel(&mut self, s: Sigil, vel: Vel3, yaw_rate: i32) -> Result<(), WorldError> {
         self.world.projection_mut().set_vel(s, vel, yaw_rate)
+    }
+
+    /// Set yaw/pitch/roll rates.
+    pub fn set_rates(
+        &mut self,
+        s: Sigil,
+        yaw_rate: i32,
+        pitch_rate: i32,
+        roll_rate: i32,
+    ) -> Result<(), WorldError> {
+        self.world
+            .projection_mut()
+            .set_rates(s, yaw_rate, pitch_rate, roll_rate)
+    }
+
+    /// Set last-admitted support. Only PhysDelta should write this at runtime.
+    pub fn set_support(&mut self, s: Sigil, support: Option<Support>) -> Result<(), WorldError> {
+        self.world.projection_mut().set_support(s, support)
+    }
+
+    /// Set seat offset used by yaw-only attach compose.
+    pub fn set_attach_local(&mut self, s: Sigil, local: Option<IVec3>) -> Result<(), WorldError> {
+        self.world.projection_mut().set_attach_local(s, local)
     }
 
     /// Set island id and sleep ticks.

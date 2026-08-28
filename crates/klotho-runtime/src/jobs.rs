@@ -16,7 +16,17 @@ pub fn ingest_island_jobs(
     let islands = kernel.partition();
     let batch = {
         let view = kernel.world().view();
-        propose_islands(n_workers, &islands, proposers, &view)
+        #[cfg(feature = "phys")]
+        {
+            let phys = klotho_phys::Phys;
+            let mut list: Vec<&dyn IslandProposer> = proposers.to_vec();
+            list.push(&phys);
+            propose_islands(n_workers, &islands, &list, &view)
+        }
+        #[cfg(not(feature = "phys"))]
+        {
+            propose_islands(n_workers, &islands, proposers, &view)
+        }
     };
     for (p, ix) in batch {
         kernel.ingest_from(p, ix);

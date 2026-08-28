@@ -410,6 +410,34 @@ mod tests {
     }
 
     #[test]
+    fn attach_local_defaults_on_rel_add() {
+        let mut w = opaque_world();
+        let parent = relic(1);
+        let child = relic(2);
+        {
+            let mut m = w.mutate();
+            m.insert_locus(parent, LocusKind::Relic).unwrap();
+            m.insert_locus(child, LocusKind::Relic).unwrap();
+            m.set_pose(parent, PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)))
+                .unwrap();
+            m.set_pose(child, PoseMm::new(Mm(1000), Mm(200), Mm(0), YawMd(0)))
+                .unwrap();
+            m.add_rel(child, Rel::AttachedTo, parent).unwrap();
+        }
+        assert_eq!(
+            w.view().attach_local(child),
+            Some(IVec3 {
+                x: 1000,
+                y: 200,
+                z: 0
+            })
+        );
+        assert_eq!(w.view().attach_parent(child), Some(parent));
+        w.mutate().del_rel(child, Rel::AttachedTo, parent).unwrap();
+        assert!(w.view().attach_local(child).is_none());
+    }
+
+    #[test]
     fn packed_ix_is_u32() {
         assert_eq!(core::mem::size_of::<PackedIx>(), 4);
         assert_eq!(MAX_LOCI, 4_096);

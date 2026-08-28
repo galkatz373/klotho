@@ -1102,6 +1102,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "klotho-phys"
+version = "0.1.0"
+dependencies = [
+ "klotho-canon",
+ "klotho-commit",
+ "klotho-core",
+ "klotho-ir",
+ "klotho-motion",
+ "klotho-world",
+]
+
+[[package]]
 name = "klotho-platform"
 version = "0.1.0"
 dependencies = [
@@ -1154,6 +1166,7 @@ dependencies = [
  "klotho-mind",
  "klotho-motion",
  "klotho-net",
+ "klotho-phys",
  "klotho-platform",
  "klotho-sim",
  "klotho-space",

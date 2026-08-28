@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use klotho_core::{BlobId, Hash, HullWitness, IVec3, PoseMm, Sigil, Vel3};
+use klotho_core::{BlobId, Hash, HullWitness, IVec3, PoseMm, Sigil, Support, Vel3};
 use klotho_ir::{InferIntent, MindIntent, PlayerIntent};
 use klotho_trace::ProposalKind;
 use klotho_world::PlaceSnap;
@@ -25,6 +25,31 @@ pub enum Proposal {
     Mind(MindIntent),
     /// Model fill. No Agency.
     Infer(InferIntent),
+    /// Quantized rigid-body delta. Kernel does not re-solve.
+    PhysDelta {
+        /// Mover (duplicated on the witness).
+        mover: Sigil,
+        /// Proposed pose.
+        pose: PoseMm,
+        /// Linear velocity.
+        vel: Vel3,
+        /// Yaw rate, millideg / tick.
+        yaw_rate: i32,
+        /// Pitch rate, millideg / tick.
+        pitch_rate: i32,
+        /// Roll rate, millideg / tick.
+        roll_rate: i32,
+        /// Island id.
+        island: u16,
+        /// Sleep ticks. Zero when this island mate received an impulse.
+        sleep_ticks: u16,
+        /// Canonical hull the proposer believes it is moving. Mismatch → `WrongHull`.
+        hull: BlobId,
+        /// K24 hint. Kernel derives swept; ignores proposer swept.
+        witness: HullWitness,
+        /// Contact support `(nx, ny, nz, depth_mm)`.
+        support: Option<Support>,
+    },
     /// Space-admitted motion of one mover.
     SpaceDelta {
         /// Mover (duplicated on the witness).
@@ -91,6 +116,7 @@ impl Proposal {
         match self {
             Self::Player(_) => 0,
             Self::Residency { .. } => 1,
+            Self::PhysDelta { .. } => 2,
             Self::SpaceDelta { .. } => 3,
             Self::MotionDelta { .. } => 4,
             Self::Mind(_) => 5,
@@ -105,7 +131,9 @@ impl Proposal {
             Self::Player(p) => u128::from(p.player.0),
             Self::Mind(m) => m.locus.raw(),
             Self::Infer(i) => i.locus.map(klotho_core::Sigil::raw).unwrap_or(0),
-            Self::SpaceDelta { mover, .. } | Self::MotionDelta { mover, .. } => mover.raw(),
+            Self::PhysDelta { mover, .. }
+            | Self::SpaceDelta { mover, .. }
+            | Self::MotionDelta { mover, .. } => mover.raw(),
             Self::Residency { place, .. } => place.raw(),
         }
     }
@@ -114,7 +142,9 @@ impl Proposal {
     #[must_use]
     pub fn island(&self) -> u16 {
         match self {
-            Self::SpaceDelta { island, .. } | Self::MotionDelta { island, .. } => *island,
+            Self::PhysDelta { island, .. }
+            | Self::SpaceDelta { island, .. }
+            | Self::MotionDelta { island, .. } => *island,
             Self::Player(_) | Self::Mind(_) | Self::Infer(_) | Self::Residency { .. } => 0,
         }
     }
@@ -137,6 +167,7 @@ impl Proposal {
             Self::Player(_) => ProposalKind::Player,
             Self::Mind(_) => ProposalKind::Mind,
             Self::Infer(_) => ProposalKind::Infer,
+            Self::PhysDelta { .. } => ProposalKind::Phys,
             Self::SpaceDelta { .. } => ProposalKind::Space,
             Self::MotionDelta { .. } => ProposalKind::Motion,
             Self::Residency { .. } => ProposalKind::Residency,

@@ -70,6 +70,9 @@ fn propose_one(view: &WorldView, s: Sigil) -> Option<Proposal> {
         // Player / NPC walk is Motion (root clip). Dual-truth is forbidden.
         return None;
     }
+    if view.attach_parent(s).is_some() {
+        return None;
+    }
     if skip_lod(view, s) {
         return None;
     }

@@ -1,6 +1,6 @@
 //! Integer yaw rotation. No `f32` on the commit path (K20).
 
-use klotho_core::{IVec3, YawMd};
+use crate::{IVec3, YawMd};
 
 /// 16.16 cosine of 0..=90 degrees. `COS[0] = 1`, `COS[90] = 0`.
 const COS: [i32; 91] = [

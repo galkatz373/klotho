@@ -1,0 +1,2 @@
+[build]
+rustflags = ["-C", "llvm-args=-ffp-contract=off"]

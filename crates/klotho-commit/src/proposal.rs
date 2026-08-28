@@ -73,11 +73,11 @@ pub enum Proposal {
         place: Sigil,
         /// Load or evict.
         op: ResidencyOp,
-        /// Prefix stamped on the proposal (must match the snap).
+        /// Prefix stamped on the proposal (must match the live world).
         prefix: Hash,
         /// Cook digest stamped on the proposal (must match the live world and snap).
         canon_hash: Hash,
-        /// Column payload. Shared; not cloned through the admit heap.
+        /// Shared payload; `place` / `canon_hash` must match this proposal.
         snap: Arc<PlaceSnap>,
     },
 }
@@ -86,7 +86,6 @@ impl Proposal {
     /// K18 class. Lower runs first.
     ///
     /// Player 0, Residency 1, Phys 2, Space 3, Motion 4, Mind 5, Infer 6.
-    /// Phys stays a reserved hole (no PhysDelta).
     #[must_use]
     pub fn order_key(&self) -> u8 {
         match self {

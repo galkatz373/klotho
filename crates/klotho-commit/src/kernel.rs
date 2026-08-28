@@ -381,8 +381,8 @@ impl CommitKernel {
                 {
                     return Err(RejectReason::EpochMismatch);
                 }
-                if snap.place != *place || snap.canon_hash != *canon_hash || snap.prefix != *prefix
-                {
+                // Snap prefix is capture identity, not the live world's prefix.
+                if snap.place != *place || snap.canon_hash != *canon_hash {
                     return Err(RejectReason::Residency);
                 }
                 if snap.len() > klotho_world::MAX_PLACE_ROWS {

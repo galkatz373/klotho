@@ -665,6 +665,55 @@ mod tests {
     }
 
     #[test]
+    fn apply_place_snap_rejects_two_in_edges_with_zero_rows() {
+        let mut w = opaque_world();
+        let p = place(1);
+        let q = place(2);
+        let r = relic(1);
+        let mut row = PlaceRow::new(r, LocusKind::Relic);
+        row.rels = vec![(Rel::In, p), (Rel::In, q)];
+        let snap = PlaceSnap::new(p, Hash::ZERO, Hash::ZERO, vec![row]);
+        assert_eq!(
+            w.mutate().apply_place_snap(&snap),
+            Err(WorldError::PlaceSnap)
+        );
+        assert_eq!(w.view().loci().count(), 0);
+    }
+
+    #[test]
+    fn apply_place_snap_replaces_existing_row_maps() {
+        let mut w = opaque_world();
+        let p = place(1);
+        let r = relic(1);
+        {
+            let mut m = w.mutate();
+            m.insert_locus(p, LocusKind::Place).unwrap();
+            m.insert_locus(r, LocusKind::Relic).unwrap();
+            m.set_qty(r, ResourceId(1), 9).unwrap();
+            m.add_rel(r, Rel::LockedBy, r).unwrap();
+            m.add_rel(r, Rel::In, p).unwrap();
+        }
+        let mut row = PlaceRow::new(r, LocusKind::Relic);
+        row.pose = Some(PoseMm::new(Mm(4), Mm(0), Mm(0), YawMd(0)));
+        row.rels = vec![(Rel::In, p)];
+        row.qty = vec![(ResourceId(2), 3)];
+        let mut place_row = PlaceRow::new(p, LocusKind::Place);
+        place_row.pose = Some(PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)));
+        let snap = PlaceSnap::new(
+            p,
+            w.canon_hash(),
+            w.trace_prefix_hash(),
+            vec![place_row, row],
+        );
+        w.mutate().apply_place_snap(&snap).unwrap();
+        assert_eq!(w.view().qty(r, ResourceId(1)), 0);
+        assert_eq!(w.view().qty(r, ResourceId(2)), 3);
+        assert!(!w.view().has_rel(r, Rel::LockedBy, r));
+        assert!(w.view().has_rel(r, Rel::In, p));
+        assert_eq!(w.view().pose(r).unwrap().x, Mm(4));
+    }
+
+    #[test]
     fn apply_place_snap_cap_is_fail_closed() {
         let mut w = opaque_world_cap(4);
         let p = place(1);

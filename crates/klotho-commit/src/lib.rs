@@ -40,7 +40,7 @@ mod tests {
         from_ron,
     };
     use klotho_trace::{ISLAND_SNAP_PERIOD_TICKS, ProposalKind, RiteEnd, TraceBody, TraceEvent};
-    use klotho_world::{PlaceRow, PlaceSnap};
+    use klotho_world::{MAX_PLACE_ROWS, PlaceRow, PlaceSnap};
 
     use super::*;
 
@@ -720,8 +720,8 @@ mod tests {
         let mut snap = door_snap(&k, p, door);
         snap = PlaceSnap::new(
             snap.place,
-            snap.canon_hash,
             Hash::from_bytes([9; 32]),
+            snap.prefix,
             snap.rows().to_vec(),
         );
         let before = k.world().view().loci().count();
@@ -737,6 +737,49 @@ mod tests {
             !d.events
                 .iter()
                 .any(|e| matches!(e.body, TraceBody::PlaceLoaded { .. }))
+        );
+        assert_eq!(k.world().view().loci().count(), before);
+    }
+
+    #[test]
+    fn residency_capture_prefix_need_not_match_live() {
+        let mut k = opaque_kernel();
+        let p = place(1);
+        let door = relic(2);
+        let mut snap = door_snap(&k, p, door);
+        snap = PlaceSnap::new(
+            snap.place,
+            snap.canon_hash,
+            Hash::ZERO,
+            snap.rows().to_vec(),
+        );
+        k.ingest(residency(&k, p, ResidencyOp::Load, snap));
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(d.rejects.is_empty(), "{d:?}");
+        assert!(k.world().view().contains(door));
+    }
+
+    #[test]
+    fn residency_place_mismatch_is_residency() {
+        let mut k = opaque_kernel();
+        let p = place(1);
+        let other = place(9);
+        let door = relic(2);
+        let snap = door_snap(&k, p, door);
+        let before = k.world().view().loci().count();
+        k.ingest(Proposal::Residency {
+            place: other,
+            op: ResidencyOp::Load,
+            prefix: k.world().trace_prefix_hash(),
+            canon_hash: k.world().canon_hash(),
+            snap: Arc::new(snap),
+        });
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(
+            d.rejects
+                .iter()
+                .any(|(kind, r)| *kind == ProposalKind::Residency && *r == RejectReason::Residency),
+            "{d:?}"
         );
         assert_eq!(k.world().view().loci().count(), before);
     }
@@ -910,6 +953,97 @@ mod tests {
             "{d:?}"
         );
         assert!(!k.world().view().contains(b));
+    }
+
+    #[test]
+    fn residency_second_place_loads_next_tick() {
+        let mut k = opaque_kernel();
+        let a = place(1);
+        let b = place(2);
+        let snap_a = PlaceSnap::new(
+            a,
+            k.world().canon_hash(),
+            Hash::ZERO,
+            vec![PlaceRow::new(a, LocusKind::Place)],
+        );
+        let snap_b = PlaceSnap::new(
+            b,
+            k.world().canon_hash(),
+            Hash::ZERO,
+            vec![PlaceRow::new(b, LocusKind::Place)],
+        );
+        k.ingest(residency(&k, a, ResidencyOp::Load, snap_a));
+        let d1 = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(d1.rejects.is_empty(), "{d1:?}");
+        k.ingest(residency(&k, b, ResidencyOp::Load, snap_b));
+        let d2 = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(d2.rejects.is_empty(), "{d2:?}");
+        assert!(k.world().view().contains(a));
+        assert!(k.world().view().contains(b));
+    }
+
+    #[test]
+    fn residency_oversize_duplicate_and_cap_are_fail_closed() {
+        let mut k = opaque_kernel();
+        let p = place(1);
+        let before = k.world().view().loci().count();
+        let too_big = vec![PlaceRow::new(relic(1), LocusKind::Relic); MAX_PLACE_ROWS + 1];
+        let snap = PlaceSnap::new(p, k.world().canon_hash(), Hash::ZERO, too_big);
+        k.ingest(residency(&k, p, ResidencyOp::Load, snap));
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(
+            d.rejects
+                .iter()
+                .any(|(kind, r)| *kind == ProposalKind::Residency && *r == RejectReason::Residency),
+            "{d:?}"
+        );
+        assert!(
+            !d.events
+                .iter()
+                .any(|e| matches!(e.body, TraceBody::PlaceLoaded { .. }))
+        );
+        assert_eq!(k.world().view().loci().count(), before);
+
+        let row = PlaceRow::new(relic(1), LocusKind::Relic);
+        let dup = PlaceSnap::new(
+            p,
+            k.world().canon_hash(),
+            Hash::ZERO,
+            vec![row.clone(), row],
+        );
+        k.ingest(residency(&k, p, ResidencyOp::Load, dup));
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(
+            d.rejects
+                .iter()
+                .any(|(kind, r)| *kind == ProposalKind::Residency && *r == RejectReason::Residency),
+            "{d:?}"
+        );
+        assert_eq!(k.world().view().loci().count(), before);
+
+        let mut capped = CommitKernel::new(klotho_world::World::with_locus_cap(
+            Arc::new(cook("[]")),
+            k.world().canon_hash(),
+            4,
+        ));
+        let rows: Vec<_> = (0..5u128)
+            .map(|i| PlaceRow::new(relic(i + 1), LocusKind::Relic))
+            .collect();
+        let snap = PlaceSnap::new(p, capped.world().canon_hash(), Hash::ZERO, rows);
+        capped.ingest(residency(&capped, p, ResidencyOp::Load, snap));
+        let d = capped.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(
+            d.rejects
+                .iter()
+                .any(|(kind, r)| *kind == ProposalKind::Residency && *r == RejectReason::Residency),
+            "{d:?}"
+        );
+        assert_eq!(capped.world().view().loci().count(), 0);
+        assert!(
+            !d.events
+                .iter()
+                .any(|e| matches!(e.body, TraceBody::PlaceLoaded { .. }))
+        );
     }
 
     #[test]

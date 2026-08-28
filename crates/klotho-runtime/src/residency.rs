@@ -11,7 +11,8 @@ use klotho_world::PlaceSnap;
 /// Build residency proposals from interest commands and an in-memory catalog.
 ///
 /// [`ResidencyCommand::Load`] or [`ResidencyCommand::Evict`] with no catalog
-/// entry is skipped — both ops need `Arc<PlaceSnap>`.
+/// entry is skipped — both ops need `Arc<PlaceSnap>`. Catalog snaps keep their
+/// capture prefix; the proposal stamps live `prefix` / `canon_hash`.
 #[must_use]
 pub fn residency_proposals(
     commands: &[ResidencyCommand],
@@ -41,7 +42,7 @@ pub fn residency_proposals(
 
 #[cfg(test)]
 mod tests {
-    use klotho_core::LocusKind;
+    use klotho_core::{Budget, LocusKind, RejectReason, Tick};
     use klotho_world::PlaceRow;
 
     use super::*;
@@ -88,6 +89,53 @@ mod tests {
             }
             other => panic!("expected Residency, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn helper_load_is_admitted_with_stale_capture_prefix() {
+        let mut k = hearth_slice::boot();
+        let p = place(99_001);
+        let q = place(99_002);
+        let mut catalog = BTreeMap::new();
+        catalog.insert(p, snap(p));
+        catalog.insert(q, snap(q));
+        let live_canon = k.world().canon_hash();
+        let props = residency_proposals(
+            &[ResidencyCommand::Load(p)],
+            &catalog,
+            k.world().trace_prefix_hash(),
+            live_canon,
+        );
+        assert_eq!(props.len(), 1);
+        for prop in props {
+            k.ingest(prop);
+        }
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(
+            !d.rejects.iter().any(|(_, r)| {
+                matches!(r, RejectReason::Residency | RejectReason::EpochMismatch)
+            }),
+            "{d:?}"
+        );
+        assert!(k.world().view().contains(p));
+
+        let props = residency_proposals(
+            &[ResidencyCommand::Load(q)],
+            &catalog,
+            k.world().trace_prefix_hash(),
+            live_canon,
+        );
+        for prop in props {
+            k.ingest(prop);
+        }
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(
+            !d.rejects.iter().any(|(_, r)| {
+                matches!(r, RejectReason::Residency | RejectReason::EpochMismatch)
+            }),
+            "{d:?}"
+        );
+        assert!(k.world().view().contains(q));
     }
 
     #[test]

@@ -240,6 +240,7 @@ impl Projection {
         }
         let mut new_rows = 0usize;
         for row in snap.rows() {
+            row_in_place(&row.rels)?;
             if self.packed(row.sigil).is_none() {
                 new_rows += 1;
             }
@@ -279,12 +280,8 @@ impl Projection {
             self.island_id.push(row.island);
             self.sleep_ticks.push(row.sleep);
             self.sim_lod.push(row.sim_lod);
-            self.in_place.push(
-                row.rels
-                    .iter()
-                    .find(|(r, _)| *r == Rel::In)
-                    .map(|(_, p)| *p),
-            );
+            self.in_place
+                .push(row_in_place(&row.rels).expect("validated"));
             for &(res, v) in &row.qty {
                 Arc::make_mut(&mut self.qty).insert((i, res), v);
             }
@@ -298,6 +295,7 @@ impl Projection {
     }
 
     fn write_snap_row(&mut self, i: PackedIx, row: &PlaceRow) {
+        self.drop_packed_maps(i);
         let ix = i as usize;
         self.kinds.set(ix, row.kind);
         self.afford.set(ix, row.afford);
@@ -314,13 +312,8 @@ impl Projection {
             self.hull_local.set(ix, None);
             self.hull_id.set(ix, row.hull_id);
         }
-        self.in_place.set(
-            ix,
-            row.rels
-                .iter()
-                .find(|(r, _)| *r == Rel::In)
-                .map(|(_, p)| *p),
-        );
+        self.in_place
+            .set(ix, row_in_place(&row.rels).expect("validated"));
         for &(res, v) in &row.qty {
             Arc::make_mut(&mut self.qty).insert((i, res), v);
         }
@@ -360,23 +353,34 @@ impl Projection {
     }
 
     pub(crate) fn drop_loci(&mut self, drop: &[Sigil]) -> Result<(), WorldError> {
-        let mut ordered: Vec<(PackedIx, Sigil)> = drop
+        let mut drop_ix = BTreeSet::new();
+        let mut drop_sig = BTreeSet::new();
+        for &s in drop {
+            let i = self.packed(s).ok_or(WorldError::UnknownLocus)?;
+            drop_ix.insert(i);
+            drop_sig.insert(s);
+        }
+        self.strip_packed_maps(&drop_ix);
+        self.scrub_incoming_set(&drop_sig);
+        let mut ordered: Vec<(PackedIx, Sigil)> = drop_sig
             .iter()
             .copied()
             .filter_map(|s| self.packed(s).map(|i| (i, s)))
             .collect();
         ordered.sort_by_key(|(i, _)| core::cmp::Reverse(*i));
         for (_, s) in ordered {
-            self.remove_locus(s)?;
+            self.swap_out_locus(s)?;
         }
         Ok(())
     }
 
     pub(crate) fn remove_locus(&mut self, s: Sigil) -> Result<(), WorldError> {
+        self.drop_loci(&[s])
+    }
+
+    fn swap_out_locus(&mut self, s: Sigil) -> Result<(), WorldError> {
         let i = self.packed(s).ok_or(WorldError::UnknownLocus)?;
         let last = (self.sigils.len() - 1) as PackedIx;
-        self.drop_packed_maps(i);
-        self.scrub_incoming(s);
         if i != last {
             self.swap_packed(i, last);
             self.remap_packed(last, i);
@@ -389,37 +393,34 @@ impl Projection {
     }
 
     fn drop_packed_maps(&mut self, ix: PackedIx) {
-        let rels = Arc::make_mut(&mut self.rels);
-        let rel_keys: Vec<_> = rels.keys().filter(|(p, _)| *p == ix).copied().collect();
-        for k in rel_keys {
-            rels.remove(&k);
-        }
-        let qty = Arc::make_mut(&mut self.qty);
-        let qty_keys: Vec<_> = qty.keys().filter(|(p, _)| *p == ix).copied().collect();
-        for k in qty_keys {
-            qty.remove(&k);
-        }
-        Arc::make_mut(&mut self.phys_req).remove(&ix);
-        let rites = Arc::make_mut(&mut self.rites);
-        let rite_keys: Vec<_> = rites.keys().filter(|(p, _)| *p == ix).copied().collect();
-        for k in rite_keys {
-            rites.remove(&k);
-        }
-        let knows = Arc::make_mut(&mut self.knows);
-        let know_gone: Vec<_> = knows.iter().filter(|(p, _)| *p == ix).copied().collect();
-        for t in know_gone {
-            knows.remove(&t);
-        }
+        let mut one = BTreeSet::new();
+        one.insert(ix);
+        self.strip_packed_maps(&one);
     }
 
-    fn scrub_incoming(&mut self, s: Sigil) {
+    fn strip_packed_maps(&mut self, drop_ix: &BTreeSet<PackedIx>) {
+        let rels = Arc::make_mut(&mut self.rels);
+        rels.retain(|(p, _), _| !drop_ix.contains(p));
+        let qty = Arc::make_mut(&mut self.qty);
+        qty.retain(|(p, _), _| !drop_ix.contains(p));
+        let phys = Arc::make_mut(&mut self.phys_req);
+        phys.retain(|p, _| !drop_ix.contains(p));
+        let rites = Arc::make_mut(&mut self.rites);
+        rites.retain(|(p, _), _| !drop_ix.contains(p));
+        let knows = Arc::make_mut(&mut self.knows);
+        knows.retain(|(p, _)| !drop_ix.contains(p));
+    }
+
+    fn scrub_incoming_set(&mut self, drop_sig: &BTreeSet<Sigil>) {
         let rels = Arc::make_mut(&mut self.rels);
         for v in rels.values_mut() {
-            v.retain(|&x| x != s);
+            v.retain(|x| !drop_sig.contains(x));
         }
         for i in 0..self.in_place.len() {
-            if self.in_place.get(i).copied().flatten() == Some(s) {
-                self.in_place.set(i, None);
+            if let Some(s) = self.in_place.get(i).copied().flatten() {
+                if drop_sig.contains(&s) {
+                    self.in_place.set(i, None);
+                }
             }
         }
     }
@@ -1067,6 +1068,20 @@ impl Default for Projection {
 
 pub(crate) fn rel_key(r: Rel) -> u8 {
     r.as_u8()
+}
+
+fn row_in_place(rels: &[(Rel, Sigil)]) -> Result<Option<Sigil>, WorldError> {
+    let mut found = None;
+    for &(r, b) in rels {
+        if r != Rel::In {
+            continue;
+        }
+        if found.is_some() {
+            return Err(WorldError::PlaceSnap);
+        }
+        found = Some(b);
+    }
+    Ok(found)
 }
 
 fn rel_from_tag(t: RelTag) -> Option<Rel> {

@@ -15,7 +15,7 @@ pub struct PlaceSnap {
     pub place: Sigil,
     /// Cook digest the rows were captured under.
     pub canon_hash: Hash,
-    /// Trace prefix the rows were captured under.
+    /// Capture prefix. Not the live world's current prefix.
     pub prefix: Hash,
     rows: Vec<PlaceRow>,
 }

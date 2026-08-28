@@ -180,7 +180,7 @@ mod tests {
             AddAffordance(Affordance(id: "Opaque", requires: [], grants: [], conflicts: [])),
             AddLaw(Law(
                 id: "never_clip_closed",
-                when: Or(SourceIs(Space), SourceIs(Motion)),
+                when: Or(SourceIs(Phys), Or(SourceIs(Space), SourceIs(Motion))),
                 body: Pred(must: Not(SweptHitsOpaqueClosed), ought: None),
             )),
         ]"#;

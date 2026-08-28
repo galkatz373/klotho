@@ -722,6 +722,12 @@ impl Projection {
         Ok(())
     }
 
+    pub(crate) fn clear_phys_req(&mut self, s: Sigil) -> Result<(), WorldError> {
+        let i = self.packed(s).ok_or(WorldError::UnknownLocus)?;
+        Arc::make_mut(&mut self.phys_req).remove(&i);
+        Ok(())
+    }
+
     /// Current `PHYS_REQ` write, if any.
     #[must_use]
     pub fn phys_req(&self, s: Sigil) -> Option<PhysRequest> {

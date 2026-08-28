@@ -103,6 +103,11 @@ impl WorldMut<'_> {
         self.world.projection_mut().set_phys_req(s, req)
     }
 
+    /// Drop a consumed `PHYS_REQ` row.
+    pub fn clear_phys_req(&mut self, s: Sigil) -> Result<(), WorldError> {
+        self.world.projection_mut().clear_phys_req(s)
+    }
+
     /// Insert a relation. Reindexes `space_ix` when Place membership or
     /// OpaqueClosed changes (`Rel::In`, `Rel::LockedBy`).
     pub fn add_rel(&mut self, a: Sigil, r: Rel, b: Sigil) -> Result<(), WorldError> {

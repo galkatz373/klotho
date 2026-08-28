@@ -1,7 +1,7 @@
-//! Scalar XPBD island proposer. f32 internals, quantized [`Proposal::PhysDelta`] out.
+//! Scalar AABB island proposer. f32 internals, quantized [`Proposal::PhysDelta`] out.
 //!
-//! No FFI. Lambdas are zeroed every tick. Floor / `OpaqueClosed` scenery is
-//! occupancy, not a body.
+//! Sequential positional correction; contact set rebuilt per substep. No hashed
+//! warm-start. Floor / `OpaqueClosed` scenery is occupancy, not a body.
 //!
 //! `#![forbid(unsafe_code)]`.
 
@@ -73,8 +73,8 @@ mod tests {
     use klotho_canon::cook_diffs;
     use klotho_commit::{CommitKernel, Proposal};
     use klotho_core::{
-        AabbMm, BlobId, Budget, Hash, HullWitness, IVec3, LocusKind, Mm, NO_ISLAND, PlayerId,
-        PoseMm, RejectReason, Sigil, Tick, Vel3, VelFx, YawMd,
+        AabbMm, BlobId, Budget, Hash, HullWitness, IVec3, LocusKind, Mm, NO_ISLAND, PhysRequest,
+        PlayerId, PoseMm, RejectReason, Sigil, Tick, Vel3, VelFx, YawMd,
     };
     use klotho_ir::{CanonDiff, Rel, from_ron};
     use klotho_motion::Motion;
@@ -203,18 +203,23 @@ mod tests {
 
     #[test]
     fn quant_residual_p99_le_1mm_max_le_4mm() {
-        let mut k = CommitKernel::new(empty_world());
-        let _floor = plant_floor(&mut k);
-        let s = relic(1);
-        plant_crate(&mut k, s, 800, 0);
         let mut residuals = Vec::new();
         let mut phys = Phys;
-        for _ in 0..45 {
-            k.partition();
-            let view = k.world().view();
-            let island = view.island(s).map(|(id, _)| id).unwrap_or(0);
-            residuals.extend(solve_island(island, &view).residuals_mm);
-            k.step(Tick(1), Budget::HEARTH, &mut [&mut phys]).unwrap();
+        for origin_x in [0, 20_000_000] {
+            let mut k = CommitKernel::new(empty_world());
+            let _floor = plant_floor(&mut k);
+            let s = relic(1);
+            plant_crate(&mut k, s, 800, 0);
+            k.world_mut()
+                .set_pose(s, PoseMm::new(Mm(origin_x), Mm(800), Mm(0), YawMd(0)))
+                .unwrap();
+            for _ in 0..45 {
+                k.partition();
+                let view = k.world().view();
+                let island = view.island(s).map(|(id, _)| id).unwrap_or(0);
+                residuals.extend(solve_island(island, &view).residuals_mm);
+                k.step(Tick(1), Budget::HEARTH, &mut [&mut phys]).unwrap();
+            }
         }
         assert!(!residuals.is_empty());
         let max = residuals.iter().copied().fold(0.0_f32, f32::max);
@@ -315,6 +320,7 @@ mod tests {
                 .unwrap();
             w.set_affordance(door, opaque, true).unwrap();
             w.add_rel(door, Rel::LockedBy, door).unwrap();
+            w.set_island(door, 1, 12).unwrap();
         }
         let next = PoseMm::new(Mm(0), Mm(0), Mm(1900), YawMd(0));
         k.ingest(Proposal::PhysDelta {
@@ -327,17 +333,64 @@ mod tests {
             island: 0,
             sleep_ticks: 0,
             hull: hull_id(1),
-            witness: HullWitness::new(player, next, false),
+            witness: HullWitness::new(player, next, true),
             support: None,
         });
         let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
         assert!(
             d.rejects
                 .iter()
-                .any(|(_, r)| matches!(r, RejectReason::Law(_) | RejectReason::WitnessMismatch)),
+                .any(|(_, r)| matches!(r, RejectReason::Law(_))),
             "{d:?}"
         );
         assert_eq!(k.world().view().pose(player).unwrap().z, Mm(1400));
+    }
+
+    #[test]
+    fn phys_req_is_consumed_on_admit() {
+        let mut k = CommitKernel::new(empty_world());
+        let _floor = plant_floor(&mut k);
+        let s = relic(1);
+        plant_crate(&mut k, s, 0, 12);
+        k.world_mut()
+            .set_phys_req(
+                s,
+                PhysRequest {
+                    lin: IVec3 { x: 20, y: 0, z: 0 },
+                    ang: IVec3::ZERO,
+                },
+            )
+            .unwrap();
+        let islands = k.partition();
+        assert!(
+            islands.iter().any(|(_, m)| m.contains(&s)),
+            "phys_req sleeper is a seed: {islands:?}"
+        );
+        let mut phys = Phys;
+        let d = k.step(Tick(1), Budget::HEARTH, &mut [&mut phys]).unwrap();
+        assert!(d.rejects.is_empty(), "{d:?}");
+        assert!(k.world().view().phys_req(s).is_none());
+        let x1 = k.world().view().pose(s).unwrap().x;
+        let (v1, _) = k.world().view().vel(s).unwrap();
+        k.partition();
+        let d2 = k.step(Tick(1), Budget::HEARTH, &mut [&mut phys]).unwrap();
+        assert!(d2.rejects.is_empty(), "{d2:?}");
+        assert!(k.world().view().phys_req(s).is_none());
+        let (v2, _) = k.world().view().vel(s).unwrap();
+        assert!(
+            (v2.x.0 - v1.x.0).unsigned_abs() < VelFx::from_mm_per_tick(10).0.unsigned_abs(),
+            "stale phys_req must not add Δv every tick: v1={} v2={} x1={}",
+            v1.x.0,
+            v2.x.0,
+            x1.0
+        );
+        k.world_mut().set_vel(s, Vel3::ZERO, 0).unwrap();
+        k.world_mut().set_island(s, 99, 12).unwrap();
+        let part = k.partition();
+        assert!(
+            !part.iter().any(|(_, m)| m.contains(&s)),
+            "cleared phys_req must not keep seeding: {part:?}"
+        );
     }
 
     #[test]

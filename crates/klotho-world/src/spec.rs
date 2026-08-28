@@ -91,6 +91,11 @@ impl SpecDelta {
         self.proj.set_phys_req(s, req)
     }
 
+    /// Drop a consumed `PHYS_REQ` row.
+    pub fn clear_phys_req(&mut self, s: Sigil) -> Result<(), WorldError> {
+        self.proj.clear_phys_req(s)
+    }
+
     /// Relation write.
     pub fn add_rel(&mut self, a: Sigil, r: Rel, b: Sigil) -> Result<(), WorldError> {
         self.proj.add_rel(a, r, b)

@@ -66,5 +66,13 @@ mod tests {
         assert_eq!(trunc_mm(1.9), 1);
         assert_eq!(trunc_mm(-0.1), -1);
         assert_eq!(trunc_mm(0.0), 0);
+        let neg_vel = -0.1 * (VelFx::SCALE as f32);
+        assert_eq!(trunc_vel(-0.1).0, neg_vel.floor() as i32);
+        assert_eq!(trunc_mm(f32::NAN), 0);
+        assert_eq!(trunc_mm(f32::INFINITY), 0);
+        assert_eq!(trunc_mm(f32::NEG_INFINITY), 0);
+        assert_eq!(trunc_vel(f32::NAN), VelFx::ZERO);
+        assert_eq!(trunc_vel(f32::INFINITY), VelFx::ZERO);
+        assert_eq!(trunc_vel(f32::NEG_INFINITY), VelFx::ZERO);
     }
 }

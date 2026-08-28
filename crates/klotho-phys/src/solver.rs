@@ -1,4 +1,4 @@
-//! Sequential XPBD on AABB rigid bodies. Lambdas start at zero every tick.
+//! Sequential positional correction on AABB rigid bodies. Contacts rebuilt each substep.
 
 use std::collections::BTreeSet;
 
@@ -164,6 +164,7 @@ fn collect_bodies(island: u16, view: &WorldView<'_>) -> Vec<Body> {
             vel.z.0 as f32 / scale,
         ];
         if let Some(req) = view.phys_req(s) {
+            // One-shot Δv (mm/tick). Kernel clears the column on admit.
             v[0] += req.lin.x as f32;
             v[1] += req.lin.y as f32;
             v[2] += req.lin.z as f32;

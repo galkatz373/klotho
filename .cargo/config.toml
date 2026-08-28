@@ -1,0 +1,3 @@
+# Phys f32 must not contract FMA (OS-varying). Merges with CI RUSTFLAGS.
+[target.'cfg(all())']
+rustflags = ["-C", "llvm-args=--fp-contract=off"]

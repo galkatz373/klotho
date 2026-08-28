@@ -410,6 +410,27 @@ mod tests {
     }
 
     #[test]
+    fn clear_phys_req_drops_the_row() {
+        let mut w = opaque_world();
+        let s = relic(1);
+        {
+            let mut m = w.mutate();
+            m.insert_locus(s, LocusKind::Relic).unwrap();
+            m.set_phys_req(
+                s,
+                klotho_core::PhysRequest {
+                    lin: IVec3 { x: 3, y: 0, z: 0 },
+                    ang: IVec3::ZERO,
+                },
+            )
+            .unwrap();
+        }
+        assert!(w.view().phys_req(s).is_some());
+        w.mutate().clear_phys_req(s).unwrap();
+        assert!(w.view().phys_req(s).is_none());
+    }
+
+    #[test]
     fn attach_local_defaults_on_rel_add() {
         let mut w = opaque_world();
         let parent = relic(1);

@@ -244,6 +244,8 @@ impl CommitKernel {
                     .map_err(|_| RejectReason::Budget)?;
                 spec.set_support(*mover, *support)
                     .map_err(|_| RejectReason::Budget)?;
+                spec.clear_phys_req(*mover)
+                    .map_err(|_| RejectReason::Budget)?;
                 for (child, local) in locals {
                     spec.set_pose(child, compose_yaw_only(*pose, local))
                         .map_err(|_| RejectReason::Budget)?;

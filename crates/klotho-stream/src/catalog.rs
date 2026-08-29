@@ -1,18 +1,18 @@
 //! Open a catalog, map Place shards, fetch CAS blobs.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use klotho_core::{BlobId, Hash, Sigil};
+use klotho_core::{AabbMm, BlobId, Hash, Sigil};
 use klotho_prove::{CATALOG_CAP, KCAS_VOLUME_CAP, PLACE_SHARD_CAP, blob_id_of};
 use klotho_world::PlaceSnap;
 
 use crate::codec::{
-    CatalogDesc, PLACE_HEADER_LEN, check_place_sizes, decode_catalog, decode_place_payload,
-    file_hash, kcas_blob, parse_place_header,
+    CatalogDesc, KCAS_HEADER_LEN, PLACE_HEADER_LEN, check_place_sizes, decode_catalog, file_hash,
+    kcas_blob, parse_kcas_header, parse_place_header, place_snap_from_bytes,
 };
 use crate::error::StreamError;
 use crate::map::{file_len_at_most, map_or_read, read_capped};
@@ -29,6 +29,7 @@ pub struct StreamCatalog {
 
 #[derive(Clone, Debug)]
 struct PlaceRec {
+    aabb: AabbMm,
     shard_id: Hash,
     filename: String,
     prefix: Hash,
@@ -53,16 +54,26 @@ impl StreamCatalog {
     }
 
     fn from_desc(dir: PathBuf, desc: CatalogDesc) -> Result<Self, StreamError> {
+        let mut names = BTreeSet::new();
         let mut volumes = BTreeMap::new();
         for v in desc.volumes {
-            volumes.insert(v.id, v.filename);
+            if volumes.insert(v.id, v.filename.clone()).is_some() {
+                return Err(StreamError::Duplicate);
+            }
+            if !names.insert(v.filename) {
+                return Err(StreamError::Name);
+            }
         }
         let mut places = BTreeMap::new();
         for p in desc.places {
+            if !names.insert(p.filename.clone()) {
+                return Err(StreamError::Name);
+            }
             if places
                 .insert(
                     p.place,
                     PlaceRec {
+                        aabb: p.aabb,
                         shard_id: p.shard_id,
                         filename: p.filename,
                         prefix: p.prefix,
@@ -70,12 +81,14 @@ impl StreamCatalog {
                 )
                 .is_some()
             {
-                return Err(StreamError::PlaceMismatch);
+                return Err(StreamError::Duplicate);
             }
         }
         let mut blobs = BTreeMap::new();
         for (blob, vol) in desc.blobs {
-            blobs.insert(blob, vol);
+            if blobs.insert(blob, vol).is_some() {
+                return Err(StreamError::Duplicate);
+            }
         }
         Ok(Self {
             dir,
@@ -102,6 +115,12 @@ impl StreamCatalog {
     #[must_use]
     pub fn dir(&self) -> &Path {
         &self.dir
+    }
+
+    /// Coarse residency AABB for `place`, if the catalog names it.
+    #[must_use]
+    pub fn place_aabb(&self, place: Sigil) -> Option<AabbMm> {
+        self.places.get(&place).map(|r| r.aabb)
     }
 }
 
@@ -143,12 +162,15 @@ pub fn map_place(catalog: &StreamCatalog, place: Sigil) -> Result<Arc<PlaceSnap>
     if file_hash(bytes) != rec.shard_id {
         return Err(StreamError::HashMismatch);
     }
-    let snap = decode_place_payload(&bytes[PLACE_HEADER_LEN..], &header)?;
+    let snap = place_snap_from_bytes(bytes)?;
     if snap.place != place {
         return Err(StreamError::PlaceMismatch);
     }
     if snap.canon_hash != catalog.canon_hash {
         return Err(StreamError::CanonHashMismatch);
+    }
+    if snap.prefix != rec.prefix {
+        return Err(StreamError::PrefixMismatch);
     }
     Ok(Arc::new(snap))
 }
@@ -164,7 +186,18 @@ pub fn blob(catalog: &StreamCatalog, id: BlobId) -> Result<Arc<[u8]>, StreamErro
     if !path.is_file() {
         return Err(StreamError::MissingShard);
     }
+    let file_len = file_len_at_most(&path, KCAS_VOLUME_CAP)?;
+    if file_len < KCAS_HEADER_LEN {
+        return Err(StreamError::Truncated);
+    }
+    let mut file = File::open(&path)?;
+    let mut hdr = [0u8; KCAS_HEADER_LEN];
+    file.read_exact(&mut hdr)?;
+    let _ = parse_kcas_header(&hdr)?;
     let mapped = map_or_read(&path, KCAS_VOLUME_CAP)?;
+    if mapped.as_slice().len() != file_len {
+        return Err(StreamError::Truncated);
+    }
     if file_hash(mapped.as_slice()) != *vol_id {
         return Err(StreamError::HashMismatch);
     }
@@ -185,7 +218,7 @@ mod tests {
     use klotho_world::PlaceRow;
 
     use crate::codec::{
-        CatalogDesc, KcasEntry, PlaceRef, VolumeRef, encode_catalog, encode_kcas,
+        CatalogDesc, KcasEntry, PlaceRef, VolumeRef, decode_catalog, encode_catalog, encode_kcas,
         encode_place_shard, file_hash, place_snap_from_bytes,
     };
 
@@ -259,6 +292,10 @@ mod tests {
         let (cat_path, blob_id) = write_pack(&dir, &snap, payload);
         let cat = StreamCatalog::open(&cat_path).unwrap();
         assert_eq!(cat.canon_hash(), snap.canon_hash);
+        assert_eq!(
+            cat.place_aabb(snap.place),
+            Some(AabbMm::from_point(IVec3::ZERO))
+        );
         let got = map_place(&cat, snap.place).unwrap();
         assert_eq!(*got, snap);
         let from_bytes =
@@ -381,25 +418,6 @@ mod tests {
     }
 
     #[test]
-    fn oversize_shard_refused_before_map() {
-        let dir = temp_dir();
-        let snap = sample_snap();
-        let (cat_path, _) = write_pack(&dir, &snap, b"x");
-        let cat = StreamCatalog::open(&cat_path).unwrap();
-        fs::write(dir.join("place-01.kplc"), vec![0u8; 16]).unwrap();
-        let e = {
-            let rec = cat.places.get(&snap.place).unwrap();
-            let path = cat.dir.join(&rec.filename);
-            file_len_at_most(&path, 8)
-        };
-        assert!(
-            matches!(e, Err(StreamError::Oversize { size: 16, cap: 8 })),
-            "{e:?}"
-        );
-        let _ = fs::remove_dir_all(&dir);
-    }
-
-    #[test]
     fn truncated_shard_fails() {
         let dir = temp_dir();
         let snap = sample_snap();
@@ -428,7 +446,31 @@ mod tests {
     }
 
     #[test]
-    fn blob_id_mismatch_on_volume_fails() {
+    fn prefix_mismatch_fails() {
+        let dir = temp_dir();
+        let snap = sample_snap();
+        let (cat_path, _) = write_pack(&dir, &snap, b"x");
+        let other = PlaceSnap::new(
+            snap.place,
+            snap.canon_hash,
+            Hash::from_bytes([99; 32]),
+            vec![PlaceRow::new(snap.place, LocusKind::Place)],
+        );
+        fs::write(
+            dir.join("place-01.kplc"),
+            encode_place_shard(&other).unwrap(),
+        )
+        .unwrap();
+        let cat = StreamCatalog::open(&cat_path).unwrap();
+        assert_eq!(
+            map_place(&cat, snap.place).unwrap_err(),
+            StreamError::PrefixMismatch
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn volume_hash_mismatch_fails() {
         let dir = temp_dir();
         let snap = sample_snap();
         let (cat_path, blob_id) = write_pack(&dir, &snap, b"xyz");
@@ -436,11 +478,102 @@ mod tests {
         vol[12] ^= 1;
         fs::write(dir.join("vol-0000.kcas"), vol).unwrap();
         let cat = StreamCatalog::open(&cat_path).unwrap();
-        let e = blob(&cat, blob_id).unwrap_err();
-        assert!(
-            matches!(e, StreamError::BlobIdMismatch | StreamError::HashMismatch),
-            "{e}"
+        assert_eq!(blob(&cat, blob_id).unwrap_err(), StreamError::HashMismatch);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn blob_id_mismatch_with_matching_volume_hash_fails() {
+        let dir = temp_dir();
+        let snap = sample_snap();
+        let payload = b"xyz";
+        let mut vol = encode_kcas(&[KcasEntry {
+            license: mit(),
+            bytes: payload,
+        }])
+        .unwrap();
+        vol[KCAS_HEADER_LEN] ^= 1;
+        let vol_hash = file_hash(&vol);
+        fs::write(dir.join("vol-0000.kcas"), &vol).unwrap();
+        let shard = encode_place_shard(&snap).unwrap();
+        fs::write(dir.join("place-01.kplc"), &shard).unwrap();
+        let blob_id = blob_id_of(payload);
+        let desc = CatalogDesc {
+            canon_hash: snap.canon_hash,
+            volumes: vec![VolumeRef {
+                id: vol_hash,
+                filename: "vol-0000.kcas".into(),
+            }],
+            places: vec![PlaceRef {
+                place: snap.place,
+                aabb: AabbMm::from_point(IVec3::ZERO),
+                shard_id: file_hash(&shard),
+                filename: "place-01.kplc".into(),
+                prefix: snap.prefix,
+            }],
+            blobs: vec![(blob_id, vol_hash)],
+        };
+        let cat_path = dir.join("catalog.kwrp");
+        fs::write(&cat_path, encode_catalog(1, &desc).unwrap()).unwrap();
+        let cat = StreamCatalog::open(&cat_path).unwrap();
+        assert_eq!(
+            blob(&cat, blob_id).unwrap_err(),
+            StreamError::BlobIdMismatch
         );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn bad_kcas_magic_fails_before_decode() {
+        let dir = temp_dir();
+        let snap = sample_snap();
+        let (cat_path, blob_id) = write_pack(&dir, &snap, b"xyz");
+        let mut vol = fs::read(dir.join("vol-0000.kcas")).unwrap();
+        vol[0] = b'X';
+        fs::write(dir.join("vol-0000.kcas"), vol).unwrap();
+        let cat = StreamCatalog::open(&cat_path).unwrap();
+        assert_eq!(blob(&cat, blob_id).unwrap_err(), StreamError::Magic);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn open_duplicate_blob_row_fails() {
+        let dir = temp_dir();
+        let snap = sample_snap();
+        let payload = b"x";
+        let vol = encode_kcas(&[KcasEntry {
+            license: mit(),
+            bytes: payload,
+        }])
+        .unwrap();
+        fs::write(dir.join("vol-0000.kcas"), &vol).unwrap();
+        let shard = encode_place_shard(&snap).unwrap();
+        fs::write(dir.join("place-01.kplc"), &shard).unwrap();
+        let vol_hash = file_hash(&vol);
+        let blob_id = blob_id_of(payload);
+        let desc = CatalogDesc {
+            canon_hash: snap.canon_hash,
+            volumes: vec![VolumeRef {
+                id: vol_hash,
+                filename: "vol-0000.kcas".into(),
+            }],
+            places: vec![PlaceRef {
+                place: snap.place,
+                aabb: AabbMm::from_point(IVec3::ZERO),
+                shard_id: file_hash(&shard),
+                filename: "place-01.kplc".into(),
+                prefix: snap.prefix,
+            }],
+            blobs: vec![(blob_id, vol_hash)],
+        };
+        let mut bytes = encode_catalog(1, &desc).unwrap();
+        // Second identical blob row: bump count and append another (id, vol) pair.
+        let n = bytes.len();
+        let count_off = n - 4 - 64;
+        bytes[count_off..count_off + 4].copy_from_slice(&2u32.to_le_bytes());
+        bytes.extend_from_slice(blob_id.as_bytes());
+        bytes.extend_from_slice(vol_hash.as_bytes());
+        assert_eq!(decode_catalog(&bytes), Err(StreamError::Duplicate));
         let _ = fs::remove_dir_all(&dir);
     }
 

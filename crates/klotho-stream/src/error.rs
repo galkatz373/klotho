@@ -44,6 +44,8 @@ pub enum StreamError {
     Name,
     /// Extra bytes after a well-formed record list.
     Trailing,
+    /// Catalog named the same place, volume, blob, or filename twice.
+    Duplicate,
     /// Filesystem error.
     Io(String),
 }
@@ -68,6 +70,7 @@ impl fmt::Display for StreamError {
             Self::License => write!(f, "License"),
             Self::Name => write!(f, "Name"),
             Self::Trailing => write!(f, "Trailing"),
+            Self::Duplicate => write!(f, "Duplicate"),
             Self::Io(s) => write!(f, "Io({s})"),
         }
     }

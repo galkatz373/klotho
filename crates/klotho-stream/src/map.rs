@@ -5,11 +5,11 @@ use std::path::Path;
 
 use crate::error::StreamError;
 
-/// Cap `path`'s length, then map (or read, under Miri).
+/// Cap `path`'s length, then map the whole fd (or read, under Miri).
 pub(crate) fn map_or_read(path: &Path, cap: usize) -> Result<Mapped, StreamError> {
+    let _ = file_len_at_most(path, cap)?;
     let file = File::open(path)?;
-    let len = file_len_at_most(path, cap)?;
-    map_file(&file, len)
+    map_file(&file, cap)
 }
 
 /// Read at most `cap` bytes. Used for the catalog (small) and Miri.
@@ -37,8 +37,15 @@ pub(crate) fn file_len_at_most(path: &Path, cap: usize) -> Result<usize, StreamE
     Ok(len as usize)
 }
 
-fn map_file(file: &File, len: usize) -> Result<Mapped, StreamError> {
-    if len == 0 {
+fn map_file(file: &File, cap: usize) -> Result<Mapped, StreamError> {
+    let meta_len = file.metadata()?.len();
+    if meta_len > cap as u64 {
+        return Err(StreamError::Oversize {
+            size: usize::try_from(meta_len).unwrap_or(usize::MAX),
+            cap,
+        });
+    }
+    if meta_len == 0 {
         return Ok(Mapped {
             inner: MapInner::Owned(Vec::new()),
         });
@@ -46,11 +53,12 @@ fn map_file(file: &File, len: usize) -> Result<Mapped, StreamError> {
     #[cfg(miri)]
     {
         use std::io::{Read, Seek, SeekFrom};
+        let expect = meta_len as usize;
         let mut file = file.try_clone()?;
         file.seek(SeekFrom::Start(0))?;
         let mut buf = Vec::new();
-        file.take(len as u64).read_to_end(&mut buf)?;
-        if buf.len() != len {
+        file.take(expect as u64).read_to_end(&mut buf)?;
+        if buf.len() != expect {
             return Err(StreamError::Truncated);
         }
         Ok(Mapped {
@@ -59,11 +67,17 @@ fn map_file(file: &File, len: usize) -> Result<Mapped, StreamError> {
     }
     #[cfg(not(miri))]
     {
-        // SAFETY: `len` is the on-disk size already checked against the shard
-        // or volume cap. The mapping is read-only. Callers must not mutate the
-        // file for the lifetime of the returned slice; header validation has
-        // already run on a bounded prefix.
-        let mmap = unsafe { memmap2::MmapOptions::new().len(len).map(file)? };
+        // SAFETY: read-only mapping of `file`. Size is refused if the mapping
+        // is longer than `cap`. Callers must not mutate the file for the
+        // lifetime of the returned slice. Header validation is the caller's
+        // job; this helper only maps bytes.
+        let mmap = unsafe { memmap2::MmapOptions::new().map(file)? };
+        if mmap.len() > cap {
+            return Err(StreamError::Oversize {
+                size: mmap.len(),
+                cap,
+            });
+        }
         Ok(Mapped {
             inner: MapInner::Mmap(mmap),
         })

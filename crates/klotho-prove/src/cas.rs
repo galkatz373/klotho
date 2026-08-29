@@ -13,7 +13,7 @@ pub const MAX_BLOBS: usize = 16_384;
 pub const MAX_BLOB_BYTES: usize = 32 * 1024 * 1024;
 /// Catalog file cap. Tens of MB; refuse before parse.
 pub const CATALOG_CAP: usize = 64 * 1024 * 1024;
-/// KCAS volume file cap. Era 1 tests use tiny volumes.
+/// Per-volume bomb cap; catalog stays tens of MB.
 pub const KCAS_VOLUME_CAP: usize = 4usize * 1024 * 1024 * 1024;
 /// Place shard file cap, including header. Payload stays ≤ [`MAX_BLOB_BYTES`].
 pub const PLACE_SHARD_CAP: usize = 32 * 1024 * 1024;

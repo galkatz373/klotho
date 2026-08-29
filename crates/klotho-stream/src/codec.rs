@@ -1,5 +1,7 @@
 //! Little-endian catalog / KCAS / KPLC codecs. Caps every length prefix.
 
+use std::collections::BTreeSet;
+
 use klotho_core::{
     AabbMm, BlobId, Hash, IVec3, LocusKind, Mm, PhysRequest, PoseMm, ResourceId, Sigil, SimLod,
     Vel3, VelFx, YawMd,
@@ -13,7 +15,7 @@ use klotho_world::{MAX_PLACE_ROWS, PlaceRow, PlaceSnap};
 
 use crate::error::StreamError;
 
-/// Catalog shares `KWRP` with the monolith warp so Distaff sees one family.
+/// Catalog magic. Same four bytes as the monolith warp; version 2 is the split.
 pub const CATALOG_MAGIC: [u8; 4] = *b"KWRP";
 /// Distinct from monolith warp version 1 so `unpack_warp` fails closed.
 pub const CATALOG_VERSION: u8 = 2;
@@ -25,6 +27,8 @@ pub const CATALOG_COMPILER: u32 = 1;
 pub const KCAS_MAGIC: [u8; 4] = *b"KCAS";
 /// Volume version.
 pub const KCAS_VERSION: u8 = 1;
+/// Fixed KCAS prefix: magic, version, pad, blob count.
+pub const KCAS_HEADER_LEN: usize = 12;
 /// Place shard magic.
 pub const KPLC_MAGIC: [u8; 4] = *b"KPLC";
 /// Shard version.
@@ -281,15 +285,12 @@ pub fn encode_kcas(entries: &[KcasEntry<'_>]) -> Result<Vec<u8>, StreamError> {
     Ok(buf)
 }
 
-/// Decode a KCAS volume. Recomputes every blob id.
-pub fn decode_kcas(bytes: &[u8]) -> Result<Vec<(BlobId, LicenseSpan, Vec<u8>)>, StreamError> {
-    if bytes.len() > KCAS_VOLUME_CAP {
-        return Err(StreamError::Oversize {
-            size: bytes.len(),
-            cap: KCAS_VOLUME_CAP,
-        });
+/// Parse the fixed 12-byte KCAS prefix. Caps blob count; does not look at blobs.
+pub fn parse_kcas_header(hdr: &[u8]) -> Result<u32, StreamError> {
+    if hdr.len() < KCAS_HEADER_LEN {
+        return Err(StreamError::Truncated);
     }
-    let mut rest = bytes;
+    let mut rest = hdr;
     let magic = take(&mut rest, 4)?;
     if magic != KCAS_MAGIC {
         return Err(StreamError::Magic);
@@ -303,6 +304,28 @@ pub fn decode_kcas(bytes: &[u8]) -> Result<Vec<(BlobId, LicenseSpan, Vec<u8>)>, 
         return Err(StreamError::Version(version));
     }
     let n = take_capped_count(&mut rest, MAX_BLOBS)?;
+    Ok(n as u32)
+}
+
+/// Decode a KCAS volume. Recomputes every blob id.
+pub fn decode_kcas(bytes: &[u8]) -> Result<Vec<(BlobId, LicenseSpan, Vec<u8>)>, StreamError> {
+    if bytes.len() > KCAS_VOLUME_CAP {
+        return Err(StreamError::Oversize {
+            size: bytes.len(),
+            cap: KCAS_VOLUME_CAP,
+        });
+    }
+    if bytes.len() < 4 {
+        return Err(StreamError::Truncated);
+    }
+    if bytes[..4] != KCAS_MAGIC {
+        return Err(StreamError::Magic);
+    }
+    if bytes.len() < KCAS_HEADER_LEN {
+        return Err(StreamError::Truncated);
+    }
+    let n = parse_kcas_header(&bytes[..KCAS_HEADER_LEN])? as usize;
+    let mut rest = &bytes[KCAS_HEADER_LEN..];
     let mut out = Vec::new();
     for _ in 0..n {
         let stored = take_blob(&mut rest)?;
@@ -352,19 +375,35 @@ pub fn encode_catalog(compiler: u32, desc: &CatalogDesc) -> Result<Vec<u8>, Stre
     }
     let mut places = desc.places.clone();
     places.sort_by_key(|p| p.place);
-    let mut seen = None;
+    let mut names = BTreeSet::new();
+    let mut place_ids = BTreeSet::new();
     for p in &places {
-        if seen == Some(p.place) {
-            return Err(StreamError::PlaceMismatch);
+        if !place_ids.insert(p.place) {
+            return Err(StreamError::Duplicate);
         }
-        seen = Some(p.place);
         check_filename(&p.filename)?;
+        if !names.insert(p.filename.as_str()) {
+            return Err(StreamError::Name);
+        }
     }
+    let mut vol_ids = BTreeSet::new();
     for v in &desc.volumes {
+        if !vol_ids.insert(v.id) {
+            return Err(StreamError::Duplicate);
+        }
         check_filename(&v.filename)?;
+        if !names.insert(v.filename.as_str()) {
+            return Err(StreamError::Name);
+        }
     }
     let mut blobs = desc.blobs.clone();
     blobs.sort_by_key(|(id, _)| *id);
+    let mut blob_ids = BTreeSet::new();
+    for (id, _) in &blobs {
+        if !blob_ids.insert(*id) {
+            return Err(StreamError::Duplicate);
+        }
+    }
 
     let mut buf = Vec::new();
     buf.extend_from_slice(&CATALOG_MAGIC);
@@ -431,26 +470,36 @@ pub fn decode_catalog(bytes: &[u8]) -> Result<(u32, CatalogDesc), StreamError> {
 
     let n_vol = take_capped_count(&mut rest, CATALOG_MAX_VOLUMES)?;
     let mut volumes = Vec::new();
+    let mut vol_ids = BTreeSet::new();
+    let mut names = BTreeSet::new();
     for _ in 0..n_vol {
         let id = take_hash(&mut rest)?;
+        if !vol_ids.insert(id) {
+            return Err(StreamError::Duplicate);
+        }
         let filename = take_str(&mut rest, MAX_NAME_BYTES)?.to_string();
         check_filename(&filename)?;
+        if !names.insert(filename.clone()) {
+            return Err(StreamError::Name);
+        }
         volumes.push(VolumeRef { id, filename });
     }
 
     let n_pl = take_capped_count(&mut rest, CATALOG_MAX_PLACES)?;
     let mut places = Vec::new();
-    let mut seen = None;
+    let mut place_ids = BTreeSet::new();
     for _ in 0..n_pl {
         let place = Sigil::from_raw(take_u128(&mut rest)?);
-        if seen == Some(place) {
-            return Err(StreamError::PlaceMismatch);
+        if !place_ids.insert(place) {
+            return Err(StreamError::Duplicate);
         }
-        seen = Some(place);
         let aabb = take_aabb(&mut rest)?;
         let shard_id = take_hash(&mut rest)?;
         let filename = take_str(&mut rest, MAX_NAME_BYTES)?.to_string();
         check_filename(&filename)?;
+        if !names.insert(filename.clone()) {
+            return Err(StreamError::Name);
+        }
         let prefix = take_hash(&mut rest)?;
         places.push(PlaceRef {
             place,
@@ -463,8 +512,12 @@ pub fn decode_catalog(bytes: &[u8]) -> Result<(u32, CatalogDesc), StreamError> {
 
     let n_blob = take_capped_count(&mut rest, MAX_BLOBS)?;
     let mut blobs = Vec::new();
+    let mut blob_ids = BTreeSet::new();
     for _ in 0..n_blob {
         let blob = take_blob(&mut rest)?;
+        if !blob_ids.insert(blob) {
+            return Err(StreamError::Duplicate);
+        }
         let vol = take_hash(&mut rest)?;
         blobs.push((blob, vol));
     }
@@ -804,7 +857,7 @@ fn take_str<'a>(rest: &mut &'a [u8], cap: usize) -> Result<&'a str, StreamError>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use klotho_core::LocusKind;
+    use klotho_core::{IVec3, LocusKind};
 
     fn place(id: u128) -> Sigil {
         Sigil::pack(LocusKind::Place, 0, id).unwrap()
@@ -1047,6 +1100,74 @@ mod tests {
             blobs: Vec::new(),
         };
         assert_eq!(encode_catalog(1, &desc), Err(StreamError::Name));
+    }
+
+    #[test]
+    fn catalog_duplicate_blob_or_volume_refused() {
+        let vol = VolumeRef {
+            id: Hash::from_bytes([1; 32]),
+            filename: "vol-0000.kcas".into(),
+        };
+        let blob = BlobId::from_bytes([2; 32]);
+        let desc = CatalogDesc {
+            canon_hash: Hash::ZERO,
+            volumes: vec![vol.clone(), vol.clone()],
+            places: Vec::new(),
+            blobs: Vec::new(),
+        };
+        assert_eq!(encode_catalog(1, &desc), Err(StreamError::Duplicate));
+        let desc = CatalogDesc {
+            canon_hash: Hash::ZERO,
+            volumes: vec![vol.clone()],
+            places: Vec::new(),
+            blobs: vec![(blob, vol.id), (blob, vol.id)],
+        };
+        assert_eq!(encode_catalog(1, &desc), Err(StreamError::Duplicate));
+        let other = VolumeRef {
+            id: Hash::from_bytes([3; 32]),
+            filename: "vol-0000.kcas".into(),
+        };
+        let desc = CatalogDesc {
+            canon_hash: Hash::ZERO,
+            volumes: vec![vol, other],
+            places: Vec::new(),
+            blobs: Vec::new(),
+        };
+        assert_eq!(encode_catalog(1, &desc), Err(StreamError::Name));
+    }
+
+    #[test]
+    fn catalog_decode_duplicate_place_fails() {
+        let a = PlaceRef {
+            place: place(1),
+            aabb: AabbMm::from_point(IVec3::ZERO),
+            shard_id: Hash::from_bytes([1; 32]),
+            filename: "place-a.kplc".into(),
+            prefix: Hash::ZERO,
+        };
+        let mut b = a.clone();
+        b.place = place(2);
+        b.filename = "place-b.kplc".into();
+        b.shard_id = Hash::from_bytes([2; 32]);
+        let desc = CatalogDesc {
+            canon_hash: Hash::ZERO,
+            volumes: Vec::new(),
+            places: vec![a, b],
+            blobs: Vec::new(),
+        };
+        let mut bytes = encode_catalog(1, &desc).unwrap();
+        let p1 = place(1).raw().to_le_bytes();
+        let p2 = place(2).raw().to_le_bytes();
+        let mut replaced = false;
+        for i in 0..bytes.len().saturating_sub(16) {
+            if bytes[i..i + 16] == p2 {
+                bytes[i..i + 16].copy_from_slice(&p1);
+                replaced = true;
+                break;
+            }
+        }
+        assert!(replaced);
+        assert_eq!(decode_catalog(&bytes), Err(StreamError::Duplicate));
     }
 
     #[test]

@@ -22,10 +22,10 @@ mod map;
 pub use catalog::{StreamCatalog, blob, map_place};
 pub use codec::{
     CATALOG_COMPILER, CATALOG_KIND, CATALOG_MAGIC, CATALOG_MAX_PLACES, CATALOG_MAX_VOLUMES,
-    CATALOG_VERSION, CatalogDesc, KCAS_MAGIC, KCAS_VERSION, KPLC_MAGIC, KPLC_VERSION, KcasEntry,
-    PLACE_HEADER_LEN, PlaceHeader, PlaceRef, VolumeRef, decode_catalog, decode_kcas,
-    encode_catalog, encode_kcas, encode_place_shard, file_hash, parse_place_header,
-    place_snap_from_bytes,
+    CATALOG_VERSION, CatalogDesc, KCAS_HEADER_LEN, KCAS_MAGIC, KCAS_VERSION, KPLC_MAGIC,
+    KPLC_VERSION, KcasEntry, PLACE_HEADER_LEN, PlaceHeader, PlaceRef, VolumeRef, decode_catalog,
+    decode_kcas, encode_catalog, encode_kcas, encode_place_shard, file_hash, parse_kcas_header,
+    parse_place_header, place_snap_from_bytes,
 };
 pub use error::StreamError;
 pub use klotho_prove::{CATALOG_CAP, KCAS_VOLUME_CAP, MAX_BLOB_BYTES, MAX_BLOBS, PLACE_SHARD_CAP};
@@ -47,5 +47,6 @@ mod tests {
         assert_eq!(KCAS_MAGIC, *b"KCAS");
         assert_eq!(KPLC_MAGIC, *b"KPLC");
         assert_eq!(PLACE_HEADER_LEN, 96);
+        assert_eq!(KCAS_HEADER_LEN, 12);
     }
 }

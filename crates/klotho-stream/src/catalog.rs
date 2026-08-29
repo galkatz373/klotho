@@ -567,7 +567,7 @@ mod tests {
             blobs: vec![(blob_id, vol_hash)],
         };
         let mut bytes = encode_catalog(1, &desc).unwrap();
-        // Second identical blob row: bump count and append another (id, vol) pair.
+        // Count is u32 immediately before the one blob row (two 32-byte hashes).
         let n = bytes.len();
         let count_off = n - 4 - 64;
         bytes[count_off..count_off + 4].copy_from_slice(&2u32.to_le_bytes());

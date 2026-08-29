@@ -2,7 +2,8 @@
 
 use klotho_canon::RiteId;
 use klotho_core::{
-    AabbMm, BlobId, IVec3, PhysRequest, PoseMm, ResourceId, Sigil, Support, Tick, Vel3,
+    AabbMm, AffordanceId, BlobId, IVec3, PhysRequest, PoseMm, ResourceId, Sigil, Support, Tick,
+    Vel3,
 };
 use klotho_ir::Rel;
 use klotho_trace::{RiteEnd, TraceBody, TraceEvent};
@@ -84,6 +85,16 @@ impl SpecDelta {
     /// Write a quantity without a Trace event (tests / Conserve pre-read).
     pub fn set_qty(&mut self, s: Sigil, r: ResourceId, v: i32) -> Result<(), WorldError> {
         self.proj.set_qty(s, r, v)
+    }
+
+    /// Mark a spawned template with its matching affordance so Cap sees it this tick.
+    pub fn set_affordance(
+        &mut self,
+        s: Sigil,
+        a: AffordanceId,
+        on: bool,
+    ) -> Result<(), WorldError> {
+        self.proj.set_affordance(s, a, on)
     }
 
     /// Write a `PHYS_REQ` column. Not a quantity.

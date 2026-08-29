@@ -876,12 +876,16 @@ impl Projection {
                     self.reindex_ix(i);
                 }
             }
+            TraceBody::Spawned { sigil, at, .. } => {
+                if self.insert_locus(*sigil, LocusKind::Relic).is_ok() {
+                    let _ = self.set_pose(*sigil, *at);
+                }
+            }
             TraceBody::SaveRequested
             | TraceBody::Emitted { .. }
             | TraceBody::Uttered { .. }
             | TraceBody::PlaceLoaded { .. }
             | TraceBody::PlaceEvicted { .. }
-            | TraceBody::Spawned { .. }
             | TraceBody::Despawned { .. } => {}
             TraceBody::Learned { mind, fact } => {
                 if let Some(i) = self.packed(*mind) {

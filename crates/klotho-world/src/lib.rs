@@ -286,11 +286,12 @@ mod tests {
     }
 
     #[test]
-    fn place_spawn_despawn_apply_is_noop() {
+    fn spawn_apply_inserts_place_and_despawn_remain_noop() {
         let mut w = opaque_world();
         let s = relic(1);
         let place = Sigil::pack(LocusKind::Place, 0, 2).unwrap();
         let pose = PoseMm::new(Mm(10), Mm(50), Mm(20), YawMd(30));
+        let spawned_at = PoseMm::new(Mm(3), Mm(4), Mm(5), YawMd(6));
         {
             let mut m = w.mutate();
             m.insert_locus(s, LocusKind::Relic).unwrap();
@@ -304,7 +305,7 @@ mod tests {
                 TraceBody::Spawned {
                     template: 1,
                     sigil: relic(9),
-                    at: PoseMm::default(),
+                    at: spawned_at,
                 },
                 TraceBody::Despawned {
                     sigil: s,
@@ -315,11 +316,12 @@ mod tests {
             }
         }
         let view = w.view();
-        assert_eq!(view.loci().count(), 2);
+        assert_eq!(view.loci().count(), 3);
         assert_eq!(view.pose(s), Some(pose));
         assert!(view.has_rel(s, Rel::In, place));
         assert_eq!(view.qty(s, ResourceId(0)), 7);
-        assert!(view.pose(relic(9)).is_none());
+        assert_eq!(view.kind(relic(9)), Some(LocusKind::Relic));
+        assert_eq!(view.pose(relic(9)), Some(spawned_at));
     }
 
     #[test]

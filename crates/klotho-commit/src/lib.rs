@@ -467,6 +467,34 @@ mod tests {
     }
 
     #[test]
+    fn use_on_hittable_picks_melee() {
+        let src = r#"[
+            AddAffordance(Affordance(id: "Hittable", requires: [], grants: [], conflicts: [])),
+            AddRite(RiteGraph(id: "fire", cap_steps: 8, cap_ticks: 8, entry: 0, nodes: [
+                Spend("stamina", 10, 2),
+                Complete(Success),
+                Complete(Fail),
+            ])),
+            AddRite(RiteGraph(id: "melee", cap_steps: 8, cap_ticks: 8, entry: 0, nodes: [
+                Wait(2, Some(Aim)),
+                Complete(Success),
+            ])),
+        ]"#;
+        let (mut k, s, stamina) = kernel_with(src, 10);
+        let dummy = actor(2);
+        k.world_mut().insert_locus(dummy, LocusKind::Actor).unwrap();
+        let hittable = k.canon().affordance_id("Hittable").unwrap();
+        k.world_mut().set_affordance(dummy, hittable, true).unwrap();
+        let mut p = player_use();
+        p.target = IntentTarget::Sigil(dummy);
+        k.ingest(Proposal::Player(p));
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(d.rejects.is_empty(), "{d:?}");
+        assert_eq!(k.world().view().qty(s, stamina), 10);
+        assert!(k.world().view().first_rite(s).is_some());
+    }
+
+    #[test]
     fn spawn_and_phys_req_commit() {
         let src = r#"[
             AddRite(RiteGraph(id: "ember.spawn", cap_steps: 8, cap_ticks: 8, entry: 0, nodes: [
@@ -486,8 +514,12 @@ mod tests {
             } => Some((sigil, template)),
             _ => None,
         });
-        assert_eq!(spawned, Some((s, 0)), "{d:?}");
-        assert_eq!(k.world().view().loci().count(), 1);
+        let (spawned, template) = spawned.expect("spawned");
+        assert_eq!(template, 0, "{d:?}");
+        assert_ne!(spawned, s);
+        assert_eq!(spawned.kind(), Some(LocusKind::Relic));
+        assert_eq!(k.world().view().loci().count(), 2);
+        assert!(k.world().view().contains(spawned));
         let req = k.world().view().phys_req(s).expect("phys_req");
         assert_eq!(req.lin.x, 3);
         assert_eq!(req.ang.y, 1);

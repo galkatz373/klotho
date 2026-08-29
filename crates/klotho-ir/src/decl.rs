@@ -204,7 +204,7 @@ pub enum RiteOp {
     Awake(Slot),
     /// Alias of Halt with Success/Fail.
     Complete(Status),
-    /// Emit `TraceBody::Spawned`. Locus apply is later.
+    /// Emit `TraceBody::Spawned` and insert a Relic from the interned template.
     Spawn(Name),
     /// Write [`klotho_core::PhysRequest`] on the acting locus. Not a `Qty`.
     PhysReq {

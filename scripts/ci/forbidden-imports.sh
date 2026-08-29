@@ -67,6 +67,7 @@ check_gameplay_jobs() {
 }
 check_gameplay_jobs examples/hearth-slice
 check_gameplay_jobs examples/ash-slice
+check_gameplay_jobs examples/ember-slice
 check_gameplay_jobs crates/klotho-author
 
 # Gameplay, motion, and sim must not import phys internals.
@@ -89,6 +90,7 @@ check_no_phys() {
 }
 check_no_phys examples/hearth-slice
 check_no_phys examples/ash-slice
+check_no_phys examples/ember-slice
 check_no_phys crates/klotho-author
 check_no_phys crates/klotho-motion
 check_no_phys crates/klotho-sim
@@ -115,6 +117,7 @@ check_no_stream() {
 }
 check_no_stream examples/hearth-slice
 check_no_stream examples/ash-slice
+check_no_stream examples/ember-slice
 check_no_stream crates/klotho-author
 check_no_stream crates/klotho-sim
 check_no_stream crates/klotho-commit

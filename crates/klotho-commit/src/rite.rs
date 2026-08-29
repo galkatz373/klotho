@@ -1,8 +1,8 @@
 //! Same-tick rite burst. `WAIT` yields and commits (K21).
 #![allow(clippy::too_many_arguments)]
 
-use klotho_canon::{Canon, CookedRite, EvalCtx, eval_pred};
-use klotho_core::{PhysRequest, RejectReason, ResourceId, Sigil, Tick};
+use klotho_canon::{Canon, CookedRite, EvalCtx, PredStore, eval_pred};
+use klotho_core::{LocusKind, PhysRequest, RejectReason, ResourceId, Sigil, Tick};
 use klotho_ir::{BindSrc, Channel, Rel, RiteOp, Slot, SourceKind, Status, Verb};
 use klotho_trace::{RelTag, RiteEnd, TraceBody, TraceEvent};
 use klotho_world::{RiteMachine, SpecDelta};
@@ -218,15 +218,25 @@ pub fn run_burst(
                     .iter()
                     .position(|n| n.as_str() == name.as_str())
                     .ok_or(RejectReason::Budget)? as u16;
+                let sigil = alloc_spawn_sigil(spec)?;
                 let at = spec.view().pose(actor).unwrap_or_default();
                 spec.push(TraceEvent::new(
                     tick,
                     TraceBody::Spawned {
                         template,
-                        sigil: actor,
+                        sigil,
                         at,
                     },
                 ));
+                if !spec.view().contains(sigil) {
+                    return Err(RejectReason::Budget);
+                }
+                if let Some(n) = canon.facts.get(template as usize) {
+                    if let Some(aff) = canon.affordance_id(n.as_str()) {
+                        spec.set_affordance(sigil, aff, true)
+                            .map_err(|_| RejectReason::Budget)?;
+                    }
+                }
                 pc = next.ok_or(RejectReason::Budget)?;
             }
             RiteOp::PhysReq { lin, ang } => {
@@ -345,20 +355,17 @@ pub fn drive_rite(
             .iter()
             .find(|r| r.id == rid)
             .ok_or(RejectReason::Budget)?;
+        let tgt = machine.target.or(target);
+        let hit = rite.name.as_str() == "melee";
         let _ = run_burst(
-            spec,
-            canon,
-            rite,
-            actor,
-            machine.target.or(target),
-            verb,
-            source,
-            claimed,
-            machine.pc,
-            rite_steps,
-            pred_ops,
+            spec, canon, rite, actor, tgt, verb, source, claimed, machine.pc, rite_steps, pred_ops,
             tick,
         )?;
+        if hit {
+            drive_apply_hit(
+                spec, canon, tgt, verb, source, claimed, rite_steps, pred_ops, tick,
+            )?;
+        }
         return Ok(());
     }
     let Some(rite) = pick_start_rite(canon, spec, verb, target) else {
@@ -372,6 +379,7 @@ pub fn drive_rite(
             target,
         },
     ));
+    let hit = verb == Verb::Fire || rite.name.as_str() == "melee";
     let _ = run_burst(
         spec,
         canon,
@@ -386,7 +394,7 @@ pub fn drive_rite(
         pred_ops,
         tick,
     )?;
-    if verb == Verb::Fire {
+    if hit {
         drive_apply_hit(
             spec, canon, target, verb, source, claimed, rite_steps, pred_ops, tick,
         )?;
@@ -422,6 +430,11 @@ fn pick_use_rite<'a>(
 ) -> Option<&'a CookedRite> {
     let view = spec.view();
     if let Some(t) = target {
+        if hittable(&view, canon, t) {
+            if let Some(r) = named_rite(canon, "melee") {
+                return Some(r);
+            }
+        }
         if let Some(id) = canon.affordance_id("Lockable") {
             if view.has_affordance(t, id) {
                 return named_rite(canon, "lockpick");
@@ -437,6 +450,18 @@ fn pick_use_rite<'a>(
         }
     }
     named_rite(canon, "lockpick").or_else(|| named_rite(canon, "ignite"))
+}
+
+fn hittable(view: &klotho_world::WorldView<'_>, canon: &Canon, t: Sigil) -> bool {
+    let Some(id) = canon.affordance_id("Hittable") else {
+        return false;
+    };
+    if view.has_affordance(t, id) {
+        return true;
+    }
+    let mut n = Vec::new();
+    PredStore::related(view, t, Rel::PartOf, &mut n);
+    n.iter().any(|p| view.has_affordance(*p, id))
 }
 
 fn burning(view: &klotho_world::WorldView<'_>, canon: &Canon, s: Sigil) -> bool {
@@ -457,7 +482,7 @@ fn drive_apply_hit(
     pred_ops: &mut u32,
     tick: Tick,
 ) -> Result<(), RejectReason> {
-    let Some(victim) = target else {
+    let Some(raw) = target else {
         return Ok(());
     };
     if !spec
@@ -467,30 +492,97 @@ fn drive_apply_hit(
     {
         return Ok(());
     }
-    let Some(hit) = named_rite(canon, "apply_hit") else {
+    let victim = part_of_parent(spec, raw).unwrap_or(raw);
+    if let Some(hit) = named_rite(canon, "apply_hit") {
+        spec.push(TraceEvent::new(
+            tick,
+            TraceBody::RiteBegan {
+                actor: victim,
+                rite: hit.id.0,
+                target: Some(victim),
+            },
+        ));
+        let _ = run_burst(
+            spec,
+            canon,
+            hit,
+            victim,
+            Some(victim),
+            verb,
+            source,
+            claimed,
+            hit.chunk.entry,
+            rite_steps,
+            pred_ops,
+            tick,
+        )?;
+    }
+    drive_collapse(
+        spec, canon, victim, verb, source, claimed, rite_steps, pred_ops, tick,
+    )
+}
+
+fn drive_collapse(
+    spec: &mut SpecDelta,
+    canon: &Canon,
+    victim: Sigil,
+    verb: Verb,
+    source: SourceKind,
+    claimed: &[Channel],
+    rite_steps: &mut u32,
+    pred_ops: &mut u32,
+    tick: Tick,
+) -> Result<(), RejectReason> {
+    let Some(mark) = canon.affordance_id("Destructible") else {
+        return Ok(());
+    };
+    if !spec.view().has_affordance(victim, mark) {
+        return Ok(());
+    }
+    let Some(res) = canon.resource_id("integrity") else {
+        return Ok(());
+    };
+    if spec.view().qty(victim, res) > 0 {
+        return Ok(());
+    }
+    let Some(collapse) = named_rite(canon, "collapse") else {
         return Ok(());
     };
     spec.push(TraceEvent::new(
         tick,
         TraceBody::RiteBegan {
             actor: victim,
-            rite: hit.id.0,
+            rite: collapse.id.0,
             target: Some(victim),
         },
     ));
     let _ = run_burst(
         spec,
         canon,
-        hit,
+        collapse,
         victim,
         Some(victim),
         verb,
         source,
         claimed,
-        hit.chunk.entry,
+        collapse.chunk.entry,
         rite_steps,
         pred_ops,
         tick,
     )?;
     Ok(())
+}
+
+fn part_of_parent(spec: &SpecDelta, s: Sigil) -> Option<Sigil> {
+    let mut n = Vec::new();
+    PredStore::related(&spec.view(), s, Rel::PartOf, &mut n);
+    n.into_iter().find(|&p| p != s)
+}
+
+fn alloc_spawn_sigil(spec: &SpecDelta) -> Result<Sigil, RejectReason> {
+    let mut next: u128 = 0;
+    for s in spec.view().loci() {
+        next = next.max(s.id().saturating_add(1));
+    }
+    Sigil::pack(LocusKind::Relic, 0, next).ok_or(RejectReason::Budget)
 }

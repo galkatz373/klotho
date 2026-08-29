@@ -1,0 +1,26 @@
+[
+    PlayerIntent(
+        player: PlayerId(0),
+        at: Tick(0),
+        verb: Use,
+        target: Name("dummy_0"),
+        analog: Analog(phase: 0, stick_x: 0, stick_z: 0, look_yaw: YawMd(0), look_pitch: 0),
+        agency: Agency(claimed: [], assist: None),
+    ),
+    PlayerIntent(
+        player: PlayerId(0),
+        at: Tick(0),
+        verb: Time,
+        target: None,
+        analog: Analog(phase: 0, stick_x: 0, stick_z: 0, look_yaw: YawMd(0), look_pitch: 0),
+        agency: Agency(claimed: [Aim], assist: None),
+    ),
+    PlayerIntent(
+        player: PlayerId(0),
+        at: Tick(0),
+        verb: Time,
+        target: None,
+        analog: Analog(phase: 0, stick_x: 0, stick_z: 0, look_yaw: YawMd(0), look_pitch: 0),
+        agency: Agency(claimed: [Aim], assist: None),
+    ),
+]

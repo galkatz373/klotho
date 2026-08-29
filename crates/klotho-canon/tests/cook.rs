@@ -47,6 +47,31 @@ fn ash_diffs_cook() {
 }
 
 #[test]
+fn ember_diffs_cook() {
+    let src = include_str!("../fixtures/ember.ron");
+    let diffs: Vec<CanonDiff> = from_ron(src).unwrap();
+    let canon = cook_diffs(&diffs).expect("ember diffs must cook");
+    assert!(canon.affordance_id("Fragment").is_some());
+    assert!(canon.affordance_id("Destructible").is_some());
+    assert!(canon.law_id("projectile.cap").is_some());
+    assert!(canon.law_id("fragment.cap").is_some());
+    assert!(canon.rite_id("melee").is_some());
+    assert!(canon.rite_id("collapse").is_some());
+    let collapse = canon
+        .rites
+        .iter()
+        .find(|r| r.name.as_str() == "collapse")
+        .expect("collapse");
+    let spawns = collapse
+        .chunk
+        .instrs
+        .iter()
+        .filter(|i| matches!(i.op, klotho_ir::RiteOp::Spawn(_)))
+        .count();
+    assert_eq!(spawns, 64);
+}
+
+#[test]
 fn lockable_requires_key_or_rite_pred() {
     let diffs = [CanonDiff::AddAffordance(Affordance {
         id: Name::from("Lockable"),

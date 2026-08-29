@@ -30,6 +30,7 @@ members = [
     "crates/klotho-net",
     "examples/hearth-slice",
     "examples/ash-slice",
+    "examples/ember-slice",
 ]
 
 [workspace.package]

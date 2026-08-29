@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Ember headless goldens (AAA-09): melee WAIT, hit hulls, Cap 512, SPAWN collapse"
+description = "Ember headless goldens: melee WAIT, hit hulls, Cap 512, SPAWN collapse"
 publish = false
 
 [dependencies]

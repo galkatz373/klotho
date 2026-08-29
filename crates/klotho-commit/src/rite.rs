@@ -493,6 +493,8 @@ fn drive_apply_hit(
         return Ok(());
     }
     let victim = part_of_parent(spec, raw).unwrap_or(raw);
+    // Collapse once: PartOf is torn down in apply_hit, so sample it first.
+    let collapse = may_collapse(spec, canon, victim);
     if let Some(hit) = named_rite(canon, "apply_hit") {
         spec.push(TraceEvent::new(
             tick,
@@ -517,9 +519,12 @@ fn drive_apply_hit(
             tick,
         )?;
     }
-    drive_collapse(
-        spec, canon, victim, verb, source, claimed, rite_steps, pred_ops, tick,
-    )
+    if collapse {
+        drive_collapse(
+            spec, canon, victim, verb, source, claimed, rite_steps, pred_ops, tick,
+        )?;
+    }
+    Ok(())
 }
 
 fn drive_collapse(
@@ -571,6 +576,18 @@ fn drive_collapse(
         tick,
     )?;
     Ok(())
+}
+
+fn may_collapse(spec: &SpecDelta, canon: &Canon, victim: Sigil) -> bool {
+    let Some(mark) = canon.affordance_id("Destructible") else {
+        return false;
+    };
+    if !spec.view().has_affordance(victim, mark) {
+        return false;
+    }
+    let mut n = Vec::new();
+    PredStore::related(&spec.view(), victim, Rel::PartOf, &mut n);
+    !n.is_empty()
 }
 
 fn part_of_parent(spec: &SpecDelta, s: Sigil) -> Option<Sigil> {

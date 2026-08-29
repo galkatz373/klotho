@@ -1,4 +1,5 @@
-//! Ember headless slice (AAA-09). Same `CommitKernel` as Hearth/Ash.
+//! Ember headless slice: melee WAIT, hit hulls, Cap, SPAWN collapse.
+//! Same `CommitKernel` as Hearth/Ash.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -201,7 +202,6 @@ fn apply_hulls(k: &mut CommitKernel) {
     k.world_mut()
         .set_pose(dummy, PoseMm::default())
         .expect("dummy pose");
-    // Body hull sits far +X so the extra hit-volume hull is what a near hit would land on.
     k.world_mut()
         .set_hull(
             dummy,

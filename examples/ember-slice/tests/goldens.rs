@@ -102,13 +102,20 @@ fn golden_03_hit_volume_hull_damages_parent() {
 }
 
 #[test]
-fn golden_04_513th_projectile_cap_rejected() {
+fn golden_04_512_projectiles_admit_513th_rejected() {
     let mut k = boot();
+    let player = pin(&k, "player");
+    let dummy = pin(&k, "dummy_0");
+    let ammo = k.canon().resource_id("ammo").unwrap();
+    let health = k.canon().resource_id("health").unwrap();
+    plant_projectiles(&mut k, 512);
+    let fire = intents(include_str!("../fixtures/golden_03_fire.ron"));
+    let ds = replay(&mut k, &fire);
+    assert!(ds.iter().all(|d| d.rejects.is_empty()), "{ds:?}");
+    assert_eq!(k.world().view().qty(player, ammo), 9);
+    assert_eq!(k.world().view().qty(dummy, health), 75);
     plant_projectiles(&mut k, 513);
-    let ds = replay(
-        &mut k,
-        &intents(include_str!("../fixtures/golden_03_fire.ron")),
-    );
+    let ds = replay(&mut k, &fire);
     assert!(
         ds.iter().any(|d| d
             .rejects
@@ -116,6 +123,7 @@ fn golden_04_513th_projectile_cap_rejected() {
             .any(|(_, r)| matches!(r, RejectReason::Law(_)))),
         "{ds:?}"
     );
+    assert_eq!(k.world().view().qty(player, ammo), 9);
 }
 
 #[test]
@@ -137,6 +145,22 @@ fn golden_05_64_fragment_collapse() {
     assert_eq!(k.world().view().loci().count(), before + 64);
     let spawned: usize = ds.iter().map(|d| spawn_count(&d.events)).sum();
     assert_eq!(spawned, 64, "{ds:?}");
+}
+
+#[test]
+fn golden_05b_second_fire_does_not_re_collapse() {
+    let mut k = boot();
+    let crate_s = pin(&k, "crate");
+    let fire = intents(include_str!("../fixtures/golden_05_collapse.ron"));
+    let ds1 = replay(&mut k, &fire);
+    assert!(ds1.iter().all(|d| d.rejects.is_empty()), "{ds1:?}");
+    assert_eq!(fragment_count(&k), 64);
+    assert!(!k.world().view().has_rel(crate_s, Rel::PartOf, crate_s));
+    let ds2 = replay(&mut k, &fire);
+    assert!(ds2.iter().all(|d| d.rejects.is_empty()), "{ds2:?}");
+    assert_eq!(fragment_count(&k), 64);
+    let spawned: usize = ds2.iter().map(|d| spawn_count(&d.events)).sum();
+    assert_eq!(spawned, 0, "{ds2:?}");
 }
 
 #[test]

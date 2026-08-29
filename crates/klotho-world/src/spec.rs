@@ -87,7 +87,7 @@ impl SpecDelta {
         self.proj.set_qty(s, r, v)
     }
 
-    /// Mark a spawned template with its matching affordance so Cap sees it this tick.
+    /// Affordance bit. Spawn uses this so Cap sees the mark this tick.
     pub fn set_affordance(
         &mut self,
         s: Sigil,

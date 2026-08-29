@@ -256,9 +256,9 @@ pub enum TraceBody {
         /// Place locus.
         place: Sigil,
     },
-    /// Template spawn. Apply inserts the locus at `sigil`.
+    /// Recorded spawn. Apply inserts a Relic at `sigil` and pose `at`.
     Spawned {
-        /// Interned template id.
+        /// Interned fact name (not a cooked locus).
         template: u16,
         /// Newly allocated locus.
         sigil: Sigil,

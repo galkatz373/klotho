@@ -204,7 +204,7 @@ pub enum RiteOp {
     Awake(Slot),
     /// Alias of Halt with Success/Fail.
     Complete(Status),
-    /// Emit `TraceBody::Spawned` and insert a Relic from the interned template.
+    /// Emit `TraceBody::Spawned` and insert a Relic. `Name` is a facts intern.
     Spawn(Name),
     /// Write [`klotho_core::PhysRequest`] on the acting locus. Not a `Qty`.
     PhysReq {

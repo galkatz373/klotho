@@ -11,6 +11,12 @@ use crate::error::ProveError;
 pub const MAX_BLOBS: usize = 16_384;
 /// Maximum size of a single blob in bytes (HLD §4).
 pub const MAX_BLOB_BYTES: usize = 32 * 1024 * 1024;
+/// Catalog file cap. Tens of MB; refuse before parse.
+pub const CATALOG_CAP: usize = 64 * 1024 * 1024;
+/// KCAS volume file cap. Era 1 tests use tiny volumes.
+pub const KCAS_VOLUME_CAP: usize = 4usize * 1024 * 1024 * 1024;
+/// Place shard file cap, including header. Payload stays ≤ [`MAX_BLOB_BYTES`].
+pub const PLACE_SHARD_CAP: usize = 32 * 1024 * 1024;
 
 /// In-memory CAS keyed by [`BlobId`]. Iteration is ordered (K25).
 #[derive(Clone, Debug, Default)]
@@ -100,6 +106,15 @@ mod tests {
         let b = cas.put(b"b").unwrap();
         assert_ne!(a, b);
         assert_eq!(cas.len(), 2);
+    }
+
+    #[test]
+    fn caps_match_documented_numbers() {
+        assert_eq!(MAX_BLOBS, 16_384);
+        assert_eq!(MAX_BLOB_BYTES, 32 * 1024 * 1024);
+        assert_eq!(CATALOG_CAP, 64 * 1024 * 1024);
+        assert_eq!(KCAS_VOLUME_CAP, 4usize * 1024 * 1024 * 1024);
+        assert_eq!(PLACE_SHARD_CAP, 32 * 1024 * 1024);
     }
 
     #[test]

@@ -4,14 +4,16 @@
 //! (K6 / Q4). Every blob carries a [`LicenseSpan`]. Quantized little-endian
 //! verts; cook hash is stable across OS (no host floats in hashed bytes).
 //!
-//! Depends on ir, prove, canon, manifest. Packs a cooked `.warp` (not `KLTH`
-//! CAS blobs) as little-endian sections.
+//! Depends on ir, prove, canon, manifest, stream. Packs a cooked `.warp`
+//! (not `KLTH` CAS blobs) as little-endian sections, or a version-2 catalog
+//! plus KCAS volumes and Place shards.
 //!
 //! `#![forbid(unsafe_code)]`.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod catalog;
 mod cook;
 mod encode;
 mod error;
@@ -19,6 +21,7 @@ mod header;
 mod kit;
 mod warp;
 
+pub use catalog::{CATALOG_FILE, CatalogManifest, PlaceCatalogEntry, write_catalog};
 pub use cook::{Binding, COMPILER_VERSION, Cooked, blob_of, cook_doc, cook_with, digest_of};
 pub use error::CompileError;
 pub use header::{

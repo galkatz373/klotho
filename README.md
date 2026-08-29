@@ -67,13 +67,16 @@ klotho/
   crates/klotho-commit/   # CommitKernel, Proposal, AdmitBuf, rite VM
   crates/klotho-sim/      # phase loop, budget timers, profile hook
   crates/klotho-jobs/     # steal queues, island propose (K34)
+  crates/klotho-interest/ # SimLod from observer pose
   crates/klotho-input/    # device sample → PlayerIntent
   crates/klotho-space/    # 2.5D AABB / swept-capsule SyncProposer (non-Actor)
+  crates/klotho-phys/     # scalar XPBD island proposer
   crates/klotho-motion/   # verb→clip + root-motion SyncProposer (Actors)
   crates/klotho-mind/     # GOAP SyncProposer (MindIntent, no Agency)
   crates/klotho-infer/    # InferHost stub; returns InferIntent (no &mut World)
   crates/klotho-manifest/ # Visual/Sonic/Ui manifests; tables pub(crate)
-  crates/klotho-compile/  # kitbash retrieval cook → CAS → .warp
+  crates/klotho-compile/  # kitbash retrieval cook → CAS → .warp / sharded catalog
+  crates/klotho-stream/   # Place shard pager, KCAS volumes (mmap after header validate)
   crates/klotho-platform/ # window, OS events, Look accum (no world mutation)
   crates/klotho-render/   # wgpu clustered meshes, Presenter, render thread
   crates/klotho-audio/    # grains from Trace, one bed, integer mix
@@ -89,4 +92,4 @@ klotho/
   docs/pred-lang.md       # Predicate / Rite RFC (PR 04a)
 ```
 
-Further crates land in the order of the HLD PR plan. `klotho-sim` will never depend on `klotho-infer` or `klotho-jobs`. Unsafe is forbidden except in `klotho-infer`, `klotho-render`, `klotho-audio`, `klotho-platform`, and `klotho-jobs`.
+Further crates land in the order of the HLD PR plan. `klotho-sim` will never depend on `klotho-infer` or `klotho-jobs`. Unsafe is forbidden except in `klotho-infer`, `klotho-render`, `klotho-audio`, `klotho-platform`, `klotho-jobs`, `klotho-phys`, and `klotho-stream`.

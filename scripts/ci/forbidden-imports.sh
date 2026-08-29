@@ -94,6 +94,49 @@ check_no_phys crates/klotho-motion
 check_no_phys crates/klotho-sim
 check_no_phys crates/klotho-commit
 
+# Gameplay, sim, and commit must not import stream. Stream does not import commit
+# and must not enable world/mutate.
+check_no_stream() {
+  local dir="$1"
+  if [[ ! -d "$dir" ]]; then
+    return 0
+  fi
+  if command -v rg >/dev/null 2>&1; then
+    if rg -n --glob '!target/**' 'klotho_stream::|klotho-stream' "$dir"; then
+      echo "forbidden_imports: $dir must not import klotho-stream" >&2
+      fail=1
+    fi
+  else
+    if grep -RIn -E 'klotho_stream::|klotho-stream' "$dir" >/dev/null 2>&1; then
+      echo "forbidden_imports: $dir must not import klotho-stream" >&2
+      fail=1
+    fi
+  fi
+}
+check_no_stream examples/hearth-slice
+check_no_stream examples/ash-slice
+check_no_stream crates/klotho-author
+check_no_stream crates/klotho-sim
+check_no_stream crates/klotho-commit
+
+if [[ -d crates/klotho-stream ]]; then
+  if command -v rg >/dev/null 2>&1; then
+    if rg -n --glob '!target/**' 'klotho_commit::|klotho-commit' crates/klotho-stream; then
+      echo "klotho-stream must not import klotho-commit" >&2
+      fail=1
+    fi
+  else
+    if grep -RIn -E 'klotho_commit::|klotho-commit' crates/klotho-stream >/dev/null 2>&1; then
+      echo "klotho-stream must not import klotho-commit" >&2
+      fail=1
+    fi
+  fi
+  if grep -E 'mutate' crates/klotho-stream/Cargo.toml >/dev/null 2>&1; then
+    echo "klotho-stream must not enable klotho-world/mutate" >&2
+    fail=1
+  fi
+fi
+
 # InferHost::{new,submit,poll} may appear only in klotho-runtime and klotho-infer.
 if [[ -d crates ]]; then
   hits=""

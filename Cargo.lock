@@ -982,6 +982,7 @@ dependencies = [
  "klotho-ir",
  "klotho-manifest",
  "klotho-prove",
+ "klotho-stream",
  "ron",
  "serde",
 ]
@@ -1170,6 +1171,7 @@ dependencies = [
  "klotho-platform",
  "klotho-sim",
  "klotho-space",
+ "klotho-stream",
  "klotho-ui",
  "klotho-world",
 ]
@@ -1196,6 +1198,17 @@ dependencies = [
  "klotho-debug",
  "klotho-ir",
  "klotho-world",
+]
+
+[[package]]
+name = "klotho-stream"
+version = "0.1.0"
+dependencies = [
+ "klotho-core",
+ "klotho-ir",
+ "klotho-prove",
+ "klotho-world",
+ "memmap2",
 ]
 
 [[package]]

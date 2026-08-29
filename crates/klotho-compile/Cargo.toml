@@ -15,6 +15,7 @@ klotho-core.workspace = true
 klotho-ir.workspace = true
 klotho-manifest.workspace = true
 klotho-prove.workspace = true
+klotho-stream.workspace = true
 ron.workspace = true
 serde.workspace = true
 

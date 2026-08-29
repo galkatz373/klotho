@@ -19,6 +19,7 @@ members = [
     "crates/klotho-infer",
     "crates/klotho-manifest",
     "crates/klotho-compile",
+    "crates/klotho-stream",
     "crates/klotho-platform",
     "crates/klotho-render",
     "crates/klotho-audio",
@@ -59,7 +60,9 @@ klotho-mind = { path = "crates/klotho-mind" }
 klotho-infer = { path = "crates/klotho-infer" }
 klotho-manifest = { path = "crates/klotho-manifest" }
 klotho-compile = { path = "crates/klotho-compile" }
+klotho-stream = { path = "crates/klotho-stream" }
 klotho-platform = { path = "crates/klotho-platform" }
+memmap2 = "0.9"
 klotho-render = { path = "crates/klotho-render" }
 klotho-audio = { path = "crates/klotho-audio" }
 klotho-ui = { path = "crates/klotho-ui" }

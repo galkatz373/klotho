@@ -22,7 +22,7 @@ mod error;
 mod license;
 
 pub use artifact::ArtifactKind;
-pub use cas::{Cas, MAX_BLOB_BYTES, MAX_BLOBS};
+pub use cas::{CATALOG_CAP, Cas, KCAS_VOLUME_CAP, MAX_BLOB_BYTES, MAX_BLOBS, PLACE_SHARD_CAP};
 pub use dag::{Activity, Agent, ProvenanceDag, ProvenanceId, ProvenanceKind, ProvenanceNode};
 pub use digest::{blob_id_of, hash_bytes};
 pub use error::ProveError;

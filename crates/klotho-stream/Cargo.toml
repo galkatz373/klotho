@@ -1,0 +1,29 @@
+[package]
+name = "klotho-stream"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Klotho stream: Place shard pager and CAS volume mapper"
+readme = false
+publish = false
+
+[dependencies]
+klotho-core.workspace = true
+klotho-ir.workspace = true
+klotho-prove.workspace = true
+klotho-world.workspace = true
+
+[target.'cfg(not(miri))'.dependencies]
+memmap2.workspace = true
+
+[lints.rust]
+unsafe_code = "allow"
+missing_docs = "warn"
+
+[lints.clippy]
+dbg_macro = "deny"
+disallowed_methods = "deny"
+todo = "warn"
+unimplemented = "warn"

@@ -14,7 +14,7 @@ use klotho_core::{
 };
 use klotho_ir::{CanonDiff, Rel, from_ron};
 use klotho_motion::{ClipSet, Motion};
-use klotho_trace::{ProposalKind, TraceBody};
+use klotho_trace::{ProposalKind, RelTag, RiteEnd, TraceBody};
 use klotho_world::{PlaceRow, PlaceSnap, World};
 
 fn intents(src: &str) -> Vec<klotho_ir::PlayerIntent> {
@@ -197,6 +197,50 @@ fn golden_02_possess_piloted_by_one_driver() {
 }
 
 #[test]
+fn golden_02b_use_while_piloting_fails_without_second_rel() {
+    let mut k = boot();
+    let player = pin(&k, "player");
+    let vehicle = pin(&k, "vehicle");
+    possess(&mut k);
+    let possess_id = k.canon().rite_id("possess").expect("possess").0;
+    let ds = replay(
+        &mut k,
+        &intents(include_str!("../fixtures/golden_02_possess.ron")),
+    );
+    assert_eq!(ds.len(), 1, "{ds:?}");
+    assert!(ds[0].rejects.is_empty(), "{ds:?}");
+    assert!(
+        ds[0].events.iter().any(|e| matches!(
+            e.body,
+            TraceBody::RiteEnded {
+                actor,
+                rite,
+                status: RiteEnd::Fail,
+            } if actor == player && rite == possess_id
+        )),
+        "{ds:?}"
+    );
+    assert!(
+        !ds[0].events.iter().any(|e| matches!(
+            e.body,
+            TraceBody::RelAdd {
+                rel: RelTag::PILOTED_BY,
+                ..
+            }
+        )),
+        "{ds:?}"
+    );
+    let pilots: Vec<_> = k
+        .world()
+        .view()
+        .loci()
+        .filter(|&s| k.world().view().has_rel(s, Rel::PilotedBy, vehicle))
+        .collect();
+    assert_eq!(pilots, vec![player]);
+    assert!(k.world().view().first_rite(player).is_none());
+}
+
+#[test]
 fn golden_03_possess_at_t_nacks_motion_root() {
     let mut k = boot();
     let player = pin(&k, "player");
@@ -337,6 +381,25 @@ fn golden_07_phys_off_vehicle_does_not_move() {
     assert!(ds.iter().all(|d| d.rejects.is_empty()), "{ds:?}");
     assert_eq!(k.world().view().pose(vehicle).unwrap(), before);
     assert!(k.world().view().phys_req(player).is_some());
+}
+
+#[test]
+fn golden_07b_steer_before_possess_nacks_steer_piloted() {
+    let mut k = boot();
+    let player = pin(&k, "player");
+    let vehicle = pin(&k, "vehicle");
+    let law = k.canon().law_id("steer.piloted").expect("steer.piloted");
+    let ds = replay(
+        &mut k,
+        &intents(include_str!("../fixtures/golden_07_steer.ron")),
+    );
+    assert!(
+        ds.iter()
+            .any(|d| d.rejects.iter().any(|(_, r)| *r == RejectReason::Law(law))),
+        "{ds:?}"
+    );
+    assert!(k.world().view().phys_req(player).is_none());
+    assert!(!k.world().view().has_rel(player, Rel::PilotedBy, vehicle));
 }
 
 #[test]

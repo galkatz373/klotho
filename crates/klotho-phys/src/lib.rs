@@ -437,4 +437,33 @@ mod tests {
             "pre-propose AttachedTo skips Motion"
         );
     }
+
+    #[test]
+    fn drift_vehicle_moves_on_steer() {
+        let mut k = drift_slice::boot();
+        let player = drift_slice::pin(&k, "player");
+        let vehicle = drift_slice::pin(&k, "vehicle");
+        let possess: Vec<klotho_ir::PlayerIntent> = from_ron(include_str!(
+            "../../../examples/drift-slice/fixtures/golden_02_possess.ron"
+        ))
+        .unwrap();
+        let ds = drift_slice::replay(&mut k, &possess);
+        assert!(ds.iter().all(|d| d.rejects.is_empty()), "{ds:?}");
+        assert!(k.world().view().has_rel(player, Rel::PilotedBy, vehicle));
+        let z0 = k.world().view().pose(vehicle).unwrap().z;
+        let steer: Vec<klotho_ir::PlayerIntent> = from_ron(include_str!(
+            "../../../examples/drift-slice/fixtures/golden_07_steer.ron"
+        ))
+        .unwrap();
+        let ds = drift_slice::replay(&mut k, &steer);
+        assert!(ds.iter().all(|d| d.rejects.is_empty()), "{ds:?}");
+        assert!(k.world().view().phys_req(player).is_some());
+        k.partition();
+        let mut phys = Phys;
+        let d = k.step(Tick(1), Budget::HEARTH, &mut [&mut phys]).unwrap();
+        assert!(d.rejects.is_empty(), "{d:?}");
+        assert!(k.world().view().phys_req(player).is_none());
+        let z1 = k.world().view().pose(vehicle).unwrap().z;
+        assert_ne!(z1, z0, "folded driver PHYS_REQ must translate the vehicle");
+    }
 }

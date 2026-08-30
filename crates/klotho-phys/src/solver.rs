@@ -169,6 +169,17 @@ fn collect_bodies(island: u16, view: &WorldView<'_>) -> Vec<Body> {
             v[1] += req.lin.y as f32;
             v[2] += req.lin.z as f32;
         }
+        // Steer writes PHYS_REQ on the driver; only the Relic parent is a body.
+        for child in view.loci() {
+            if view.attach_parent(child) != Some(s) {
+                continue;
+            }
+            if let Some(req) = view.phys_req(child) {
+                v[0] += req.lin.x as f32;
+                v[1] += req.lin.y as f32;
+                v[2] += req.lin.z as f32;
+            }
+        }
         out.push(Body {
             sigil: s,
             local,

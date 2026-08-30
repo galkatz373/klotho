@@ -510,6 +510,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8b14ccef22fc6f5a8f4d7d768562a182c04ce9a3b3157b91390b52ddfdf1a76"
 
 [[package]]
+name = "drift-slice"
+version = "0.1.0"
+dependencies = [
+ "klotho-canon",
+ "klotho-commit",
+ "klotho-core",
+ "klotho-ir",
+ "klotho-motion",
+ "klotho-trace",
+ "klotho-world",
+]
+
+[[package]]
 name = "ed25519"
 version = "2.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1119,6 +1132,7 @@ dependencies = [
 name = "klotho-phys"
 version = "0.1.0"
 dependencies = [
+ "drift-slice",
  "klotho-canon",
  "klotho-commit",
  "klotho-core",

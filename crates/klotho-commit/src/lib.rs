@@ -26,6 +26,11 @@ pub use klotho_trace::TraceDelta;
 pub use partition::{Partition, partition_islands};
 pub use proposal::{Proposal, ResidencyOp};
 
+/// PlaceSnap rows applied on a residency load (`TraceBody::PlaceLoaded.n`).
+pub const METRIC_RESIDENCY_ROWS_APPLIED: &str = "klotho.residency.rows_applied";
+/// Wall time of a Place load `step`, microseconds.
+pub const METRIC_STREAM_HITCH_US: &str = "klotho.stream.hitch_us";
+
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;

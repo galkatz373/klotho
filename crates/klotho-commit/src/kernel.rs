@@ -249,6 +249,8 @@ impl CommitKernel {
                 for (child, local) in locals {
                     spec.set_pose(child, compose_yaw_only(*pose, local))
                         .map_err(|_| RejectReason::Budget)?;
+                    spec.clear_phys_req(child)
+                        .map_err(|_| RejectReason::Budget)?;
                 }
             }
             Proposal::SpaceDelta {

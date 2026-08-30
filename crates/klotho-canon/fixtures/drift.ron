@@ -1,0 +1,43 @@
+[
+    AddAffordance(Affordance(
+        id: "Driveable",
+        requires: [],
+        grants: ["Use", "Steer"],
+        conflicts: [],
+    )),
+    AddAffordance(Affordance(id: "Opaque", requires: [], grants: [], conflicts: [])),
+    AddLaw(Law(
+        id: "never_clip_closed",
+        when: Or(SourceIs(Phys), Or(SourceIs(Space), SourceIs(Motion))),
+        body: Pred(must: Not(SweptHitsOpaqueClosed), ought: None),
+    )),
+    AddLaw(Law(
+        id: "steer.piloted",
+        when: EqVerb(Steer),
+        body: Pred(
+            must: ExistsRelated(
+                of: Self,
+                rel: PilotedBy,
+                pred: Affordance(Other, "Driveable"),
+            ),
+            ought: None,
+        ),
+    )),
+    AddRite(RiteGraph(id: "possess", cap_steps: 8, cap_ticks: 4, entry: 0, nodes: [
+        { pc: 0, op: Bind(Target) },
+        { pc: 1, op: Guard(Affordance(Target, "Driveable"), fail: 9) },
+        { pc: 2, op: Guard(Not(ExistsRelated(
+            of: Self,
+            rel: PilotedBy,
+            pred: Affordance(Other, "Driveable"),
+        )), fail: 9) },
+        { pc: 3, op: RelAdd(Self, PilotedBy, Target) },
+        { pc: 4, op: Awake(Target) },
+        { pc: 5, op: Complete(Success) },
+        { pc: 9, op: Complete(Fail) },
+    ])),
+    AddRite(RiteGraph(id: "steer", cap_steps: 8, cap_ticks: 4, entry: 0, nodes: [
+        { pc: 0, op: PhysReq(lin: IVec3(x: 0, y: 0, z: 40), ang: IVec3(x: 0, y: 0, z: 0)) },
+        { pc: 1, op: Complete(Success) },
+    ])),
+]

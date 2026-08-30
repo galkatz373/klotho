@@ -419,6 +419,7 @@ fn pick_start_rite<'a>(
         Verb::Pay => named_rite(canon, "trade.pay"),
         Verb::Fire => named_rite(canon, "fire").or_else(fallback),
         Verb::Use | Verb::Open => pick_use_rite(canon, spec, target).or_else(fallback),
+        Verb::Steer => named_rite(canon, "steer"),
         _ => None,
     }
 }
@@ -433,6 +434,11 @@ fn pick_use_rite<'a>(
         if hittable(&view, canon, t) {
             if let Some(r) = named_rite(canon, "melee") {
                 return Some(r);
+            }
+        }
+        if let Some(id) = canon.affordance_id("Driveable") {
+            if view.has_affordance(t, id) {
+                return named_rite(canon, "possess");
             }
         }
         if let Some(id) = canon.affordance_id("Lockable") {

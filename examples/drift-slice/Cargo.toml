@@ -1,23 +1,22 @@
 [package]
-name = "klotho-phys"
+name = "drift-slice"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Klotho phys: scalar XPBD island proposer (no FFI)"
-readme = false
+description = "Drift headless goldens: Driveable, PilotedBy, seam, AABB floor"
 publish = false
 
 [dependencies]
+klotho-canon.workspace = true
 klotho-commit.workspace = true
 klotho-core.workspace = true
+klotho-ir.workspace = true
+klotho-trace.workspace = true
 klotho-world.workspace = true
 
 [dev-dependencies]
-drift-slice = { path = "../../examples/drift-slice" }
-klotho-canon.workspace = true
-klotho-ir.workspace = true
 klotho-motion.workspace = true
 
 [lints]

@@ -103,7 +103,7 @@ pub struct PaletteSlot {
     pub bones: u8,
 }
 
-/// Trace-driven decal. Presentation TTL only; not hashed, no Sigil.
+/// Trace-driven decal. Presentation TTL only; no identity field.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct Decal {
     /// CAS recipe (texture / mesh).
@@ -118,7 +118,7 @@ pub struct Decal {
     pub ttl_ticks: u16,
 }
 
-/// One-shot debris mesh. Manifest TTL only; no Sigil.
+/// One-shot debris mesh. Manifest TTL only; no identity field.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct OneShotMesh {
     /// CAS recipe (mesh).
@@ -340,7 +340,7 @@ impl VisualManifest {
         t.extract(epoch)
     }
 
-    /// Merge presentation-only VFX into this buffer. `from_v2` leaves VFX empty.
+    /// Appends `decals` and `one_shots` onto `self`. Other columns are unchanged.
     #[must_use]
     pub fn with_vfx(
         mut self,
@@ -496,11 +496,31 @@ mod tests {
             tag: MaterialTag::Stone,
             palette: 0,
         };
+        let cluster_pose = PoseMm::new(Mm(9), Mm(0), Mm(9), YawMd::ZERO);
+        let cluster_mat = MaterialRef {
+            tag: MaterialTag::Metal,
+            palette: 1,
+        };
+        let light = LightStub {
+            pos: IVec3 {
+                x: 0,
+                y: 1000,
+                z: 0,
+            },
+            kind: LightKind::Emissive,
+        };
         let decal = Decal {
             blob,
             pose,
             material,
             born: Tick(1),
+            ttl_ticks: 4,
+        };
+        let decal2 = Decal {
+            blob,
+            pose: PoseMm::new(Mm(3), Mm(0), Mm(4), YawMd::ZERO),
+            material,
+            born: Tick(2),
             ttl_ticks: 4,
         };
         let one = OneShotMesh {
@@ -510,11 +530,31 @@ mod tests {
             born: Tick(1),
             ttl_ticks: 4,
         };
-        let vis = VisualManifest::empty(Epoch(2)).with_vfx([decal], [one]);
+        let vis = VisualManifest::from_v2(
+            Epoch(2),
+            Tick(7),
+            [(blob, cluster_pose, cluster_mat)],
+            [],
+            [],
+            [],
+            [light],
+            [],
+            PostFlags::ADVENTURE,
+            [],
+        );
+        assert_eq!(vis.clusters.len(), 1);
+        assert!(vis.decals.is_empty());
+        let vis = vis.with_vfx([decal], [one]).with_vfx([decal2], []);
         assert_eq!(vis.epoch, Epoch(2));
-        assert_eq!(vis.decals, vec![decal]);
+        assert_eq!(vis.tick, Tick(7));
+        assert_eq!(vis.post, PostFlags::ADVENTURE);
+        assert_eq!(vis.clusters.len(), 1);
+        assert_eq!(vis.clusters[0].blob, blob);
+        assert_eq!(vis.clusters[0].pose, cluster_pose);
+        assert_eq!(vis.materials, vec![cluster_mat]);
+        assert_eq!(vis.lights, vec![light]);
+        assert_eq!(vis.decals, vec![decal, decal2]);
         assert_eq!(vis.one_shots, vec![one]);
-        assert!(vis.clusters.is_empty());
 
         let Decal {
             blob: _,

@@ -78,4 +78,25 @@ mod tests {
         assert!(!probe_grid_ready(&g, Some(&[0])));
         assert_eq!(probe_sample(&g, [0, 0, 0], Some(&[0])), None);
     }
+
+    #[test]
+    fn non_positive_spacing_is_skipped() {
+        let mut g = grid();
+        g.spacing_mm = 0;
+        assert!(!probe_grid_usable(&g));
+        assert!(!probe_grid_ready(&g, Some(&[0])));
+        assert_eq!(probe_sample(&g, [0, 0, 0], Some(&[0])), None);
+        g.spacing_mm = -2000;
+        assert!(!probe_grid_ready(&g, Some(&[0])));
+        assert_eq!(probe_sample(&g, [0, 0, 0], Some(&[0])), None);
+    }
+
+    #[test]
+    fn empty_dim_is_skipped() {
+        let mut g = grid();
+        g.dim = (0, 4, 8);
+        assert!(!probe_grid_usable(&g));
+        assert!(!probe_grid_ready(&g, Some(&[0])));
+        assert_eq!(probe_sample(&g, [0, 0, 0], Some(&[0])), None);
+    }
 }

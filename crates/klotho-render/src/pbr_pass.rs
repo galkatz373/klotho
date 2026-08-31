@@ -40,7 +40,8 @@ pub(crate) struct PbrResources {
     frame_buf: wgpu::Buffer,
     lights_buf: wgpu::Buffer,
     tiles_buf: wgpu::Buffer,
-    post_buf: wgpu::Buffer,
+    post_half_buf: wgpu::Buffer,
+    post_full_buf: wgpu::Buffer,
     frame_bg: wgpu::BindGroup,
     shadow_layer_views: [wgpu::TextureView; 3],
     _shadow_tex: wgpu::Texture,
@@ -232,7 +233,8 @@ impl PbrResources {
         let frame_buf = ubuf(device, "pbr-frame-ub", FRAME_BYTES);
         let lights_buf = ubuf(device, "pbr-lights-ub", LIGHTS_BYTES);
         let tiles_buf = ubuf(device, "pbr-tiles-ub", TILES_BYTES);
-        let post_buf = ubuf(device, "pbr-post-ub", POST_BYTES);
+        let post_half_buf = ubuf(device, "pbr-post-half-ub", POST_BYTES);
+        let post_full_buf = ubuf(device, "pbr-post-full-ub", POST_BYTES);
 
         let shadow_tex = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("pbr-shadow"),
@@ -370,7 +372,8 @@ impl PbrResources {
             frame_buf,
             lights_buf,
             tiles_buf,
-            post_buf,
+            post_half_buf,
+            post_full_buf,
             frame_bg,
             _shadow_tex: shadow_tex,
             shadow_layer_views,
@@ -497,11 +500,30 @@ pub(crate) fn present_pbr(
 
     let prepared = prepare_draws(gpu, vis, &drawn);
     let need_post = plan.ssgi || plan.bloom || plan.taa;
+    let mut flags = 0u32;
+    if plan.ssgi {
+        flags |= 1;
+    }
+    if plan.bloom {
+        flags |= 2;
+    }
+    if plan.taa && gpu.pbr.as_ref().is_some_and(|p| p.history_valid) {
+        flags |= 4;
+    }
+    gpu.last_post_flags = flags;
     {
         let pbr = gpu.pbr.as_ref().expect("pbr");
         gpu.queue.write_buffer(&pbr.frame_buf, 0, &frame_bytes);
         gpu.queue.write_buffer(&pbr.lights_buf, 0, &lights_bytes);
         gpu.queue.write_buffer(&pbr.tiles_buf, 0, &tiles_bytes);
+        write_post(
+            &gpu.queue,
+            &pbr.post_half_buf,
+            (gpu.width / 2).max(1),
+            (gpu.height / 2).max(1),
+            0,
+        );
+        write_post(&gpu.queue, &pbr.post_full_buf, gpu.width, gpu.height, flags);
         let mut encoder = gpu
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -569,13 +591,6 @@ pub(crate) fn present_pbr(
         }
 
         if plan.ssgi {
-            write_post(
-                &gpu.queue,
-                &pbr.post_buf,
-                (gpu.width / 2).max(1),
-                (gpu.height / 2).max(1),
-                0,
-            );
             let bg = ssgi_bg(gpu, pbr);
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("pbr-ssgi"),
@@ -589,14 +604,7 @@ pub(crate) fn present_pbr(
             pass.draw(0..3, 0..1);
         }
         if plan.bloom {
-            write_post(
-                &gpu.queue,
-                &pbr.post_buf,
-                (gpu.width / 2).max(1),
-                (gpu.height / 2).max(1),
-                0,
-            );
-            let bg = blit_bg(gpu, pbr, &pbr.pbr_color_view);
+            let bg = blit_bg(gpu, pbr, &pbr.pbr_color_view, &pbr.post_half_buf);
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("pbr-bloom"),
                 color_attachments: &[Some(load_store(&pbr.bloom_view))],
@@ -609,17 +617,6 @@ pub(crate) fn present_pbr(
             pass.draw(0..3, 0..1);
         }
         if need_post {
-            let mut flags = 0u32;
-            if plan.ssgi {
-                flags |= 1;
-            }
-            if plan.bloom {
-                flags |= 2;
-            }
-            if plan.taa && pbr.history_valid {
-                flags |= 4;
-            }
-            write_post(&gpu.queue, &pbr.post_buf, gpu.width, gpu.height, flags);
             let bg = composite_bg(gpu, pbr);
             {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -633,8 +630,7 @@ pub(crate) fn present_pbr(
                 pass.set_bind_group(0, &bg, &[]);
                 pass.draw(0..3, 0..1);
             }
-            write_post(&gpu.queue, &pbr.post_buf, gpu.width, gpu.height, 0);
-            let blit_bg = blit_bg(gpu, pbr, &pbr.resolve_view);
+            let blit_bg = blit_bg(gpu, pbr, &pbr.resolve_view, &pbr.post_full_buf);
             {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("pbr-blit"),
@@ -673,29 +669,38 @@ struct Prepared {
     _buf: wgpu::Buffer,
 }
 
-fn prepare_draws(gpu: &WgpuPresenter, vis: &VisualManifest, drawn: &[usize]) -> Vec<Prepared> {
-    let pbr = gpu.pbr.as_ref().expect("pbr");
-    let mut prepared = Vec::new();
+/// Opaque (`drawn`) + masked instances. Skinned lists have no GPU palette here.
+pub(crate) fn pbr_draw_items(
+    vis: &VisualManifest,
+    drawn: &[usize],
+) -> Vec<(BlobId, klotho_core::PoseMm, MaterialRef)> {
+    let mut out = Vec::new();
     for i in drawn {
         let cluster = vis.clusters[*i];
-        if !gpu.meshes.contains_key(&cluster.blob) {
-            continue;
-        }
         let mat = vis.materials.get(*i).copied().unwrap_or(MaterialRef {
             tag: MaterialTag::Stone,
             palette: 0,
         });
-        prepared.push(make_prepared(gpu, pbr, cluster.blob, cluster.pose, mat));
+        out.push((cluster.blob, cluster.pose, mat));
     }
     for (i, cluster) in vis.masked.iter().enumerate() {
-        if !gpu.meshes.contains_key(&cluster.blob) {
-            continue;
-        }
         let mat = vis.masked_materials.get(i).copied().unwrap_or(MaterialRef {
             tag: MaterialTag::Stone,
             palette: 0,
         });
-        prepared.push(make_prepared(gpu, pbr, cluster.blob, cluster.pose, mat));
+        out.push((cluster.blob, cluster.pose, mat));
+    }
+    out
+}
+
+fn prepare_draws(gpu: &WgpuPresenter, vis: &VisualManifest, drawn: &[usize]) -> Vec<Prepared> {
+    let pbr = gpu.pbr.as_ref().expect("pbr");
+    let mut prepared = Vec::new();
+    for (blob, pose, mat) in pbr_draw_items(vis, drawn) {
+        if !gpu.meshes.contains_key(&blob) {
+            continue;
+        }
+        prepared.push(make_prepared(gpu, pbr, blob, pose, mat));
     }
     prepared
 }
@@ -750,7 +755,12 @@ fn draw_prepared(
     }
 }
 
-fn blit_bg(gpu: &WgpuPresenter, pbr: &PbrResources, src: &wgpu::TextureView) -> wgpu::BindGroup {
+fn blit_bg(
+    gpu: &WgpuPresenter,
+    pbr: &PbrResources,
+    src: &wgpu::TextureView,
+    post_buf: &wgpu::Buffer,
+) -> wgpu::BindGroup {
     gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("pbr-blit-bg"),
         layout: &pbr.blit_layout,
@@ -765,7 +775,7 @@ fn blit_bg(gpu: &WgpuPresenter, pbr: &PbrResources, src: &wgpu::TextureView) -> 
             },
             wgpu::BindGroupEntry {
                 binding: 2,
-                resource: pbr.post_buf.as_entire_binding(),
+                resource: post_buf.as_entire_binding(),
             },
         ],
     })
@@ -786,7 +796,7 @@ fn ssgi_bg(gpu: &WgpuPresenter, pbr: &PbrResources) -> wgpu::BindGroup {
             },
             wgpu::BindGroupEntry {
                 binding: 2,
-                resource: pbr.post_buf.as_entire_binding(),
+                resource: pbr.post_half_buf.as_entire_binding(),
             },
             wgpu::BindGroupEntry {
                 binding: 3,
@@ -815,7 +825,7 @@ fn composite_bg(gpu: &WgpuPresenter, pbr: &PbrResources) -> wgpu::BindGroup {
             },
             wgpu::BindGroupEntry {
                 binding: 2,
-                resource: pbr.post_buf.as_entire_binding(),
+                resource: pbr.post_full_buf.as_entire_binding(),
             },
             wgpu::BindGroupEntry {
                 binding: 5,
@@ -1303,4 +1313,51 @@ fn make_probe(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Texture, wgp
         ..Default::default()
     });
     (t, v)
+}
+
+#[cfg(test)]
+mod tests {
+    use klotho_core::{BlobId, Epoch, Mm, PoseMm, Tick, YawMd};
+    use klotho_manifest::{
+        GpuHandle, MaterialRef, MaterialTag, PaletteSlot, PostFlags, SkinnedInstance,
+        VisualManifest,
+    };
+
+    use super::pbr_draw_items;
+
+    #[test]
+    fn skinned_instances_are_not_drawn() {
+        let opaque = BlobId::from_bytes([1; 32]);
+        let skinned = BlobId::from_bytes([2; 32]);
+        let mat = MaterialRef {
+            tag: MaterialTag::Stone,
+            palette: 0,
+        };
+        let vis = VisualManifest::from_v2(
+            Epoch::ZERO,
+            Tick::ZERO,
+            [(opaque, PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd::ZERO), mat)],
+            [],
+            [SkinnedInstance {
+                blob: skinned,
+                gpu: GpuHandle::NONE,
+                pose: PoseMm::new(Mm(10), Mm(0), Mm(0), YawMd::ZERO),
+                palette: 0,
+                material: mat,
+            }],
+            [PaletteSlot {
+                gpu: GpuHandle::NONE,
+                bones: 16,
+            }],
+            [],
+            [],
+            PostFlags::ADVENTURE,
+            [],
+        );
+        assert_eq!(vis.skinned.len(), 1);
+        let items = pbr_draw_items(&vis, &[0]);
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].0, opaque);
+        assert!(items.iter().all(|i| i.0 != skinned));
+    }
 }

@@ -1,4 +1,5 @@
-// Fullscreen post: SSGI, bloom extract, history blend, blit.
+// UV from the sampled color size so half-res passes stay independent of the
+// full-res composite uniform.
 
 struct Post {
     screen: vec2<f32>,
@@ -26,7 +27,8 @@ fn vs_fs(@builtin(vertex_index) vid: u32) -> @builtin(position) vec4<f32> {
 }
 
 fn uv_of(p: vec4<f32>) -> vec2<f32> {
-    return p.xy / max(post.screen, vec2<f32>(1.0));
+    let dim = vec2<f32>(textureDimensions(src));
+    return p.xy / max(dim, vec2<f32>(1.0));
 }
 
 @fragment

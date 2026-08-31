@@ -46,10 +46,16 @@ pub struct WgpuPresenter {
     pub last_drawn: u16,
     /// Last present: how many blobs were rejected at header check.
     pub last_rejected: u16,
-    /// Wall time of the last [`Self::present_to`], microseconds.
+    /// Encode + GPU-wait wall time of the last [`Self::present_to`], microseconds.
+    ///
+    /// After `submit` the presenter `poll(Wait)`s so this is not CPU encode
+    /// alone. It is not a timestamp query (`TIMESTAMP_QUERY` stays off on
+    /// downlevel). Fail-open compares this to [`GpuBudget::us_present`].
     pub last_present_us: u32,
     /// Cascades rendered on the last present (0 on the unlit path).
     pub last_cascades: u8,
+    /// Composite `post.flags` packed into the full-res uniform (0 on unlit).
+    pub last_post_flags: u32,
     pub(crate) probe_present: BTreeSet<BlobId>,
     pub(crate) pbr: Option<PbrResources>,
 }
@@ -218,6 +224,7 @@ impl WgpuPresenter {
             last_rejected: 0,
             last_present_us: 0,
             last_cascades: 0,
+            last_post_flags: 0,
             probe_present: BTreeSet::new(),
             pbr: None,
         }
@@ -309,10 +316,15 @@ impl WgpuPresenter {
         match plan.perm {
             PresenterPerm::Unlit => {
                 self.last_cascades = 0;
+                self.last_post_flags = 0;
                 self.present_unlit(color, vis, observer, budget);
             }
             _ => pbr_pass::present_pbr(self, color, vis, observer, budget, plan),
         }
+        let _ = self.device.poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
         let us = start.elapsed().as_micros();
         self.last_present_us = u32::try_from(us).unwrap_or(u32::MAX);
     }
@@ -670,6 +682,7 @@ mod tests {
         p.present(&vis, Observer::origin(), GpuBudget::HEARTH);
         assert_eq!(p.last_drawn, 1);
         assert_eq!(p.last_cascades, 0);
+        assert_eq!(p.last_post_flags, 0);
         assert!(p.pbr.is_none());
     }
 
@@ -685,6 +698,8 @@ mod tests {
         assert_eq!(p.last_drawn, 1);
         assert_eq!(p.last_cascades, 3);
         assert!(p.pbr.is_some());
+        assert_ne!(p.last_post_flags & 1, 0);
+        assert_ne!(p.last_post_flags & 2, 0);
     }
 
     #[test]
@@ -713,6 +728,7 @@ mod tests {
         p.present(&vis, Observer::origin(), GpuBudget::AAA_SHOOTER);
         assert_eq!(p.last_drawn, 1);
         assert_eq!(p.last_cascades, 1);
+        assert_eq!(p.last_post_flags, 0);
     }
 
     #[test]

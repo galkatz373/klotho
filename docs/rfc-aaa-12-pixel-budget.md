@@ -87,7 +87,11 @@ Budget is time + cluster cap. It does not select the lighting permutation.
 3. Drop extra cascades (adventure 3 → 1).
 
 Steps 2–3 use the previous frame's `WgpuPresenter::last_present_us`
-against `GpuBudget.us_present`. Over-budget never rejects a commit.
+against `GpuBudget.us_present`. That metric is encode + `device.poll(Wait)`
+after `submit`, not a GPU timestamp query (`TIMESTAMP_QUERY` is off on
+downlevel). A GPU-bound frame can therefore trip fail-open; a CPU-only
+encode time cannot. Over-budget never rejects a commit. CI still does
+not fail if this machine exceeds 11 ms.
 
 ## Honest CI
 
@@ -96,6 +100,7 @@ There is **no locked reference GPU** in this repo. The gate is:
 - constants on `GpuBudget` matching the HLD table
 - CPU permutation / tile / probe-skip tests
 - optional GPU timing recorded on `WgpuPresenter::last_present_us`
+  (encode + poll-wait; not a timestamp query)
 
 GPU tests skip when `try_headless()` is `None`. When they run they
 assert draw/cascade outcomes. They do **not** fail CI if a present

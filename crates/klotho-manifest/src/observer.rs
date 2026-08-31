@@ -68,6 +68,20 @@ impl GpuBudget {
         us_extract: 1_500,
         max_clusters: 256,
     };
+
+    /// 1080p adventure high: forward+ + cascades + probes.
+    pub const AAA_ADVENTURE: Self = Self {
+        us_present: 11_000,
+        us_extract: 1_500,
+        max_clusters: 2048,
+    };
+
+    /// 1080p shooter competitive: no GI, at most one cascade.
+    pub const AAA_SHOOTER: Self = Self {
+        us_present: 8_000,
+        us_extract: 1_500,
+        max_clusters: 1024,
+    };
 }
 
 impl Default for GpuBudget {
@@ -95,8 +109,15 @@ mod tests {
     }
 
     #[test]
-    fn hearth_gpu_budget_matches_hld() {
+    fn gpu_budget_profiles_match_hld() {
         assert_eq!(GpuBudget::HEARTH.us_present, 7_000);
         assert_eq!(GpuBudget::HEARTH.us_extract, 1_500);
+        assert_eq!(GpuBudget::HEARTH.max_clusters, 256);
+        assert_eq!(GpuBudget::AAA_ADVENTURE.us_present, 11_000);
+        assert_eq!(GpuBudget::AAA_ADVENTURE.us_extract, 1_500);
+        assert_eq!(GpuBudget::AAA_ADVENTURE.max_clusters, 2048);
+        assert_eq!(GpuBudget::AAA_SHOOTER.us_present, 8_000);
+        assert_eq!(GpuBudget::AAA_SHOOTER.us_extract, 1_500);
+        assert_eq!(GpuBudget::AAA_SHOOTER.max_clusters, 1024);
     }
 }

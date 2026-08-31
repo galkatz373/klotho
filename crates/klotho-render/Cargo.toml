@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Klotho wgpu presenter: clustered static meshes, one shader family, render thread"
+description = "Klotho wgpu presenter: clustered forward+ PBR, unlit lambert goldens, render thread"
 readme = false
 publish = false
 

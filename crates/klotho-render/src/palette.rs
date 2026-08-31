@@ -1,8 +1,8 @@
-//! Closed material → albedo. Palette index selects a style family; v1 uses tag.
+//! Closed material → albedo and metalness/roughness. Unlit uses albedo only.
 
 use klotho_manifest::{MaterialRef, MaterialTag};
 
-/// Linear RGB in 0..=1. Emissive is the unlit permutation in the one shader.
+/// Linear RGB in 0..=1. Emissive is the unlit permutation in the lambert shader.
 #[must_use]
 pub fn albedo(mat: MaterialRef) -> [f32; 4] {
     let rgb = match mat.tag {
@@ -23,6 +23,19 @@ pub fn albedo(mat: MaterialRef) -> [f32; 4] {
     ]
 }
 
+/// Metalness / roughness constants. Emissive skips lighting in the PBR path.
+#[must_use]
+pub fn metalness_roughness(tag: MaterialTag) -> (f32, f32) {
+    match tag {
+        MaterialTag::Organic => (0.0, 0.8),
+        MaterialTag::Metal => (1.0, 0.35),
+        MaterialTag::Stone => (0.0, 0.7),
+        MaterialTag::Cloth => (0.0, 0.9),
+        MaterialTag::Emissive => (0.0, 1.0),
+        MaterialTag::Water => (0.0, 0.05),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -39,5 +52,15 @@ mod tests {
         });
         assert_ne!(a, b);
         assert_eq!(a[3], 1.0);
+    }
+
+    #[test]
+    fn metal_and_stone_pbr_params_differ() {
+        let metal = metalness_roughness(MaterialTag::Metal);
+        let stone = metalness_roughness(MaterialTag::Stone);
+        assert_ne!(metal, stone);
+        assert_eq!(metal.0, 1.0);
+        assert_eq!(stone.0, 0.0);
+        assert!(metal.1 < stone.1);
     }
 }

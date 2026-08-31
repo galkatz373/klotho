@@ -138,6 +138,123 @@ pub(crate) fn dist2_xz(pose: PoseMm, observer: Observer) -> i64 {
     dx.saturating_mul(dx).saturating_add(dz.saturating_mul(dz))
 }
 
+pub(crate) fn eye_metres(observer: Observer) -> [f32; 3] {
+    [
+        observer.eye.x.0 as f32 / 1000.0,
+        observer.eye.y.0 as f32 / 1000.0,
+        observer.eye.z.0 as f32 / 1000.0,
+    ]
+}
+
+fn add3(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
+}
+
+fn scale3(a: [f32; 3], s: f32) -> [f32; 3] {
+    [a[0] * s, a[1] * s, a[2] * s]
+}
+
+fn transform_point(m: Mat4, p: [f32; 3]) -> [f32; 3] {
+    [
+        m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12],
+        m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13],
+        m[2] * p[0] + m[6] * p[1] + m[10] * p[2] + m[14],
+    ]
+}
+
+fn ortho(l: f32, r: f32, b: f32, t: f32, n: f32, f: f32) -> Mat4 {
+    let mut m = [0.0f32; 16];
+    m[0] = 2.0 / (r - l);
+    m[5] = 2.0 / (t - b);
+    m[10] = 1.0 / (n - f);
+    m[12] = -(r + l) / (r - l);
+    m[13] = -(t + b) / (t - b);
+    m[14] = n / (n - f);
+    m[15] = 1.0;
+    m
+}
+
+fn cascade_vp(observer: Observer, aspect: f32, sun_dir: [f32; 3], z_near: f32, z_far: f32) -> Mat4 {
+    let eye = eye_metres(observer);
+    let fwd = look_dir(observer.eye.yaw, observer.pitch_md);
+    let world_up = [0.0, 1.0, 0.0];
+    let right = norm(cross(fwd, world_up));
+    let up = cross(right, fwd);
+    let tan = (md_to_rad(60_000) * 0.5).tan();
+    let mut corners = [[0.0f32; 3]; 8];
+    let mut k = 0;
+    for (z, hw, hh) in [
+        (z_near, tan * z_near * aspect, tan * z_near),
+        (z_far, tan * z_far * aspect, tan * z_far),
+    ] {
+        let c = add3(eye, scale3(fwd, z));
+        for sx in [-1.0, 1.0] {
+            for sy in [-1.0, 1.0] {
+                corners[k] = add3(add3(c, scale3(right, sx * hw)), scale3(up, sy * hh));
+                k += 1;
+            }
+        }
+    }
+    let sun = norm(sun_dir);
+    let mut light_up = [0.0, 1.0, 0.0];
+    if dot(sun, light_up).abs() > 0.95 {
+        light_up = [1.0, 0.0, 0.0];
+    }
+    let light_view = look_to([0.0, 0.0, 0.0], [-sun[0], -sun[1], -sun[2]], light_up);
+    let mut mn = [f32::MAX; 3];
+    let mut mx = [f32::MIN; 3];
+    for c in corners {
+        let p = transform_point(light_view, c);
+        for i in 0..3 {
+            mn[i] = mn[i].min(p[i]);
+            mx[i] = mx[i].max(p[i]);
+        }
+    }
+    let cx = (mn[0] + mx[0]) * 0.5;
+    let cy = (mn[1] + mx[1]) * 0.5;
+    let hx = ((mx[0] - mn[0]) * 0.5 * 1.1).max(0.5);
+    let hy = ((mx[1] - mn[1]) * 0.5 * 1.1).max(0.5);
+    let proj = ortho(
+        cx - hx,
+        cx + hx,
+        cy - hy,
+        cy + hy,
+        -mx[2] - 40.0,
+        -mn[2] + 8.0,
+    );
+    mul(proj, light_view)
+}
+
+/// Light-space view-projections and positive split distances (metres).
+pub(crate) fn cascade_view_projs(
+    observer: Observer,
+    aspect: f32,
+    sun_dir: [f32; 3],
+    n_cascades: u8,
+) -> ([Mat4; 3], [f32; 4]) {
+    let n = n_cascades.min(3);
+    let near = 0.05;
+    let far = 200.0;
+    let mut splits = [far, far, far, far];
+    let mut vps = [identity(), identity(), identity()];
+    if n == 0 {
+        return (vps, splits);
+    }
+    for i in 0..n {
+        let p = f32::from(i + 1) / f32::from(n);
+        let log = near * (far / near).powf(p);
+        let uni = near + (far - near) * p;
+        splits[i as usize] = log * 0.7 + uni * 0.3;
+    }
+    let mut z0 = near;
+    for i in 0..n {
+        let z1 = splits[i as usize];
+        vps[i as usize] = cascade_vp(observer, aspect.max(0.1), sun_dir, z0, z1);
+        z0 = z1;
+    }
+    (vps, splits)
+}
+
 #[cfg(test)]
 mod tests {
     use klotho_core::{Mm, PoseMm, YawMd};

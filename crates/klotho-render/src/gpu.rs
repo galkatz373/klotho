@@ -1,6 +1,7 @@
 //! wgpu clustered-mesh presenter. Header-validate before upload.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+use std::time::Instant;
 
 use klotho_compile::decode_mesh;
 use klotho_core::BlobId;
@@ -10,6 +11,8 @@ use wgpu::util::DeviceExt;
 
 use crate::math::{model_from_pose, view_proj};
 use crate::palette::albedo;
+use crate::pbr_pass::{self, PbrResources};
+use crate::perm::{PresenterPerm, present_plan};
 use crate::presenter::{Presenter, draw_list};
 
 /// Offscreen golden size (16:9, row-aligned for readback).
@@ -18,16 +21,16 @@ pub const GOLDEN_WIDTH: u32 = 640;
 pub const GOLDEN_HEIGHT: u32 = 360;
 const SHADER: &str = include_str!("shader.wgsl");
 
-struct GpuMesh {
-    verts: wgpu::Buffer,
-    indices: wgpu::Buffer,
-    nidx: u32,
+pub(crate) struct GpuMesh {
+    pub verts: wgpu::Buffer,
+    pub indices: wgpu::Buffer,
+    pub nidx: u32,
 }
 
 /// Headless / windowed presenter. Owns GPU resources; borrows the manifest.
 pub struct WgpuPresenter {
-    device: wgpu::Device,
-    queue: wgpu::Queue,
+    pub(crate) device: wgpu::Device,
+    pub(crate) queue: wgpu::Queue,
     pipeline: wgpu::RenderPipeline,
     frame_bg: wgpu::BindGroup,
     frame_buf: wgpu::Buffer,
@@ -35,14 +38,20 @@ pub struct WgpuPresenter {
     color_tex: Option<wgpu::Texture>,
     color: wgpu::TextureView,
     depth: wgpu::TextureView,
-    width: u32,
-    height: u32,
-    format: wgpu::TextureFormat,
-    meshes: BTreeMap<BlobId, GpuMesh>,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) format: wgpu::TextureFormat,
+    pub(crate) meshes: BTreeMap<BlobId, GpuMesh>,
     /// Last present: how many clusters were drawn.
     pub last_drawn: u16,
     /// Last present: how many blobs were rejected at header check.
     pub last_rejected: u16,
+    /// Wall time of the last [`Self::present_to`], microseconds.
+    pub last_present_us: u32,
+    /// Cascades rendered on the last present (0 on the unlit path).
+    pub last_cascades: u8,
+    pub(crate) probe_present: BTreeSet<BlobId>,
+    pub(crate) pbr: Option<PbrResources>,
 }
 
 impl WgpuPresenter {
@@ -207,6 +216,10 @@ impl WgpuPresenter {
             meshes: BTreeMap::new(),
             last_drawn: 0,
             last_rejected: 0,
+            last_present_us: 0,
+            last_cascades: 0,
+            probe_present: BTreeSet::new(),
+            pbr: None,
         }
     }
 
@@ -263,7 +276,13 @@ impl WgpuPresenter {
     /// Header-validate every cluster blob in `cas` that is not yet cached.
     pub fn upload_cas(&mut self, vis: &VisualManifest, cas: &Cas) {
         self.last_rejected = 0;
-        for c in &vis.clusters {
+        self.probe_present.clear();
+        for g in &vis.probes {
+            if cas.get(g.blob).is_some() {
+                self.probe_present.insert(g.blob);
+            }
+        }
+        for c in vis.clusters.iter().chain(vis.masked.iter()) {
             if self.meshes.contains_key(&c.blob) {
                 continue;
             }
@@ -279,6 +298,26 @@ impl WgpuPresenter {
 
     /// Draw into an external color view (swapchain). Depth must match [`Self::size`].
     pub fn present_to(
+        &mut self,
+        color: &wgpu::TextureView,
+        vis: &VisualManifest,
+        observer: Observer,
+        budget: GpuBudget,
+    ) {
+        let start = Instant::now();
+        let plan = present_plan(vis.post, self.last_present_us, budget);
+        match plan.perm {
+            PresenterPerm::Unlit => {
+                self.last_cascades = 0;
+                self.present_unlit(color, vis, observer, budget);
+            }
+            _ => pbr_pass::present_pbr(self, color, vis, observer, budget, plan),
+        }
+        let us = start.elapsed().as_micros();
+        self.last_present_us = u32::try_from(us).unwrap_or(u32::MAX);
+    }
+
+    fn present_unlit(
         &mut self,
         color: &wgpu::TextureView,
         vis: &VisualManifest,
@@ -396,6 +435,9 @@ impl WgpuPresenter {
         self.color_tex = tex;
         self.color = view;
         self.depth = make_depth(&self.device, width, height);
+        if let Some(pbr) = self.pbr.as_mut() {
+            pbr.resize(&self.device, self.format, width, height);
+        }
     }
 
     /// Read the offscreen target. `None` if this presenter has no readback texture.
@@ -537,14 +579,74 @@ impl Presenter for WgpuPresenter {
 #[cfg(test)]
 mod tests {
     use klotho_compile::{Kitbash, cook_doc};
-    use klotho_core::{Epoch, Hash, Mm, PoseMm, YawMd};
+    use klotho_core::{BlobId, Epoch, Hash, IVec3, Mm, PoseMm, YawMd};
     use klotho_ir::{IntentDoc, Name, ProvenanceId, StyleIntent};
-    use klotho_manifest::{GpuBudget, MaterialRef, Observer, VisualManifest};
+    use klotho_manifest::{
+        GpuBudget, LightKind, LightStub, MaterialRef, Observer, PostFlags, ProbeGrid,
+        VisualManifest,
+    };
 
     use super::*;
 
     fn skip_if_no_gpu() -> Option<WgpuPresenter> {
         WgpuPresenter::try_headless()
+    }
+
+    fn door_mesh() -> (BlobId, Vec<u8>, MaterialRef) {
+        let doc = IntentDoc {
+            style: StyleIntent {
+                notes: String::new(),
+                palettes: Vec::new(),
+                kitbash_tags: vec![Name::from("door.oak.lockable")],
+            },
+            canon_diffs: Vec::new(),
+            seed: Vec::new(),
+            minds: Vec::new(),
+            provenance: ProvenanceId(Hash::ZERO),
+        };
+        let cooked = cook_doc(&doc).unwrap();
+        let tag = Kitbash::load_default().unwrap();
+        let entry = tag.get("door.oak.lockable").unwrap();
+        let mesh_id = cooked
+            .bindings
+            .iter()
+            .find(|b| b.tag.as_str() == "door.oak.lockable")
+            .map(|b| b.mesh)
+            .or_else(|| {
+                cooked.cas.iter().find_map(|(id, bytes)| {
+                    if klotho_compile::validate_mesh(bytes).is_ok() {
+                        Some(id)
+                    } else {
+                        None
+                    }
+                })
+            })
+            .unwrap();
+        let bytes = cooked.cas.get(mesh_id).unwrap().to_vec();
+        (
+            mesh_id,
+            bytes,
+            MaterialRef {
+                tag: entry.material,
+                palette: 0,
+            },
+        )
+    }
+
+    fn vis_with(
+        mesh_id: BlobId,
+        mat: MaterialRef,
+        post: PostFlags,
+        lights: Vec<LightStub>,
+    ) -> VisualManifest {
+        let mut vis = VisualManifest::from_instances(
+            Epoch::ZERO,
+            [(mesh_id, PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd::ZERO), mat)],
+            lights,
+            [],
+        );
+        vis.post = post;
+        vis
     }
 
     #[test]
@@ -561,54 +663,74 @@ mod tests {
         let Some(mut p) = skip_if_no_gpu() else {
             return;
         };
-        let doc = IntentDoc {
-            style: StyleIntent {
-                notes: String::new(),
-                palettes: Vec::new(),
-                kitbash_tags: vec![Name::from("door.oak.lockable")],
-            },
-            canon_diffs: Vec::new(),
-            seed: Vec::new(),
-            minds: Vec::new(),
-            provenance: ProvenanceId(Hash::ZERO),
-        };
-        let cooked = cook_doc(&doc).unwrap();
-        let tag = Kitbash::load_default().unwrap();
-        let entry = tag.get("door.oak.lockable").unwrap();
-        // The library encodes every catalog mesh; pick any hull/mesh from CAS
-        // via the door bind table even without a seed locus.
-        let mesh_id = cooked
-            .bindings
-            .iter()
-            .find(|b| b.tag.as_str() == "door.oak.lockable")
-            .map(|b| b.mesh)
-            .or_else(|| {
-                cooked.cas.iter().find_map(|(id, bytes)| {
-                    if klotho_compile::validate_mesh(bytes).is_ok() {
-                        Some(id)
-                    } else {
-                        None
-                    }
-                })
-            })
-            .unwrap();
-        let bytes = cooked.cas.get(mesh_id).unwrap();
-        assert!(klotho_compile::validate_mesh(bytes).is_ok());
-        assert!(p.upload(mesh_id, bytes));
-        let vis = VisualManifest::from_instances(
-            Epoch::ZERO,
-            [(
-                mesh_id,
-                PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd::ZERO),
-                MaterialRef {
-                    tag: entry.material,
-                    palette: 0,
-                },
-            )],
-            [],
-            [],
-        );
+        let (mesh_id, bytes, mat) = door_mesh();
+        assert!(klotho_compile::validate_mesh(&bytes).is_ok());
+        assert!(p.upload(mesh_id, &bytes));
+        let vis = vis_with(mesh_id, mat, PostFlags::UNLIT, vec![]);
         p.present(&vis, Observer::origin(), GpuBudget::HEARTH);
         assert_eq!(p.last_drawn, 1);
+        assert_eq!(p.last_cascades, 0);
+        assert!(p.pbr.is_none());
+    }
+
+    #[test]
+    fn adventure_present_draws_one() {
+        let Some(mut p) = skip_if_no_gpu() else {
+            return;
+        };
+        let (mesh_id, bytes, mat) = door_mesh();
+        assert!(p.upload(mesh_id, &bytes));
+        let vis = vis_with(mesh_id, mat, PostFlags::ADVENTURE, vec![]);
+        p.present(&vis, Observer::origin(), GpuBudget::AAA_ADVENTURE);
+        assert_eq!(p.last_drawn, 1);
+        assert_eq!(p.last_cascades, 3);
+        assert!(p.pbr.is_some());
+    }
+
+    #[test]
+    fn competitive_present_with_sun_draws_one() {
+        let Some(mut p) = skip_if_no_gpu() else {
+            return;
+        };
+        let (mesh_id, bytes, mat) = door_mesh();
+        assert!(p.upload(mesh_id, &bytes));
+        let sun = LightStub {
+            pos: IVec3 {
+                x: 0,
+                y: 4000,
+                z: 0,
+            },
+            kind: LightKind::Sun {
+                dir: IVec3 {
+                    x: 350,
+                    y: 800,
+                    z: 450,
+                },
+                intensity_milli: 1000,
+            },
+        };
+        let vis = vis_with(mesh_id, mat, PostFlags::COMPETITIVE, vec![sun]);
+        p.present(&vis, Observer::origin(), GpuBudget::AAA_SHOOTER);
+        assert_eq!(p.last_drawn, 1);
+        assert_eq!(p.last_cascades, 1);
+    }
+
+    #[test]
+    fn missing_probe_blob_does_not_panic() {
+        let Some(mut p) = skip_if_no_gpu() else {
+            return;
+        };
+        let (mesh_id, bytes, mat) = door_mesh();
+        assert!(p.upload(mesh_id, &bytes));
+        let mut vis = vis_with(mesh_id, mat, PostFlags::ADVENTURE, vec![]);
+        vis.probes.push(ProbeGrid {
+            blob: BlobId::from_bytes([9; 32]),
+            origin: IVec3 { x: 0, y: 0, z: 0 },
+            spacing_mm: 2000,
+            dim: (4, 2, 4),
+        });
+        p.present(&vis, Observer::origin(), GpuBudget::AAA_ADVENTURE);
+        assert_eq!(p.last_drawn, 1);
+        assert_eq!(p.last_cascades, 3);
     }
 }

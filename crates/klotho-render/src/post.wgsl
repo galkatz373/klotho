@@ -1,5 +1,5 @@
-// UV from the sampled color size so half-res passes stay independent of the
-// full-res composite uniform.
+// UV is framebuffer position over the *target* size (`post.screen`).
+// SSGI/bloom sample full-res color from a half-res pass; src size is wrong.
 
 struct Post {
     screen: vec2<f32>,
@@ -27,8 +27,7 @@ fn vs_fs(@builtin(vertex_index) vid: u32) -> @builtin(position) vec4<f32> {
 }
 
 fn uv_of(p: vec4<f32>) -> vec2<f32> {
-    let dim = vec2<f32>(textureDimensions(src));
-    return p.xy / max(dim, vec2<f32>(1.0));
+    return p.xy / max(post.screen, vec2<f32>(1.0));
 }
 
 @fragment

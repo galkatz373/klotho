@@ -26,8 +26,8 @@ pub use observer::{EYE_HEIGHT_MM, GpuBudget, Observer};
 pub use sonic::{BedRef, GrainVoice, SonicManifest};
 pub use ui::{UiManifest, Widget, WidgetKind};
 pub use visual::{
-    ClusterRef, GpuHandle, InstancePass, LightKind, LightStub, MaterialRef, PaletteSlot, PostFlags,
-    ProbeGrid, SkinnedInstance, VisualManifest,
+    ClusterRef, Decal, GpuHandle, InstancePass, LightKind, LightStub, MaterialRef, OneShotMesh,
+    PaletteSlot, PostFlags, ProbeGrid, SkinnedInstance, VisualManifest,
 };
 
 pub use klotho_core::{AabbMm, BlobId, Epoch, IVec3, PoseMm, Sigil, Tick};

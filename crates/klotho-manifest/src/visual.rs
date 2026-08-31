@@ -103,6 +103,36 @@ pub struct PaletteSlot {
     pub bones: u8,
 }
 
+/// Trace-driven decal. Presentation TTL only; not hashed, no Sigil.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub struct Decal {
+    /// CAS recipe (texture / mesh).
+    pub blob: BlobId,
+    /// Integer millimetre placement.
+    pub pose: PoseMm,
+    /// Closed material.
+    pub material: MaterialRef,
+    /// Tick the cue was committed.
+    pub born: Tick,
+    /// Live while `now < born + ttl_ticks`.
+    pub ttl_ticks: u16,
+}
+
+/// One-shot debris mesh. Manifest TTL only; no Sigil.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub struct OneShotMesh {
+    /// CAS recipe (mesh).
+    pub blob: BlobId,
+    /// Integer millimetre placement.
+    pub pose: PoseMm,
+    /// Closed material.
+    pub material: MaterialRef,
+    /// Tick the cue was committed.
+    pub born: Tick,
+    /// Live while `now < born + ttl_ticks`.
+    pub ttl_ticks: u16,
+}
+
 /// Cook-baked irradiance probe volume. SSGI is presenter-only.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct ProbeGrid {
@@ -193,6 +223,10 @@ pub struct VisualManifest {
     pub post: PostFlags,
     /// Debug overlays only. Not the hot identity path.
     pub debug_sigils: Vec<(Sigil, AabbMm)>,
+    /// Trace-driven decals. Empty on Hearth unlit extract.
+    pub decals: Vec<Decal>,
+    /// One-shot debris meshes. Empty on Hearth unlit extract.
+    pub one_shots: Vec<OneShotMesh>,
 }
 
 impl VisualManifest {
@@ -212,6 +246,8 @@ impl VisualManifest {
             probes: Vec::new(),
             post: PostFlags::UNLIT,
             debug_sigils: Vec::new(),
+            decals: Vec::new(),
+            one_shots: Vec::new(),
         }
     }
 
@@ -284,6 +320,38 @@ impl VisualManifest {
         }
         t.extract(epoch)
     }
+
+    /// Visual buffer that holds only VFX lists. Other columns stay empty.
+    #[must_use]
+    pub fn from_vfx(
+        epoch: Epoch,
+        tick: Tick,
+        decals: impl IntoIterator<Item = Decal>,
+        one_shots: impl IntoIterator<Item = OneShotMesh>,
+    ) -> Self {
+        let mut t = crate::tables::VisualTables::new();
+        t.set_tick(tick);
+        for d in decals {
+            t.push_decal(d);
+        }
+        for o in one_shots {
+            t.push_oneshot(o);
+        }
+        t.extract(epoch)
+    }
+
+    /// Merge presentation-only VFX into this buffer. `from_v2` leaves VFX empty.
+    #[must_use]
+    pub fn with_vfx(
+        mut self,
+        decals: impl IntoIterator<Item = Decal>,
+        one_shots: impl IntoIterator<Item = OneShotMesh>,
+    ) -> Self {
+        let add = Self::from_vfx(self.epoch, self.tick, decals, one_shots);
+        self.decals.extend(add.decals);
+        self.one_shots.extend(add.one_shots);
+        self
+    }
 }
 
 #[cfg(test)]
@@ -316,6 +384,8 @@ mod tests {
         assert_eq!(vis.post, PostFlags::UNLIT);
         assert_eq!(vis.tick, Tick::ZERO);
         assert!(!vis.clusters[0].gpu.is_uploaded());
+        assert!(vis.decals.is_empty());
+        assert!(vis.one_shots.is_empty());
         let _eye: Observer = Observer::origin();
     }
 
@@ -386,5 +456,95 @@ mod tests {
             vec![(s, AabbMm::from_point(IVec3 { x: 0, y: 0, z: 0 }))]
         );
         assert!(vis.clusters.is_empty());
+        assert!(vis.decals.is_empty());
+        assert!(vis.one_shots.is_empty());
+    }
+
+    #[test]
+    fn empty_and_from_v2_default_vfx_empty() {
+        let empty = VisualManifest::empty(Epoch::ZERO);
+        assert!(empty.decals.is_empty());
+        assert!(empty.one_shots.is_empty());
+        assert_eq!(empty.post, PostFlags::UNLIT);
+
+        let vis = VisualManifest::from_instances(Epoch::ZERO, [], [], []);
+        assert!(vis.decals.is_empty());
+        assert!(vis.one_shots.is_empty());
+        assert_eq!(vis.post, PostFlags::UNLIT);
+
+        let vis = VisualManifest::from_v2(
+            Epoch::ZERO,
+            Tick::ZERO,
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            PostFlags::UNLIT,
+            [],
+        );
+        assert!(vis.decals.is_empty());
+        assert!(vis.one_shots.is_empty());
+    }
+
+    #[test]
+    fn with_vfx_merges_without_sigils_or_particles() {
+        let blob = BlobId(*Hash::ZERO.as_bytes());
+        let pose = PoseMm::new(Mm(1), Mm(0), Mm(2), YawMd::ZERO);
+        let material = MaterialRef {
+            tag: MaterialTag::Stone,
+            palette: 0,
+        };
+        let decal = Decal {
+            blob,
+            pose,
+            material,
+            born: Tick(1),
+            ttl_ticks: 4,
+        };
+        let one = OneShotMesh {
+            blob,
+            pose,
+            material,
+            born: Tick(1),
+            ttl_ticks: 4,
+        };
+        let vis = VisualManifest::empty(Epoch(2)).with_vfx([decal], [one]);
+        assert_eq!(vis.epoch, Epoch(2));
+        assert_eq!(vis.decals, vec![decal]);
+        assert_eq!(vis.one_shots, vec![one]);
+        assert!(vis.clusters.is_empty());
+
+        let Decal {
+            blob: _,
+            pose: _,
+            material: _,
+            born: _,
+            ttl_ticks: _,
+        } = vis.decals[0];
+        let OneShotMesh {
+            blob: _,
+            pose: _,
+            material: _,
+            born: _,
+            ttl_ticks: _,
+        } = vis.one_shots[0];
+        let VisualManifest {
+            epoch: _,
+            tick: _,
+            clusters: _,
+            materials: _,
+            masked: _,
+            masked_materials: _,
+            skinned: _,
+            palettes: _,
+            lights: _,
+            probes: _,
+            post: _,
+            debug_sigils: _,
+            decals: _,
+            one_shots: _,
+        } = vis;
     }
 }

@@ -24,6 +24,7 @@ members = [
     "crates/klotho-render",
     "crates/klotho-audio",
     "crates/klotho-ui",
+    "crates/klotho-vfx",
     "crates/klotho-author",
     "crates/klotho-debug",
     "crates/klotho-runtime",
@@ -68,6 +69,7 @@ memmap2 = "0.9"
 klotho-render = { path = "crates/klotho-render" }
 klotho-audio = { path = "crates/klotho-audio" }
 klotho-ui = { path = "crates/klotho-ui" }
+klotho-vfx = { path = "crates/klotho-vfx" }
 klotho-author = { path = "crates/klotho-author" }
 klotho-debug = { path = "crates/klotho-debug" }
 klotho-net = { path = "crates/klotho-net" }

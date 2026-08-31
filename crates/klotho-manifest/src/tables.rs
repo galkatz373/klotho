@@ -10,8 +10,8 @@ use klotho_core::{AabbMm, BlobId, Epoch, PoseMm, Sigil, Tick};
 use crate::sonic::{BedRef, GrainVoice, SonicManifest};
 use crate::ui::{UiManifest, Widget};
 use crate::visual::{
-    ClusterRef, GpuHandle, LightStub, MaterialRef, PaletteSlot, PostFlags, ProbeGrid,
-    SkinnedInstance, VisualManifest,
+    ClusterRef, Decal, GpuHandle, LightStub, MaterialRef, OneShotMesh, PaletteSlot, PostFlags,
+    ProbeGrid, SkinnedInstance, VisualManifest,
 };
 
 /// Visual SoA. Extract copies into [`VisualManifest`] (AoS presenter buffer).
@@ -28,6 +28,8 @@ pub(crate) struct VisualTables {
     post: PostFlags,
     debug: Vec<(Sigil, AabbMm)>,
     tick: Tick,
+    decals: Vec<Decal>,
+    one_shots: Vec<OneShotMesh>,
 }
 
 impl VisualTables {
@@ -73,6 +75,14 @@ impl VisualTables {
         self.tick = tick;
     }
 
+    pub(crate) fn push_decal(&mut self, decal: Decal) {
+        self.decals.push(decal);
+    }
+
+    pub(crate) fn push_oneshot(&mut self, mesh: OneShotMesh) {
+        self.one_shots.push(mesh);
+    }
+
     pub(crate) fn extract(&self, epoch: Epoch) -> VisualManifest {
         let clusters = self
             .blobs
@@ -107,6 +117,8 @@ impl VisualTables {
             probes: self.probes.clone(),
             post: self.post,
             debug_sigils: self.debug.clone(),
+            decals: self.decals.clone(),
+            one_shots: self.one_shots.clone(),
         }
     }
 }
@@ -170,6 +182,8 @@ mod tests {
     #[test]
     fn soa_starts_empty() {
         assert!(VisualTables::new().blobs.is_empty());
+        assert!(VisualTables::new().decals.is_empty());
+        assert!(VisualTables::new().one_shots.is_empty());
         assert!(SonicTables::new().bed.is_none());
         assert!(UiTables::new().widgets.is_empty());
     }

@@ -1261,6 +1261,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "klotho-vfx"
+version = "0.1.0"
+dependencies = [
+ "klotho-core",
+ "klotho-manifest",
+ "klotho-trace",
+]
+
+[[package]]
 name = "klotho-world"
 version = "0.1.0"
 dependencies = [

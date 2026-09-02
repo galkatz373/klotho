@@ -23,6 +23,8 @@ pub enum ArtifactKind {
     AffordanceGraph = 6,
     /// Optional embedding (v2 Weaver). Stored, not interpreted, in v1.
     Embedding = 7,
+    /// Skinned mesh: `i16` verts + 4-bone joints/weights + `u32` indices.
+    SkinnedMesh = 8,
 }
 
 impl ArtifactKind {
@@ -38,6 +40,7 @@ impl ArtifactKind {
             5 => Some(Self::RiteChunk),
             6 => Some(Self::AffordanceGraph),
             7 => Some(Self::Embedding),
+            8 => Some(Self::SkinnedMesh),
             _ => None,
         }
     }
@@ -55,7 +58,9 @@ mod tests {
     fn discriminants_are_stable() {
         assert_eq!(ArtifactKind::ClusteredMesh as u8, 0);
         assert_eq!(ArtifactKind::Embedding as u8, 7);
+        assert_eq!(ArtifactKind::SkinnedMesh as u8, 8);
         assert_eq!(ArtifactKind::from_u8(3), Some(ArtifactKind::Grain));
-        assert_eq!(ArtifactKind::from_u8(8), None);
+        assert_eq!(ArtifactKind::from_u8(8), Some(ArtifactKind::SkinnedMesh));
+        assert_eq!(ArtifactKind::from_u8(9), None);
     }
 }

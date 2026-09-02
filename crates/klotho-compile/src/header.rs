@@ -67,6 +67,9 @@ pub fn validate_blob(bytes: &[u8]) -> Result<(), CompileError> {
         ArtifactKind::RiteChunk => {
             validate_rite(bytes)?;
         }
+        ArtifactKind::SkinnedMesh => {
+            validate_skinned_mesh(bytes)?;
+        }
         ArtifactKind::Texture | ArtifactKind::AffordanceGraph | ArtifactKind::Embedding => {}
     }
     Ok(())
@@ -279,6 +282,203 @@ pub fn validate_rite(bytes: &[u8]) -> Result<(), CompileError> {
     Ok(())
 }
 
+/// Bone cap on a SkinnedMesh blob / palette.
+pub const MAX_SKIN_BONES: u32 = 256;
+/// Vertex cap: `MAX_TRIS * 3` so a length prefix cannot allocate unbounded.
+pub const MAX_SKIN_VERTS: u32 = MAX_TRIS.saturating_mul(3);
+/// Quantized 4-influence weights must sum to this (`u16` x4).
+pub const SKIN_WEIGHT_SUM: u32 = 65_535;
+
+/// Parsed skinned-mesh header.
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct SkinnedMeshInfo {
+    /// Vertex count.
+    pub verts: u32,
+    /// Index count (must be a multiple of 3).
+    pub indices: u32,
+    /// Bone count. 0 = identity / rigid fallback.
+    pub bones: u32,
+}
+
+/// Quantized skinned mesh after header validation.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct DecodedSkinnedMesh {
+    /// Counts.
+    pub info: SkinnedMeshInfo,
+    /// `i16` millimetre verts. Presenters may promote to float.
+    pub verts: Vec<[i16; 3]>,
+    /// Four joint indices per vert.
+    pub joints: Vec<[u8; 4]>,
+    /// Four `u16` weights per vert. Each vertex sums to [`SKIN_WEIGHT_SUM`].
+    pub weights: Vec<[u16; 4]>,
+    /// Triangle indices.
+    pub indices: Vec<u32>,
+}
+
+/// Encode a skinned mesh. Lengths of `joints` / `weights` must match `verts`.
+pub fn encode_skinned_mesh(
+    verts: &[[i16; 3]],
+    joints: &[[u8; 4]],
+    weights: &[[u16; 4]],
+    indices: &[u32],
+    bones: u32,
+) -> Result<Vec<u8>, CompileError> {
+    if joints.len() != verts.len() || weights.len() != verts.len() {
+        return Err(CompileError::Header("weight count mismatch".into()));
+    }
+    if verts.len() > MAX_SKIN_VERTS as usize {
+        return Err(CompileError::Header(format!(
+            "verts {} > {MAX_SKIN_VERTS}",
+            verts.len()
+        )));
+    }
+    if indices.len() % 3 != 0 {
+        return Err(CompileError::Header("index count not multiple of 3".into()));
+    }
+    let tris = (indices.len() / 3) as u32;
+    if tris > MAX_TRIS {
+        return Err(CompileError::Header(format!("tris {tris} > {MAX_TRIS}")));
+    }
+    if bones > MAX_SKIN_BONES {
+        return Err(CompileError::Header(format!(
+            "bones {bones} > {MAX_SKIN_BONES}"
+        )));
+    }
+    let mut b = Vec::new();
+    write_prefix(&mut b, ArtifactKind::SkinnedMesh);
+    b.extend_from_slice(&(verts.len() as u32).to_le_bytes());
+    b.extend_from_slice(&(indices.len() as u32).to_le_bytes());
+    b.extend_from_slice(&bones.to_le_bytes());
+    for v in verts {
+        b.extend_from_slice(&v[0].to_le_bytes());
+        b.extend_from_slice(&v[1].to_le_bytes());
+        b.extend_from_slice(&v[2].to_le_bytes());
+    }
+    for j in joints {
+        b.extend_from_slice(j);
+    }
+    for w in weights {
+        for c in w {
+            b.extend_from_slice(&c.to_le_bytes());
+        }
+    }
+    for i in indices {
+        b.extend_from_slice(&i.to_le_bytes());
+    }
+    Ok(b)
+}
+
+/// Validate a skinned-mesh blob. Caps: [`MAX_TRIS`], [`MAX_SKIN_BONES`].
+pub fn validate_skinned_mesh(bytes: &[u8]) -> Result<SkinnedMeshInfo, CompileError> {
+    decode_skinned_mesh(bytes).map(|d| d.info)
+}
+
+/// Validate then copy verts/joints/weights/indices. Call before GPU upload.
+pub fn decode_skinned_mesh(bytes: &[u8]) -> Result<DecodedSkinnedMesh, CompileError> {
+    let rest = peek(bytes, ArtifactKind::SkinnedMesh)?;
+    if rest.len() < 12 {
+        return Err(CompileError::Header("truncated skinned header".into()));
+    }
+    let verts = u32_le(rest, 0)?;
+    let indices = u32_le(rest, 4)?;
+    let bones = u32_le(rest, 8)?;
+    if indices % 3 != 0 {
+        return Err(CompileError::Header("index count not multiple of 3".into()));
+    }
+    let tris = indices / 3;
+    if tris > MAX_TRIS {
+        return Err(CompileError::Header(format!("tris {tris} > {MAX_TRIS}")));
+    }
+    if bones > MAX_SKIN_BONES {
+        return Err(CompileError::Header(format!(
+            "bones {bones} > {MAX_SKIN_BONES}"
+        )));
+    }
+    if verts > MAX_SKIN_VERTS {
+        return Err(CompileError::Header(format!(
+            "verts {verts} > {MAX_SKIN_VERTS}"
+        )));
+    }
+    let nv = verts as usize;
+    let ni = indices as usize;
+    let vert_bytes = nv
+        .checked_mul(6)
+        .ok_or_else(|| CompileError::Header("vert overflow".into()))?;
+    let joint_bytes = nv
+        .checked_mul(4)
+        .ok_or_else(|| CompileError::Header("joint overflow".into()))?;
+    let weight_bytes = nv
+        .checked_mul(8)
+        .ok_or_else(|| CompileError::Header("weight overflow".into()))?;
+    let idx_bytes = ni
+        .checked_mul(4)
+        .ok_or_else(|| CompileError::Header("index overflow".into()))?;
+    let need = 12usize
+        .checked_add(vert_bytes)
+        .and_then(|n| n.checked_add(joint_bytes))
+        .and_then(|n| n.checked_add(weight_bytes))
+        .and_then(|n| n.checked_add(idx_bytes))
+        .ok_or_else(|| CompileError::Header("size overflow".into()))?;
+    if rest.len() != need {
+        return Err(CompileError::Header("payload size mismatch".into()));
+    }
+    let mut off = 12usize;
+    let mut out_verts = Vec::with_capacity(nv);
+    for _ in 0..nv {
+        let x = i16::from_le_bytes([rest[off], rest[off + 1]]);
+        let y = i16::from_le_bytes([rest[off + 2], rest[off + 3]]);
+        let z = i16::from_le_bytes([rest[off + 4], rest[off + 5]]);
+        out_verts.push([x, y, z]);
+        off += 6;
+    }
+    let mut out_joints = Vec::with_capacity(nv);
+    for _ in 0..nv {
+        let j = [rest[off], rest[off + 1], rest[off + 2], rest[off + 3]];
+        for &b in &j {
+            if u32::from(b) >= bones && !(bones == 0 && b == 0) {
+                return Err(CompileError::Header("bone index out of range".into()));
+            }
+        }
+        out_joints.push(j);
+        off += 4;
+    }
+    let mut out_weights = Vec::with_capacity(nv);
+    for _ in 0..nv {
+        let w = [
+            u16::from_le_bytes([rest[off], rest[off + 1]]),
+            u16::from_le_bytes([rest[off + 2], rest[off + 3]]),
+            u16::from_le_bytes([rest[off + 4], rest[off + 5]]),
+            u16::from_le_bytes([rest[off + 6], rest[off + 7]]),
+        ];
+        let sum = u32::from(w[0]) + u32::from(w[1]) + u32::from(w[2]) + u32::from(w[3]);
+        if sum != SKIN_WEIGHT_SUM {
+            return Err(CompileError::Header("weight count mismatch".into()));
+        }
+        out_weights.push(w);
+        off += 8;
+    }
+    let mut out_idx = Vec::with_capacity(ni);
+    for _ in 0..ni {
+        let ix = u32::from_le_bytes([rest[off], rest[off + 1], rest[off + 2], rest[off + 3]]);
+        if ix >= verts {
+            return Err(CompileError::Header("index out of range".into()));
+        }
+        out_idx.push(ix);
+        off += 4;
+    }
+    Ok(DecodedSkinnedMesh {
+        info: SkinnedMeshInfo {
+            verts,
+            indices,
+            bones,
+        },
+        verts: out_verts,
+        joints: out_joints,
+        weights: out_weights,
+        indices: out_idx,
+    })
+}
+
 /// v1 cap: clips in one ClipSet.
 pub const MAX_CLIPS: u16 = 64;
 /// v1 cap: samples per clip.
@@ -476,5 +676,151 @@ mod tests {
         let mut trunc = grain_blob(GRAIN_HZ, 1, &[1, 2, 3]);
         trunc.pop();
         assert!(matches!(decode_grain(&trunc), Err(CompileError::Header(_))));
+    }
+
+    fn tri_skinned(bones: u32, joints: [u8; 4], weights: [u16; 4]) -> Vec<u8> {
+        encode_skinned_mesh(
+            &[[0, 0, 0], [100, 0, 0], [0, 100, 0]],
+            &[joints, joints, joints],
+            &[weights, weights, weights],
+            &[0, 1, 2],
+            bones,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn skinned_mesh_roundtrip() {
+        let w = [SKIN_WEIGHT_SUM as u16, 0, 0, 0];
+        let b = tri_skinned(2, [0, 1, 0, 0], w);
+        assert_eq!(&b[..4], b"KLTH");
+        assert_eq!(b[5], ArtifactKind::SkinnedMesh as u8);
+        let info = validate_skinned_mesh(&b).unwrap();
+        assert_eq!(info.verts, 3);
+        assert_eq!(info.indices, 3);
+        assert_eq!(info.bones, 2);
+        let d = decode_skinned_mesh(&b).unwrap();
+        assert_eq!(d.verts[1], [100, 0, 0]);
+        assert_eq!(d.joints[0], [0, 1, 0, 0]);
+        assert_eq!(d.weights[0], w);
+        assert!(validate_blob(&b).is_ok());
+    }
+
+    #[test]
+    fn skinned_bad_magic_is_header_error() {
+        assert!(matches!(
+            validate_skinned_mesh(b"XXXX"),
+            Err(CompileError::Header(_))
+        ));
+    }
+
+    #[test]
+    fn skinned_bone_index_oob_rejected() {
+        let w = [SKIN_WEIGHT_SUM as u16, 0, 0, 0];
+        let e = encode_skinned_mesh(
+            &[[0, 0, 0], [1, 0, 0], [0, 1, 0]],
+            &[[2, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]],
+            &[w, w, w],
+            &[0, 1, 2],
+            2,
+        )
+        .unwrap();
+        let err = validate_skinned_mesh(&e).unwrap_err();
+        assert!(
+            matches!(err, CompileError::Header(ref s) if s.contains("bone")),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn skinned_weight_count_mismatch_rejected() {
+        let e = encode_skinned_mesh(
+            &[[0, 0, 0]],
+            &[[0, 0, 0, 0], [0, 0, 0, 0]],
+            &[[SKIN_WEIGHT_SUM as u16, 0, 0, 0]],
+            &[0, 0, 0],
+            1,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(e, CompileError::Header(ref s) if s.contains("weight count mismatch")),
+            "{e}"
+        );
+        let w = [1u16, 0, 0, 0];
+        let bytes = encode_skinned_mesh(
+            &[[0, 0, 0], [1, 0, 0], [0, 1, 0]],
+            &[[0; 4], [0; 4], [0; 4]],
+            &[w, w, w],
+            &[0, 1, 2],
+            1,
+        )
+        .unwrap();
+        let err = validate_skinned_mesh(&bytes).unwrap_err();
+        assert!(
+            matches!(err, CompileError::Header(ref s) if s.contains("weight count mismatch")),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn skinned_over_cap_rejected() {
+        let mut b = Vec::new();
+        write_prefix(&mut b, ArtifactKind::SkinnedMesh);
+        b.extend_from_slice(&0u32.to_le_bytes());
+        b.extend_from_slice(&(MAX_TRIS.saturating_add(1).saturating_mul(3)).to_le_bytes());
+        b.extend_from_slice(&1u32.to_le_bytes());
+        let e = validate_skinned_mesh(&b).unwrap_err();
+        assert!(matches!(e, CompileError::Header(s) if s.contains("tris")));
+
+        let mut b = Vec::new();
+        write_prefix(&mut b, ArtifactKind::SkinnedMesh);
+        b.extend_from_slice(&0u32.to_le_bytes());
+        b.extend_from_slice(&0u32.to_le_bytes());
+        b.extend_from_slice(&(MAX_SKIN_BONES.saturating_add(1)).to_le_bytes());
+        let e = validate_skinned_mesh(&b).unwrap_err();
+        assert!(matches!(e, CompileError::Header(s) if s.contains("bones")));
+    }
+
+    #[test]
+    fn skinned_truncated_and_index_oob() {
+        let w = [SKIN_WEIGHT_SUM as u16, 0, 0, 0];
+        let mut b = tri_skinned(1, [0; 4], w);
+        b.pop();
+        assert!(matches!(
+            validate_skinned_mesh(&b),
+            Err(CompileError::Header(_))
+        ));
+        let bytes = encode_skinned_mesh(
+            &[[0, 0, 0], [1, 0, 0], [0, 1, 0]],
+            &[[0; 4], [0; 4], [0; 4]],
+            &[w, w, w],
+            &[0, 1, 3],
+            1,
+        )
+        .unwrap();
+        let err = validate_skinned_mesh(&bytes).unwrap_err();
+        assert!(
+            matches!(err, CompileError::Header(ref s) if s.contains("index out of range")),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn skinned_bones_zero_allows_joint_zero() {
+        let w = [SKIN_WEIGHT_SUM as u16, 0, 0, 0];
+        let b = tri_skinned(0, [0; 4], w);
+        assert!(validate_skinned_mesh(&b).is_ok());
+        let bad = encode_skinned_mesh(
+            &[[0, 0, 0], [1, 0, 0], [0, 1, 0]],
+            &[[1, 0, 0, 0], [0; 4], [0; 4]],
+            &[w, w, w],
+            &[0, 1, 2],
+            0,
+        )
+        .unwrap();
+        assert!(matches!(
+            validate_skinned_mesh(&bad),
+            Err(CompileError::Header(s)) if s.contains("bone")
+        ));
     }
 }

@@ -75,7 +75,7 @@ pub enum InstancePass {
     Opaque,
     /// Alpha-tested / masked.
     Masked,
-    /// Skinned palettes. GPU skinning is a later presenter.
+    /// Skinned palettes.
     Skinned,
 }
 
@@ -94,13 +94,27 @@ pub struct SkinnedInstance {
     pub material: MaterialRef,
 }
 
-/// GPU skinning palette slot. Bones are presenter-owned.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+/// GPU skinning palette slot. CPU joints travel with the Manifest.
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct PaletteSlot {
     /// Presenter GPU slot. Extract leaves [`GpuHandle::NONE`].
     pub gpu: GpuHandle,
-    /// Bone count the clip/mesh declared. 0 = unused.
-    pub bones: u8,
+    /// Bone count the clip/mesh declared. 0 = identity / T-pose.
+    pub bones: u16,
+    /// Local joint poses (`len == bones`). Empty when `bones == 0`.
+    pub joints: Vec<PoseMm>,
+}
+
+impl PaletteSlot {
+    /// Identity / T-pose slot.
+    #[must_use]
+    pub const fn identity() -> Self {
+        Self {
+            gpu: GpuHandle::NONE,
+            bones: 0,
+            joints: Vec::new(),
+        }
+    }
 }
 
 /// Trace-driven decal. Presentation TTL only; no identity field.
@@ -404,6 +418,7 @@ mod tests {
         t.push_palette(PaletteSlot {
             gpu: GpuHandle::NONE,
             bones: 32,
+            joints: vec![PoseMm::default(); 32],
         });
         t.push_skinned(SkinnedInstance {
             blob: BlobId(*Hash::ZERO.as_bytes()),

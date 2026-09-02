@@ -14,6 +14,7 @@ members = [
     "crates/klotho-input",
     "crates/klotho-space",
     "crates/klotho-phys",
+    "crates/klotho-anim",
     "crates/klotho-motion",
     "crates/klotho-mind",
     "crates/klotho-infer",
@@ -58,6 +59,7 @@ klotho-interest = { path = "crates/klotho-interest" }
 klotho-input = { path = "crates/klotho-input" }
 klotho-space = { path = "crates/klotho-space" }
 klotho-phys = { path = "crates/klotho-phys" }
+klotho-anim = { path = "crates/klotho-anim" }
 klotho-motion = { path = "crates/klotho-motion" }
 klotho-mind = { path = "crates/klotho-mind" }
 klotho-infer = { path = "crates/klotho-infer" }

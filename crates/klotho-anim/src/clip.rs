@@ -1,6 +1,6 @@
 //! Cooked verb→clip table. v1 is one clip per `(Verb, grounded)`; not motion matching.
 
-use klotho_core::{IVec3, Tick};
+use klotho_core::{IVec3, PoseMm, Tick};
 use klotho_ir::Verb;
 use serde::{Deserialize, Serialize};
 
@@ -21,6 +21,9 @@ pub struct Clip {
     pub looping: bool,
     /// Per-tick root translation, clip-local millimetres.
     pub samples: Vec<IVec3>,
+    /// Per-tick local joint poses. Empty = T-pose identity. Not hashed.
+    #[serde(default)]
+    pub joints: Vec<Vec<PoseMm>>,
 }
 
 impl Clip {
@@ -39,7 +42,22 @@ impl Clip {
         self.samples[i]
     }
 
-    /// Debug T-pose: identity, no root.
+    /// Local joints at `tick`. Empty is T-pose (identity locals).
+    #[must_use]
+    pub fn sample_joints(&self, tick: Tick) -> &[PoseMm] {
+        if self.joints.is_empty() {
+            return &[];
+        }
+        let n = self.joints.len();
+        let i = if self.looping {
+            (tick.0 as usize) % n
+        } else {
+            (tick.0 as usize).min(n - 1)
+        };
+        &self.joints[i]
+    }
+
+    /// Debug T-pose: identity, no root, no joints.
     #[must_use]
     pub fn tpose(id: u16, verb: Verb) -> Self {
         Self {
@@ -48,6 +66,7 @@ impl Clip {
             grounded: true,
             looping: true,
             samples: vec![IVec3::ZERO],
+            joints: Vec::new(),
         }
     }
 }
@@ -77,6 +96,7 @@ impl ClipSet {
                         y: 0,
                         z: WALK_MM_PER_TICK,
                     }],
+                    joints: Vec::new(),
                 },
                 Clip {
                     id: 2,
@@ -84,6 +104,7 @@ impl ClipSet {
                     grounded: true,
                     looping: false,
                     samples: vec![IVec3::ZERO],
+                    joints: Vec::new(),
                 },
             ],
         }
@@ -126,6 +147,7 @@ mod tests {
         let src = include_str!("../fixtures/hearth_biped.ron");
         let parsed = ClipSet::from_ron(src).expect("fixture");
         assert_eq!(parsed, ClipSet::hearth());
+        assert!(parsed.clips.iter().all(|c| c.joints.is_empty()));
     }
 
     #[test]
@@ -133,6 +155,7 @@ mod tests {
         let c = &ClipSet::hearth().clips[1];
         assert_eq!(c.sample(Tick(0)).z, WALK_MM_PER_TICK);
         assert_eq!(c.sample(Tick(1)).z, WALK_MM_PER_TICK);
+        assert!(c.sample_joints(Tick(0)).is_empty());
     }
 
     #[test]
@@ -141,5 +164,13 @@ mod tests {
         let c = s.lookup(Verb::Fire, true).unwrap();
         assert_eq!(c.id, 0);
         assert_eq!(c.sample(Tick(0)), IVec3::ZERO);
+        assert!(c.sample_joints(Tick(0)).is_empty());
+    }
+
+    #[test]
+    fn empty_clipset_lookup_is_none() {
+        let s = ClipSet::default();
+        assert!(s.lookup(Verb::Look, true).is_none());
+        assert!(s.lookup(Verb::Move, true).is_none());
     }
 }

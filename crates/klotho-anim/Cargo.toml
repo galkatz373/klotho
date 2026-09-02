@@ -1,23 +1,19 @@
 [package]
-name = "klotho-motion"
+name = "klotho-anim"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Klotho motion: verb→clip + root-motion SyncProposer (not motion matching)"
+description = "Klotho anim: ClipSet joint sampling and presentation palettes"
 readme = false
 publish = false
 
 [dependencies]
-klotho-anim.workspace = true
-klotho-commit.workspace = true
 klotho-core.workspace = true
 klotho-ir.workspace = true
-klotho-world.workspace = true
-
-[dev-dependencies]
-klotho-canon.workspace = true
+ron.workspace = true
+serde.workspace = true
 
 [lints]
 workspace = true

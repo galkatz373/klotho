@@ -396,7 +396,8 @@ fn kit_blobs_from_cas(cas: &Cas) -> Vec<BlobId> {
             ArtifactKind::ClusteredMesh
             | ArtifactKind::Hull
             | ArtifactKind::Grain
-            | ArtifactKind::ClipSet,
+            | ArtifactKind::ClipSet
+            | ArtifactKind::SkinnedMesh,
         ) = peek_kind(bytes)
         {
             ids.push(id);

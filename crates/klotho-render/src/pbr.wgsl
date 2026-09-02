@@ -45,6 +45,12 @@ struct Object {
 @group(0) @binding(6) var probe_samp: sampler;
 @group(1) @binding(0) var<uniform> object: Object;
 
+struct Palette {
+    bones: array<mat4x4<f32>, 256>,
+};
+
+@group(1) @binding(1) var<uniform> palette: Palette;
+
 struct VsOut {
     @builtin(position) clip: vec4<f32>,
     @location(0) world: vec3<f32>,
@@ -62,9 +68,49 @@ fn vs(@location(0) pos: vec3<f32>) -> VsOut {
     return out;
 }
 
+fn skin_pos(pos: vec3<f32>, joints: vec4<f32>, weights: vec4<f32>) -> vec4<f32> {
+    let j0 = u32(joints.x);
+    let j1 = u32(joints.y);
+    let j2 = u32(joints.z);
+    let j3 = u32(joints.w);
+    var skin = weights.x * palette.bones[j0];
+    skin += weights.y * palette.bones[j1];
+    skin += weights.z * palette.bones[j2];
+    skin += weights.w * palette.bones[j3];
+    return object.model * skin * vec4<f32>(pos, 1.0);
+}
+
+@vertex
+fn vs_skinned(
+    @location(0) pos: vec3<f32>,
+    @location(1) joints: vec4<f32>,
+    @location(2) weights: vec4<f32>,
+) -> VsOut {
+    let world = skin_pos(pos, joints, weights);
+    var out: VsOut;
+    out.clip = frame.view_proj * world;
+    out.world = world.xyz;
+    return out;
+}
+
 @vertex
 fn vs_shadow(@location(0) pos: vec3<f32>, @builtin(instance_index) cascade: u32) -> @builtin(position) vec4<f32> {
     let world = object.model * vec4<f32>(pos, 1.0);
+    switch cascade {
+        case 1u: { return frame.cascade1 * world; }
+        case 2u: { return frame.cascade2 * world; }
+        default: { return frame.cascade0 * world; }
+    }
+}
+
+@vertex
+fn vs_shadow_skinned(
+    @location(0) pos: vec3<f32>,
+    @location(1) joints: vec4<f32>,
+    @location(2) weights: vec4<f32>,
+    @builtin(instance_index) cascade: u32,
+) -> @builtin(position) vec4<f32> {
+    let world = skin_pos(pos, joints, weights);
     switch cascade {
         case 1u: { return frame.cascade1 * world; }
         case 2u: { return frame.cascade2 * world; }

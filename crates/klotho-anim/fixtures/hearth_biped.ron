@@ -1,0 +1,7 @@
+ClipSet(
+    clips: [
+        Clip(id: 0, verb: Look, grounded: true, looping: true, samples: [(x: 0, y: 0, z: 0)]),
+        Clip(id: 1, verb: Move, grounded: true, looping: true, samples: [(x: 0, y: 0, z: 20)]),
+        Clip(id: 2, verb: Use, grounded: true, looping: false, samples: [(x: 0, y: 0, z: 0)]),
+    ],
+)

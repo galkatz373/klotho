@@ -3,10 +3,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Instant;
 
-use klotho_compile::decode_mesh;
+use klotho_compile::{decode_mesh, decode_skinned_mesh, peek_kind};
 use klotho_core::BlobId;
 use klotho_manifest::{GpuBudget, LightKind, Observer, VisualManifest};
-use klotho_prove::Cas;
+use klotho_prove::{ArtifactKind, Cas};
 use wgpu::util::DeviceExt;
 
 use crate::math::{model_from_pose, view_proj};
@@ -42,6 +42,7 @@ pub struct WgpuPresenter {
     pub(crate) height: u32,
     pub(crate) format: wgpu::TextureFormat,
     pub(crate) meshes: BTreeMap<BlobId, GpuMesh>,
+    pub(crate) skinned_meshes: BTreeMap<BlobId, GpuMesh>,
     /// Last present: how many clusters were drawn.
     pub last_drawn: u16,
     /// Last present: how many blobs were rejected at header check.
@@ -220,6 +221,7 @@ impl WgpuPresenter {
             height: height.max(1),
             format,
             meshes: BTreeMap::new(),
+            skinned_meshes: BTreeMap::new(),
             last_drawn: 0,
             last_rejected: 0,
             last_present_us: 0,
@@ -238,9 +240,17 @@ impl WgpuPresenter {
 
     /// Upload a mesh if the `KLTH` header validates. Returns whether it is cached.
     pub fn upload(&mut self, id: BlobId, bytes: &[u8]) -> bool {
-        if self.meshes.contains_key(&id) {
+        if self.meshes.contains_key(&id) || self.skinned_meshes.contains_key(&id) {
             return true;
         }
+        match peek_kind(bytes) {
+            Ok(ArtifactKind::ClusteredMesh) => self.upload_clustered(id, bytes),
+            Ok(ArtifactKind::SkinnedMesh) => self.upload_skinned(id, bytes),
+            _ => false,
+        }
+    }
+
+    fn upload_clustered(&mut self, id: BlobId, bytes: &[u8]) -> bool {
         let Ok(decoded) = decode_mesh(bytes) else {
             return false;
         };
@@ -250,34 +260,54 @@ impl WgpuPresenter {
                 vbytes.extend_from_slice(&((*c as f32) / 1000.0).to_le_bytes());
             }
         }
-        let ibytes: Vec<u8> = decoded
-            .indices
-            .iter()
-            .flat_map(|i| i.to_le_bytes())
-            .collect();
+        let mesh = self.gpu_mesh("cluster-verts", "cluster-idx", &vbytes, &decoded.indices);
+        self.meshes.insert(id, mesh);
+        true
+    }
+
+    fn upload_skinned(&mut self, id: BlobId, bytes: &[u8]) -> bool {
+        let Ok(decoded) = decode_skinned_mesh(bytes) else {
+            return false;
+        };
+        let mut vbytes = Vec::with_capacity(decoded.verts.len() * 48);
+        for i in 0..decoded.verts.len() {
+            for c in decoded.verts[i] {
+                vbytes.extend_from_slice(&((c as f32) / 1000.0).to_le_bytes());
+            }
+            vbytes.extend_from_slice(&0f32.to_le_bytes());
+            for c in decoded.joints[i] {
+                vbytes.extend_from_slice(&(f32::from(c)).to_le_bytes());
+            }
+            for c in decoded.weights[i] {
+                vbytes.extend_from_slice(&(f32::from(c) / 65_535.0).to_le_bytes());
+            }
+        }
+        let mesh = self.gpu_mesh("skin-verts", "skin-idx", &vbytes, &decoded.indices);
+        self.skinned_meshes.insert(id, mesh);
+        true
+    }
+
+    fn gpu_mesh(&self, vlabel: &str, ilabel: &str, vbytes: &[u8], indices: &[u32]) -> GpuMesh {
+        let ibytes: Vec<u8> = indices.iter().flat_map(|i| i.to_le_bytes()).collect();
         let verts = self
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("cluster-verts"),
-                contents: &vbytes,
+                label: Some(vlabel),
+                contents: vbytes,
                 usage: wgpu::BufferUsages::VERTEX,
             });
-        let indices = self
+        let indices_buf = self
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("cluster-idx"),
+                label: Some(ilabel),
                 contents: &ibytes,
                 usage: wgpu::BufferUsages::INDEX,
             });
-        self.meshes.insert(
-            id,
-            GpuMesh {
-                verts,
-                indices,
-                nidx: decoded.info.indices,
-            },
-        );
-        true
+        GpuMesh {
+            verts,
+            indices: indices_buf,
+            nidx: indices.len() as u32,
+        }
     }
 
     /// Header-validate every cluster blob in `cas` that is not yet cached.
@@ -289,15 +319,21 @@ impl WgpuPresenter {
                 self.probe_present.insert(g.blob);
             }
         }
-        for c in vis.clusters.iter().chain(vis.masked.iter()) {
-            if self.meshes.contains_key(&c.blob) {
+        for blob in vis
+            .clusters
+            .iter()
+            .map(|c| c.blob)
+            .chain(vis.masked.iter().map(|c| c.blob))
+            .chain(vis.skinned.iter().map(|c| c.blob))
+        {
+            if self.meshes.contains_key(&blob) || self.skinned_meshes.contains_key(&blob) {
                 continue;
             }
-            let Some(bytes) = cas.get(c.blob) else {
+            let Some(bytes) = cas.get(blob) else {
                 self.last_rejected = self.last_rejected.saturating_add(1);
                 continue;
             };
-            if !self.upload(c.blob, bytes) {
+            if !self.upload(blob, bytes) {
                 self.last_rejected = self.last_rejected.saturating_add(1);
             }
         }
@@ -748,5 +784,174 @@ mod tests {
         p.present(&vis, Observer::origin(), GpuBudget::AAA_ADVENTURE);
         assert_eq!(p.last_drawn, 1);
         assert_eq!(p.last_cascades, 3);
+    }
+
+    fn tri_verts() -> [[i16; 3]; 3] {
+        [[-2000, 0, 3000], [2000, 0, 3000], [0, 3200, 3000]]
+    }
+
+    fn clustered_tri() -> Vec<u8> {
+        let verts = tri_verts();
+        let mut b = Vec::new();
+        b.extend_from_slice(b"KLTH");
+        b.push(1);
+        b.push(0);
+        b.push(0);
+        b.push(0);
+        b.extend_from_slice(&3u32.to_le_bytes());
+        b.extend_from_slice(&3u32.to_le_bytes());
+        for v in verts {
+            for c in v {
+                b.extend_from_slice(&c.to_le_bytes());
+            }
+        }
+        for i in [0u32, 2, 1] {
+            b.extend_from_slice(&i.to_le_bytes());
+        }
+        b
+    }
+
+    fn skinned_tri(bones: u32, joints: [u8; 4], weights: [u16; 4]) -> Vec<u8> {
+        let verts = tri_verts();
+        klotho_compile::encode_skinned_mesh(
+            &verts,
+            &[joints, joints, joints],
+            &[weights, weights, weights],
+            &[0, 2, 1],
+            bones,
+        )
+        .unwrap()
+    }
+
+    fn skinned_vis(
+        blob: BlobId,
+        pose: PoseMm,
+        slot: klotho_manifest::PaletteSlot,
+        post: PostFlags,
+    ) -> VisualManifest {
+        let mat = MaterialRef {
+            tag: klotho_manifest::MaterialTag::Stone,
+            palette: 0,
+        };
+        VisualManifest::from_v2(
+            Epoch::ZERO,
+            klotho_core::Tick::ZERO,
+            [],
+            [],
+            [klotho_manifest::SkinnedInstance {
+                blob,
+                gpu: klotho_manifest::GpuHandle::NONE,
+                pose,
+                palette: 0,
+                material: mat,
+            }],
+            [slot],
+            [],
+            [],
+            post,
+            [],
+        )
+    }
+
+    #[test]
+    fn invalid_skinned_mesh_is_not_uploaded() {
+        let Some(mut p) = skip_if_no_gpu() else {
+            return;
+        };
+        assert!(!p.upload(BlobId::from_bytes([1; 32]), b"XXXX"));
+        assert!(p.skinned_meshes.is_empty());
+        let mut bad = skinned_tri(1, [0; 4], [klotho_compile::SKIN_WEIGHT_SUM as u16, 0, 0, 0]);
+        bad[5] = 99;
+        assert!(!p.upload(BlobId::from_bytes([2; 32]), &bad));
+    }
+
+    #[test]
+    fn unlit_skinned_does_not_panic() {
+        let Some(mut p) = skip_if_no_gpu() else {
+            return;
+        };
+        let id = BlobId::from_bytes([3; 32]);
+        let bytes = skinned_tri(0, [0; 4], [klotho_compile::SKIN_WEIGHT_SUM as u16, 0, 0, 0]);
+        assert!(p.upload(id, &bytes));
+        let vis = skinned_vis(
+            id,
+            PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd::ZERO),
+            klotho_manifest::PaletteSlot::identity(),
+            PostFlags::UNLIT,
+        );
+        p.present(&vis, Observer::origin(), GpuBudget::HEARTH);
+        assert_eq!(p.last_drawn, 0);
+        assert!(p.pbr.is_none());
+    }
+
+    #[test]
+    fn identity_palette_matches_rigid_and_clip_moves() {
+        let pos = klotho_core::IVec3 {
+            x: -2000,
+            y: 0,
+            z: 3000,
+        };
+        let root = PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd::ZERO);
+        let w = [klotho_compile::SKIN_WEIGHT_SUM as u16, 0, 0, 0];
+        let identity = klotho_anim::skin_world(pos, root, &[], [0; 4], w);
+        let rigid = klotho_anim::apply_pose(root, pos);
+        assert_eq!(identity, rigid);
+
+        let joint = PoseMm::new(Mm(2500), Mm(0), Mm(0), YawMd::ZERO);
+        let moved = klotho_anim::skin_world(pos, root, &[joint], [0; 4], w);
+        assert_ne!(moved, identity);
+
+        let Some(mut p) = skip_if_no_gpu() else {
+            return;
+        };
+        let rigid_id = BlobId::from_bytes([10; 32]);
+        let skin_id = BlobId::from_bytes([11; 32]);
+        let tpose_id = BlobId::from_bytes([12; 32]);
+        assert!(p.upload(rigid_id, &clustered_tri()));
+        let skin_bytes = skinned_tri(1, [0; 4], w);
+        assert!(p.upload(skin_id, &skin_bytes));
+        assert!(p.upload(tpose_id, &skin_bytes));
+
+        let mat = MaterialRef {
+            tag: klotho_manifest::MaterialTag::Stone,
+            palette: 0,
+        };
+        let rigid_vis = vis_with(rigid_id, mat, PostFlags::COMPETITIVE, vec![]);
+        p.present(&rigid_vis, Observer::origin(), GpuBudget::AAA_SHOOTER);
+        let rigid_px = p.read_rgba().expect("readback");
+        assert!(
+            rigid_px.chunks_exact(4).any(|c| c != [63, 63, 75, 255]),
+            "rigid triangle was not drawn"
+        );
+
+        let ident_vis = skinned_vis(
+            skin_id,
+            root,
+            klotho_manifest::PaletteSlot::identity(),
+            PostFlags::COMPETITIVE,
+        );
+        p.present(&ident_vis, Observer::origin(), GpuBudget::AAA_SHOOTER);
+        assert_eq!(p.last_drawn, 1);
+        let ident_px = p.read_rgba().expect("readback");
+        assert!(
+            ident_px.chunks_exact(4).any(|c| c != [63, 63, 75, 255]),
+            "identity skinned triangle was not drawn"
+        );
+        assert_eq!(ident_px, rigid_px);
+
+        let moved_vis = skinned_vis(
+            tpose_id,
+            root,
+            klotho_manifest::PaletteSlot {
+                gpu: klotho_manifest::GpuHandle::NONE,
+                bones: 1,
+                joints: vec![joint],
+            },
+            PostFlags::COMPETITIVE,
+        );
+        p.present(&moved_vis, Observer::origin(), GpuBudget::AAA_SHOOTER);
+        assert_eq!(p.last_drawn, 1);
+        let moved_px = p.read_rgba().expect("readback");
+        assert_ne!(moved_px, ident_px);
     }
 }

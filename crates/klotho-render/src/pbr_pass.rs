@@ -28,11 +28,14 @@ const PROBE_DIM: u32 = 4;
 pub(crate) struct PbrResources {
     pipeline: wgpu::RenderPipeline,
     shadow_pipeline: wgpu::RenderPipeline,
+    skinned_pipeline: wgpu::RenderPipeline,
+    skinned_shadow_pipeline: wgpu::RenderPipeline,
     ssgi_pipeline: wgpu::RenderPipeline,
     bloom_pipeline: wgpu::RenderPipeline,
     composite_pipeline: wgpu::RenderPipeline,
     blit_pipeline: wgpu::RenderPipeline,
     object_layout: wgpu::BindGroupLayout,
+    skinned_object_layout: wgpu::BindGroupLayout,
     shadow_frame_bg: wgpu::BindGroup,
     blit_layout: wgpu::BindGroupLayout,
     ssgi_layout: wgpu::BindGroupLayout,
@@ -120,6 +123,14 @@ impl PbrResources {
                 wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
             )],
         });
+        let skinned_object_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("pbr-skinned-object"),
+                entries: &[
+                    ub_entry(0, wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT),
+                    ub_entry(1, wgpu::ShaderStages::VERTEX),
+                ],
+            });
         let blit_layout = post_layout(device, "pbr-blit-layout");
         let ssgi_layout = ssgi_bg_layout(device);
         let composite_layout = composite_bg_layout(device);
@@ -142,6 +153,16 @@ impl PbrResources {
             bind_group_layouts: &[&shadow_frame_layout, &object_layout],
             push_constant_ranges: &[],
         });
+        let skinned_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("pbr-skinned"),
+            bind_group_layouts: &[&frame_layout, &skinned_object_layout],
+            push_constant_ranges: &[],
+        });
+        let skinned_shadow_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("pbr-skinned-shadow-pl"),
+            bind_group_layouts: &[&shadow_frame_layout, &skinned_object_layout],
+            push_constant_ranges: &[],
+        });
         let pipeline = color_pipeline(
             device,
             &pbr_pl,
@@ -151,6 +172,18 @@ impl PbrResources {
             format,
             true,
             "pbr-forward",
+            vert_layout(),
+        );
+        let skinned_pipeline = color_pipeline(
+            device,
+            &skinned_pl,
+            &pbr_shader,
+            "vs_skinned",
+            "fs",
+            format,
+            true,
+            "pbr-forward-skinned",
+            skinned_vert_layout(),
         );
         let shadow_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("pbr-shadow"),
@@ -182,6 +215,37 @@ impl PbrResources {
             multiview: None,
             cache: None,
         });
+        let skinned_shadow_pipeline =
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("pbr-skinned-shadow"),
+                layout: Some(&skinned_shadow_pl),
+                vertex: wgpu::VertexState {
+                    module: &pbr_shader,
+                    entry_point: Some("vs_shadow_skinned"),
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    buffers: &[skinned_vert_layout()],
+                },
+                fragment: None,
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    cull_mode: Some(wgpu::Face::Front),
+                    ..Default::default()
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: wgpu::TextureFormat::Depth32Float,
+                    depth_write_enabled: true,
+                    depth_compare: wgpu::CompareFunction::Less,
+                    stencil: wgpu::StencilState::default(),
+                    bias: wgpu::DepthBiasState {
+                        constant: 2,
+                        slope_scale: 2.0,
+                        clamp: 0.0,
+                    },
+                }),
+                multisample: wgpu::MultisampleState::default(),
+                multiview: None,
+                cache: None,
+            });
         let blit_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("pbr-blit-pl"),
             bind_group_layouts: &[&blit_layout],
@@ -360,11 +424,14 @@ impl PbrResources {
         Self {
             pipeline,
             shadow_pipeline,
+            skinned_pipeline,
+            skinned_shadow_pipeline,
             ssgi_pipeline,
             bloom_pipeline,
             composite_pipeline,
             blit_pipeline,
             object_layout,
+            skinned_object_layout,
             shadow_frame_bg,
             blit_layout,
             ssgi_layout,
@@ -464,7 +531,8 @@ pub(crate) fn present_pbr(
     }
 
     let drawn = draw_list(vis, observer, budget);
-    gpu.last_drawn = drawn.len() as u16;
+    let items = pbr_draw_items(vis, &drawn);
+    gpu.last_drawn = items.len() as u16;
     gpu.last_cascades = plan.cascades;
 
     let aspect = gpu.width as f32 / gpu.height.max(1) as f32;
@@ -498,7 +566,7 @@ pub(crate) fn present_pbr(
     let lights_bytes = pack_lights(&points);
     let tiles_bytes = pack_tiles(&tiles);
 
-    let prepared = prepare_draws(gpu, vis, &drawn);
+    let prepared = prepare_draws(gpu, vis, &items);
     let need_post = plan.ssgi || plan.bloom || plan.taa;
     let mut flags = 0u32;
     if plan.ssgi {
@@ -546,10 +614,9 @@ pub(crate) fn present_pbr(
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-            pass.set_pipeline(&pbr.shadow_pipeline);
             pass.set_bind_group(0, &pbr.shadow_frame_bg, &[]);
             let inst = u32::from(layer);
-            draw_prepared(&mut pass, gpu, &prepared, inst..inst + 1);
+            draw_prepared(&mut pass, gpu, &prepared, inst..inst + 1, true);
         }
 
         let pbr_target = if need_post {
@@ -585,9 +652,8 @@ pub(crate) fn present_pbr(
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-            pass.set_pipeline(&pbr.pipeline);
             pass.set_bind_group(0, &pbr.frame_bg, &[]);
-            draw_prepared(&mut pass, gpu, &prepared, 0..1);
+            draw_prepared(&mut pass, gpu, &prepared, 0..1, false);
         }
 
         if plan.ssgi {
@@ -667,13 +733,25 @@ struct Prepared {
     blob: BlobId,
     bg: wgpu::BindGroup,
     _buf: wgpu::Buffer,
+    _palette_buf: Option<wgpu::Buffer>,
+    skinned: bool,
 }
 
-/// Opaque (`drawn`) + masked instances. Skinned lists have no GPU palette here.
-pub(crate) fn pbr_draw_items(
-    vis: &VisualManifest,
-    drawn: &[usize],
-) -> Vec<(BlobId, klotho_core::PoseMm, MaterialRef)> {
+/// One PBR instance. `palette` is `Some` for skinned draws.
+#[derive(Copy, Clone, Debug)]
+pub(crate) struct PbrDrawItem {
+    /// Mesh blob.
+    pub blob: BlobId,
+    /// Admitted root pose.
+    pub pose: klotho_core::PoseMm,
+    /// Closed material.
+    pub mat: MaterialRef,
+    /// Index into [`VisualManifest::palettes`]. `None` is rigid.
+    pub palette: Option<u16>,
+}
+
+/// Opaque (`drawn`) + masked + skinned with a valid palette index.
+pub(crate) fn pbr_draw_items(vis: &VisualManifest, drawn: &[usize]) -> Vec<PbrDrawItem> {
     let mut out = Vec::new();
     for i in drawn {
         let cluster = vis.clusters[*i];
@@ -681,26 +759,63 @@ pub(crate) fn pbr_draw_items(
             tag: MaterialTag::Stone,
             palette: 0,
         });
-        out.push((cluster.blob, cluster.pose, mat));
+        out.push(PbrDrawItem {
+            blob: cluster.blob,
+            pose: cluster.pose,
+            mat,
+            palette: None,
+        });
     }
     for (i, cluster) in vis.masked.iter().enumerate() {
         let mat = vis.masked_materials.get(i).copied().unwrap_or(MaterialRef {
             tag: MaterialTag::Stone,
             palette: 0,
         });
-        out.push((cluster.blob, cluster.pose, mat));
+        out.push(PbrDrawItem {
+            blob: cluster.blob,
+            pose: cluster.pose,
+            mat,
+            palette: None,
+        });
+    }
+    for inst in &vis.skinned {
+        if vis.palettes.get(usize::from(inst.palette)).is_none() {
+            continue;
+        }
+        out.push(PbrDrawItem {
+            blob: inst.blob,
+            pose: inst.pose,
+            mat: inst.material,
+            palette: Some(inst.palette),
+        });
     }
     out
 }
 
-fn prepare_draws(gpu: &WgpuPresenter, vis: &VisualManifest, drawn: &[usize]) -> Vec<Prepared> {
+fn prepare_draws(
+    gpu: &WgpuPresenter,
+    vis: &VisualManifest,
+    items: &[PbrDrawItem],
+) -> Vec<Prepared> {
     let pbr = gpu.pbr.as_ref().expect("pbr");
     let mut prepared = Vec::new();
-    for (blob, pose, mat) in pbr_draw_items(vis, drawn) {
-        if !gpu.meshes.contains_key(&blob) {
-            continue;
+    for item in items {
+        if let Some(ix) = item.palette {
+            let Some(slot) = vis.palettes.get(usize::from(ix)) else {
+                continue;
+            };
+            if gpu.skinned_meshes.contains_key(&item.blob) {
+                prepared.push(make_skinned(gpu, pbr, item, slot));
+            } else if gpu.meshes.contains_key(&item.blob) {
+                prepared.push(make_prepared(
+                    gpu, pbr, item.blob, item.pose, item.mat, false,
+                ));
+            }
+        } else if gpu.meshes.contains_key(&item.blob) {
+            prepared.push(make_prepared(
+                gpu, pbr, item.blob, item.pose, item.mat, false,
+            ));
         }
-        prepared.push(make_prepared(gpu, pbr, blob, pose, mat));
     }
     prepared
 }
@@ -711,6 +826,7 @@ fn make_prepared(
     blob: BlobId,
     pose: klotho_core::PoseMm,
     mat: MaterialRef,
+    skinned: bool,
 ) -> Prepared {
     let model = model_from_pose(pose);
     let alb = albedo(mat);
@@ -735,7 +851,72 @@ fn make_prepared(
         blob,
         bg,
         _buf: buf,
+        _palette_buf: None,
+        skinned,
     }
+}
+
+fn make_skinned(
+    gpu: &WgpuPresenter,
+    pbr: &PbrResources,
+    item: &PbrDrawItem,
+    slot: &klotho_manifest::PaletteSlot,
+) -> Prepared {
+    let model = model_from_pose(item.pose);
+    let alb = albedo(item.mat);
+    let (metalness, roughness) = metalness_roughness(item.mat.tag);
+    let ub = pack_object(&model, alb, item.mat.tag as u32, metalness, roughness);
+    let buf = gpu
+        .device
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("pbr-object-ub"),
+            contents: &ub,
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+    let pal = pack_palette(&slot.joints);
+    let palette_buf = gpu
+        .device
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("pbr-palette-ub"),
+            contents: &pal,
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+    let bg = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: None,
+        layout: &pbr.skinned_object_layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: buf.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: palette_buf.as_entire_binding(),
+            },
+        ],
+    });
+    Prepared {
+        blob: item.blob,
+        bg,
+        _buf: buf,
+        _palette_buf: Some(palette_buf),
+        skinned: true,
+    }
+}
+
+const PALETTE_BONES: usize = 256;
+const PALETTE_BYTES: usize = PALETTE_BONES * 64;
+
+fn pack_palette(joints: &[klotho_core::PoseMm]) -> [u8; PALETTE_BYTES] {
+    let mut b = [0u8; PALETTE_BYTES];
+    let id = crate::math::identity();
+    for i in 0..PALETTE_BONES {
+        put_mat4(&mut b, i * 64, &id);
+    }
+    for (i, pose) in joints.iter().take(PALETTE_BONES).enumerate() {
+        put_mat4(&mut b, i * 64, &model_from_pose(*pose));
+    }
+    b
 }
 
 fn draw_prepared(
@@ -743,15 +924,31 @@ fn draw_prepared(
     gpu: &WgpuPresenter,
     prepared: &[Prepared],
     instances: std::ops::Range<u32>,
+    shadow: bool,
 ) {
-    for item in prepared {
-        let Some(mesh) = gpu.meshes.get(&item.blob) else {
-            continue;
+    let pbr = gpu.pbr.as_ref().expect("pbr");
+    for skinned in [false, true] {
+        let pipeline = match (shadow, skinned) {
+            (false, false) => &pbr.pipeline,
+            (false, true) => &pbr.skinned_pipeline,
+            (true, false) => &pbr.shadow_pipeline,
+            (true, true) => &pbr.skinned_shadow_pipeline,
         };
-        pass.set_bind_group(1, &item.bg, &[]);
-        pass.set_vertex_buffer(0, mesh.verts.slice(..));
-        pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
-        pass.draw_indexed(0..mesh.nidx, 0, instances.clone());
+        pass.set_pipeline(pipeline);
+        for item in prepared.iter().filter(|p| p.skinned == skinned) {
+            let mesh = if skinned {
+                gpu.skinned_meshes.get(&item.blob)
+            } else {
+                gpu.meshes.get(&item.blob)
+            };
+            let Some(mesh) = mesh else {
+                continue;
+            };
+            pass.set_bind_group(1, &item.bg, &[]);
+            pass.set_vertex_buffer(0, mesh.verts.slice(..));
+            pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
+            pass.draw_indexed(0..mesh.nidx, 0, instances.clone());
+        }
     }
 }
 
@@ -1108,12 +1305,37 @@ fn composite_bg_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
 }
 
 const VTX_ATTRS: [wgpu::VertexAttribute; 1] = wgpu::vertex_attr_array![0 => Float32x3];
+const SKIN_VTX_ATTRS: [wgpu::VertexAttribute; 3] = [
+    wgpu::VertexAttribute {
+        format: wgpu::VertexFormat::Float32x3,
+        offset: 0,
+        shader_location: 0,
+    },
+    wgpu::VertexAttribute {
+        format: wgpu::VertexFormat::Float32x4,
+        offset: 16,
+        shader_location: 1,
+    },
+    wgpu::VertexAttribute {
+        format: wgpu::VertexFormat::Float32x4,
+        offset: 32,
+        shader_location: 2,
+    },
+];
 
 fn vert_layout() -> wgpu::VertexBufferLayout<'static> {
     wgpu::VertexBufferLayout {
         array_stride: 12,
         step_mode: wgpu::VertexStepMode::Vertex,
         attributes: &VTX_ATTRS,
+    }
+}
+
+fn skinned_vert_layout() -> wgpu::VertexBufferLayout<'static> {
+    wgpu::VertexBufferLayout {
+        array_stride: 48,
+        step_mode: wgpu::VertexStepMode::Vertex,
+        attributes: &SKIN_VTX_ATTRS,
     }
 }
 
@@ -1127,6 +1349,7 @@ fn color_pipeline(
     format: wgpu::TextureFormat,
     depth: bool,
     label: &str,
+    verts: wgpu::VertexBufferLayout<'static>,
 ) -> wgpu::RenderPipeline {
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some(label),
@@ -1135,7 +1358,7 @@ fn color_pipeline(
             module: shader,
             entry_point: Some(vs),
             compilation_options: wgpu::PipelineCompilationOptions::default(),
-            buffers: &[vert_layout()],
+            buffers: &[verts],
         },
         fragment: Some(wgpu::FragmentState {
             module: shader,
@@ -1325,29 +1548,33 @@ mod tests {
 
     use super::pbr_draw_items;
 
-    #[test]
-    fn skinned_instances_are_not_drawn() {
-        let opaque = BlobId::from_bytes([1; 32]);
-        let skinned = BlobId::from_bytes([2; 32]);
-        let mat = MaterialRef {
+    fn mat() -> MaterialRef {
+        MaterialRef {
             tag: MaterialTag::Stone,
             palette: 0,
-        };
+        }
+    }
+
+    #[test]
+    fn skinned_instances_are_drawn() {
+        let opaque = BlobId::from_bytes([1; 32]);
+        let skinned = BlobId::from_bytes([2; 32]);
         let vis = VisualManifest::from_v2(
             Epoch::ZERO,
             Tick::ZERO,
-            [(opaque, PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd::ZERO), mat)],
+            [(opaque, PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd::ZERO), mat())],
             [],
             [SkinnedInstance {
                 blob: skinned,
                 gpu: GpuHandle::NONE,
                 pose: PoseMm::new(Mm(10), Mm(0), Mm(0), YawMd::ZERO),
                 palette: 0,
-                material: mat,
+                material: mat(),
             }],
             [PaletteSlot {
                 gpu: GpuHandle::NONE,
                 bones: 16,
+                joints: vec![PoseMm::default(); 16],
             }],
             [],
             [],
@@ -1356,8 +1583,61 @@ mod tests {
         );
         assert_eq!(vis.skinned.len(), 1);
         let items = pbr_draw_items(&vis, &[0]);
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].blob, opaque);
+        assert_eq!(items[1].blob, skinned);
+        assert_eq!(items[1].palette, Some(0));
+    }
+
+    #[test]
+    fn palette_index_oob_is_not_drawn() {
+        let skinned = BlobId::from_bytes([2; 32]);
+        let vis = VisualManifest::from_v2(
+            Epoch::ZERO,
+            Tick::ZERO,
+            [],
+            [],
+            [SkinnedInstance {
+                blob: skinned,
+                gpu: GpuHandle::NONE,
+                pose: PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd::ZERO),
+                palette: 3,
+                material: mat(),
+            }],
+            [PaletteSlot::identity()],
+            [],
+            [],
+            PostFlags::ADVENTURE,
+            [],
+        );
+        let items = pbr_draw_items(&vis, &[]);
+        assert!(items.is_empty());
+    }
+
+    #[test]
+    fn bones_zero_identity_is_drawn() {
+        let skinned = BlobId::from_bytes([9; 32]);
+        let vis = VisualManifest::from_v2(
+            Epoch::ZERO,
+            Tick::ZERO,
+            [],
+            [],
+            [SkinnedInstance {
+                blob: skinned,
+                gpu: GpuHandle::NONE,
+                pose: PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd::ZERO),
+                palette: 0,
+                material: mat(),
+            }],
+            [PaletteSlot::identity()],
+            [],
+            [],
+            PostFlags::COMPETITIVE,
+            [],
+        );
+        let items = pbr_draw_items(&vis, &[]);
         assert_eq!(items.len(), 1);
-        assert_eq!(items[0].0, opaque);
-        assert!(items.iter().all(|i| i.0 != skinned));
+        assert_eq!(items[0].blob, skinned);
+        assert_eq!(vis.palettes[0].bones, 0);
     }
 }

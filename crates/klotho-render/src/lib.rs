@@ -23,7 +23,9 @@ mod surface;
 mod thread;
 
 pub use cluster::{PointLight, TileAssign, assign_tiles};
-pub use extract::{VisualBind, binds_from_cooked, extract_visual};
+pub use extract::{
+    VisualBind, binds_from_cooked, extract_visual, extract_visual_with_clips, skinned_instance,
+};
 pub use gpu::{GOLDEN_HEIGHT, GOLDEN_WIDTH, WgpuPresenter};
 pub use overlay::{overlay_hud, write_bmp};
 pub use palette::{albedo, metalness_roughness};
@@ -59,6 +61,7 @@ mod tests {
         assert!(PBR_WGSL.contains("metalness"));
         assert!(PBR_WGSL.contains("roughness"));
         assert!(PBR_WGSL.contains("fn vs"));
+        assert!(PBR_WGSL.contains("fn vs_skinned"));
         assert!(PBR_WGSL.contains("fn fs"));
         assert!(!PBR_WGSL.contains("meshlet"));
         assert!(!PBR_WGSL.to_ascii_lowercase().contains("sdf"));

@@ -452,7 +452,7 @@ pub fn decode_skinned_mesh(bytes: &[u8]) -> Result<DecodedSkinnedMesh, CompileEr
         ];
         let sum = u32::from(w[0]) + u32::from(w[1]) + u32::from(w[2]) + u32::from(w[3]);
         if sum != SKIN_WEIGHT_SUM {
-            return Err(CompileError::Header("weight count mismatch".into()));
+            return Err(CompileError::Header("weight sum".into()));
         }
         out_weights.push(w);
         off += 8;
@@ -746,6 +746,10 @@ mod tests {
             matches!(e, CompileError::Header(ref s) if s.contains("weight count mismatch")),
             "{e}"
         );
+    }
+
+    #[test]
+    fn skinned_weight_sum_rejected() {
         let w = [1u16, 0, 0, 0];
         let bytes = encode_skinned_mesh(
             &[[0, 0, 0], [1, 0, 0], [0, 1, 0]],
@@ -757,7 +761,7 @@ mod tests {
         .unwrap();
         let err = validate_skinned_mesh(&bytes).unwrap_err();
         assert!(
-            matches!(err, CompileError::Header(ref s) if s.contains("weight count mismatch")),
+            matches!(err, CompileError::Header(ref s) if s.contains("weight sum")),
             "{err}"
         );
     }

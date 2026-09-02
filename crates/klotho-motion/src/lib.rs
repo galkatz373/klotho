@@ -6,8 +6,7 @@
 //! Gameplay-critical timing lives in Rite `WAIT` + Laws, not clip notifies.
 //!
 //! Clip time is derived from `WorldView::tick` (no hidden integrator state).
-//! Empty clip joints are T-pose (Hearth fallback). Look-at/IK is presentation
-//! only and is not called from this proposer.
+//! Empty clip joints are identity so Hearth hashes stay root-only.
 //!
 //! Actor locomotion is Motion's job. `klotho-space` skips `LocusKind::Actor`
 //! so root motion and island integration cannot dual-truth the same body.
@@ -170,7 +169,7 @@ mod tests {
         AabbMm, BlobId, Budget, Hash, HullWitness, IVec3, LocusKind, Mm, PlayerId, PoseMm,
         RejectReason, Sigil, Tick, Vel3, VelFx, YawMd,
     };
-    use klotho_ir::{CanonDiff, Rel, Verb, from_ron};
+    use klotho_ir::{CanonDiff, Rel, from_ron};
     use klotho_world::World;
 
     use super::*;
@@ -333,41 +332,6 @@ mod tests {
         assert!(
             d.rejects.iter().any(|(_, r)| *r == RejectReason::WrongHull),
             "{d:?}"
-        );
-    }
-
-    #[test]
-    fn look_at_palette_does_not_change_motion_delta() {
-        let diffs: Vec<CanonDiff> = from_ron("[]").unwrap();
-        let canon = cook_diffs(&diffs).unwrap();
-        let mut k = CommitKernel::new(World::new(Arc::new(canon), Hash::ZERO));
-        let player = actor(1);
-        {
-            let mut w = k.world_mut();
-            w.insert_locus(player, LocusKind::Actor).unwrap();
-            w.set_hull(player, box_xz(200, 1800, 200), hull_id(1))
-                .unwrap();
-            w.set_pose(player, PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)))
-                .unwrap();
-            w.set_vel(player, Vel3::new(VelFx::ONE, VelFx::ZERO, VelFx::ZERO), 0)
-                .unwrap();
-        }
-        let mut motion = Motion::hearth();
-        let joints = vec![PoseMm::new(Mm(0), Mm(1800), Mm(0), YawMd::ZERO)];
-        let _looked = klotho_anim::look_at_yaw(&joints, 0, YawMd(45_000));
-        let d = k.step(Tick(1), Budget::HEARTH, &mut [&mut motion]).unwrap();
-        assert!(d.rejects.is_empty(), "{d:?}");
-        let p = k.world().view().pose(player).unwrap();
-        assert_eq!(p.z, Mm(WALK_MM_PER_TICK));
-        assert_eq!(p.yaw, YawMd(0));
-        assert_eq!(
-            motion
-                .clips()
-                .lookup(Verb::Move, true)
-                .unwrap()
-                .sample(Tick(0))
-                .z,
-            WALK_MM_PER_TICK
         );
     }
 

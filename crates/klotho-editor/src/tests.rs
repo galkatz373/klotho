@@ -278,3 +278,13 @@ fn empty_pin_reason_is_rejected() {
     assert_eq!(err, EditorError::Author(AuthorError::EmptyPinReason));
     assert_eq!(session.seed_pose(&chair()), Some(origin()));
 }
+
+#[test]
+fn pin_pose_without_overlay_is_no_overlay() {
+    let mut session = EditorSession::new(stool_chair());
+    session.cook().unwrap();
+    let err = session.pin_pose(&chair(), "place the chair").unwrap_err();
+    assert_eq!(err, EditorError::NoOverlay(chair()));
+    assert_eq!(err.to_string(), "no overlay pose chair");
+    assert_eq!(session.seed_pose(&chair()), Some(origin()));
+}

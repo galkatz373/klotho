@@ -1,4 +1,4 @@
-//! Selection inspector: Canon/seed facts and last Pin reason.
+//! Selection inspector: seed kind, rels, qtys, and last Pin reason.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -37,7 +37,7 @@ impl fmt::Display for InspectorView {
     }
 }
 
-/// Facts for `name` from the document. `None` if that locus is not seeded.
+/// Seed kind / rels / qtys and last Pin reason. `None` if that locus is not seeded.
 #[must_use]
 pub fn inspect(
     doc: &IntentDoc,

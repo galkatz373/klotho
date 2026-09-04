@@ -35,7 +35,7 @@ pub struct EditorSession {
 }
 
 impl EditorSession {
-    /// Hold `doc`. Call [`Self::cook`] before play or viewport present.
+    /// Hold `doc` uncooked. [`Self::cook`], [`Self::play`], and [`Self::present`] boot the kernel.
     #[must_use]
     pub fn new(doc: IntentDoc) -> Self {
         Self {
@@ -160,7 +160,7 @@ impl EditorSession {
             .overlay
             .get(locus)
             .copied()
-            .ok_or_else(|| EditorError::Boot(format!("no overlay pose {}", locus.as_str())))?;
+            .ok_or_else(|| EditorError::NoOverlay(locus.clone()))?;
         self.apply_pin(Pin::ToSeedTrace {
             fact: SeedFact::Pose {
                 of: locus.clone(),

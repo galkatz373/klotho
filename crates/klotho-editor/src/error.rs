@@ -17,6 +17,8 @@ pub enum EditorError {
     NoCook,
     /// Named locus is not in the document seed.
     UnknownLocus(Name),
+    /// Pin of a pose needs a gizmo overlay for that locus.
+    NoOverlay(Name),
     /// Kernel invariant during `step`.
     Fault(KernelFault),
 }
@@ -28,6 +30,7 @@ impl fmt::Display for EditorError {
             Self::Boot(s) => write!(f, "{s}"),
             Self::NoCook => write!(f, "no cook"),
             Self::UnknownLocus(n) => write!(f, "unknown locus {n}"),
+            Self::NoOverlay(n) => write!(f, "no overlay pose {n}"),
             Self::Fault(e) => write!(f, "{e}"),
         }
     }

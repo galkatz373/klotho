@@ -10,7 +10,7 @@ use klotho_world::World;
 
 use crate::error::EditorError;
 
-/// Boot from packed Canon and seed. Play-in-editor must not depend on `klotho-runtime`.
+/// Seed a [`CommitKernel`] from packed Canon and seed facts.
 pub(crate) fn kernel_from_cooked(cooked: &Cooked) -> Result<CommitKernel, EditorError> {
     let mut k = CommitKernel::new(World::new(
         Arc::new(cooked.canon.clone()),

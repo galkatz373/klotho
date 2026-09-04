@@ -9,7 +9,7 @@ use klotho_ir::{Channel, Rel};
 
 use crate::proj::Projection;
 
-/// Hitscan segment length, millimetres.
+/// Engine Fire range cap (50 m). Rewind hitscan only; not a Law.
 pub const HITSCAN_RANGE_MM: i32 = 50_000;
 
 /// Borrowed projection queries. No writes.

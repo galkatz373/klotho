@@ -24,7 +24,7 @@ pub enum SidecarFlag {
     AnalogRange,
     /// More intents in the 60-tick window than `intent_hz`.
     CmdRate,
-    /// Fire/Use `at` older than `now - rewind_ticks`.
+    /// Fire `at` older than `now - rewind_ticks`. Use is not flagged (no world).
     StaleFire,
 }
 
@@ -105,7 +105,7 @@ impl Sidecar {
         }
         let cmd_flag = q.len() > usize::from(self.intent_hz);
         let stale = self.rewind_ticks > 0
-            && matches!(intent.verb, Verb::Fire | Verb::Use)
+            && intent.verb == Verb::Fire
             && now.0.saturating_sub(intent.at.0) > u64::from(self.rewind_ticks);
         let flag = if cmd_flag {
             SidecarFlag::CmdRate
@@ -163,6 +163,13 @@ mod tests {
         let r = s.inspect(&intent(Verb::Fire, Tick(0), Analog::default()), Tick(20));
         assert_eq!(r.flag, SidecarFlag::StaleFire);
         assert!(!r.recommend_disconnect());
+    }
+
+    #[test]
+    fn too_old_use_is_not_stale_fire() {
+        let mut s = Sidecar::new(20, 12);
+        let r = s.inspect(&intent(Verb::Use, Tick(0), Analog::default()), Tick(20));
+        assert_eq!(r.flag, SidecarFlag::None);
     }
 
     #[test]

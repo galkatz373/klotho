@@ -129,4 +129,24 @@ mod tests {
         assert_eq!(v.y, 20);
         assert_eq!(v.z, 0);
     }
+
+    #[test]
+    fn look_offset_pitch_down_is_minus_y() {
+        let v = look_offset(YawMd::ZERO, YawMd(-YawMd::QUARTER_TURN), 20);
+        assert_eq!(v.x, 0);
+        assert_eq!(v.y, -20);
+        assert_eq!(v.z, 0);
+    }
+
+    #[test]
+    fn look_offset_pitch_clamps_past_quarter_turn() {
+        assert_eq!(
+            look_offset(YawMd::ZERO, YawMd(91_000), 20),
+            look_offset(YawMd::ZERO, YawMd(YawMd::QUARTER_TURN), 20)
+        );
+        assert_eq!(
+            look_offset(YawMd::ZERO, YawMd(-91_000), 20),
+            look_offset(YawMd::ZERO, YawMd(-YawMd::QUARTER_TURN), 20)
+        );
+    }
 }

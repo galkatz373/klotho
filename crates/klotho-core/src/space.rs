@@ -361,6 +361,16 @@ mod tests {
         assert!(empty.is_empty());
         assert!(!empty.intersects(point));
         assert!(!empty.contains_point(IVec3 { x: 5, y: 0, z: 0 }));
+        assert!(
+            empty
+                .segment_hit(IVec3 { x: 5, y: 0, z: 0 }, IVec3::ZERO)
+                .is_none()
+        );
+        assert!(
+            empty
+                .segment_hit(IVec3 { x: 0, y: 0, z: 0 }, IVec3 { x: 10, y: 0, z: 0 })
+                .is_none()
+        );
     }
 
     #[test]

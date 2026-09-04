@@ -17,8 +17,9 @@ pub enum RejectReason {
     Resource(ResourceId),
     /// Infer or mind claimed a fact the locus does not `Knows`.
     HallucinatedFact,
-    /// Job or intent older than `Budget.eval_slo_ticks`, or Fire/melee older
-    /// than `now - Budget.rewind_ticks` when rewind is enabled.
+    /// Job or intent older than `Budget.eval_slo_ticks`; Fire/melee older than
+    /// `now - Budget.rewind_ticks` when rewind is enabled; or Fire whose `at`
+    /// is in-window but the ring has no snapshot (fail closed, not live poses).
     StaleEpoch,
     /// `WAIT.channel` / agency claimed by a proposer that does not own it (K10).
     UnclaimedAgency,

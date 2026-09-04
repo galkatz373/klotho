@@ -114,13 +114,24 @@ fn off_ray() -> PoseMm {
 }
 
 fn fire_intent(at: Tick, target: IntentTarget) -> PlayerIntent {
+    player_intent(Verb::Fire, at, target)
+}
+
+fn player_intent(verb: Verb, at: Tick, target: IntentTarget) -> PlayerIntent {
     PlayerIntent {
         player: PlayerId(0),
         at,
-        verb: Verb::Fire,
+        verb,
         target,
         analog: Analog::default(),
         agency: Agency::none(),
+    }
+}
+
+fn rewind_not_slo() -> Budget {
+    Budget {
+        rewind_ticks: 5,
+        ..Budget::AAA_SHOOTER
     }
 }
 
@@ -198,8 +209,10 @@ fn delayed_fire_name_still_needs_ring_ray() {
         at,
         IntentTarget::Name(Name::from("dummy_0")),
     )));
+    let ammo = k.canon().resource_id("ammo").unwrap();
     let d = k.step(Tick(3), Budget::AAA_SHOOTER, &mut []).unwrap();
     assert!(d.rejects.is_empty(), "{d:?}");
+    assert_eq!(k.world().view().qty(player, ammo), 9);
     assert_eq!(k.world().view().qty(dummy, health), 100);
     assert!(!d.events.iter().any(|e| matches!(
         e.body,
@@ -231,6 +244,85 @@ fn too_old_fire_nacks_stale_epoch() {
     );
     assert_eq!(k.world().view().qty(dummy, health), 100);
     assert!(!hit_event(&d.events, dummy), "{d:?}");
+}
+
+#[test]
+fn rewind_stale_is_not_eval_slo() {
+    let budget = rewind_not_slo();
+    assert!(budget.rewind_ticks < Budget::HEARTH.eval_slo_ticks);
+
+    let (mut k, player, dummy) = shooter_kernel();
+    let health = k.canon().resource_id("health").unwrap();
+    let ammo = k.canon().resource_id("ammo").unwrap();
+    k.step(Tick(1), budget, &mut []).unwrap();
+    let at = k.world().tick();
+    k.ingest(Proposal::Player(fire_intent(
+        at,
+        IntentTarget::Sigil(dummy),
+    )));
+    let d = k.step(Tick(8), budget, &mut []).unwrap();
+    assert!(
+        d.rejects
+            .iter()
+            .any(|(_, r)| *r == RejectReason::StaleEpoch),
+        "{d:?}"
+    );
+    assert_eq!(k.world().view().qty(dummy, health), 100);
+    assert_eq!(k.world().view().qty(player, ammo), 10);
+
+    let (mut k, _, _) = shooter_kernel();
+    k.step(Tick(1), budget, &mut []).unwrap();
+    let at = k.world().tick();
+    k.ingest(Proposal::Player(player_intent(
+        Verb::Look,
+        at,
+        IntentTarget::None,
+    )));
+    let d = k.step(Tick(8), budget, &mut []).unwrap();
+    assert!(
+        !d.rejects
+            .iter()
+            .any(|(_, r)| *r == RejectReason::StaleEpoch),
+        "{d:?}"
+    );
+
+    let (mut k, _, dummy) = shooter_kernel();
+    let health = k.canon().resource_id("health").unwrap();
+    k.step(Tick(1), budget, &mut []).unwrap();
+    let at = k.world().tick();
+    k.ingest(Proposal::Player(player_intent(
+        Verb::Use,
+        at,
+        IntentTarget::Sigil(dummy),
+    )));
+    let d = k.step(Tick(8), budget, &mut []).unwrap();
+    assert!(
+        d.rejects
+            .iter()
+            .any(|(_, r)| *r == RejectReason::StaleEpoch),
+        "{d:?}"
+    );
+    assert_eq!(k.world().view().qty(dummy, health), 100);
+
+    let (mut k, _, dummy) = shooter_kernel();
+    let health = k.canon().resource_id("health").unwrap();
+    let door = Sigil::pack(LocusKind::Relic, 0, 99).unwrap();
+    k.world_mut().insert_locus(door, LocusKind::Relic).unwrap();
+    k.step(Tick(1), budget, &mut []).unwrap();
+    let at = k.world().tick();
+    k.ingest(Proposal::Player(player_intent(
+        Verb::Use,
+        at,
+        IntentTarget::Sigil(door),
+    )));
+    let d = k.step(Tick(8), budget, &mut []).unwrap();
+    assert!(
+        !d.rejects
+            .iter()
+            .any(|(_, r)| *r == RejectReason::StaleEpoch),
+        "{d:?}"
+    );
+    assert_eq!(k.world().view().qty(dummy, health), 100);
 }
 
 #[test]

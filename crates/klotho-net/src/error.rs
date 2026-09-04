@@ -21,10 +21,12 @@ pub enum NetError {
     BadKey,
     /// OS entropy for join-time keygen failed.
     Keygen,
-    /// Hello `canon_hash` or [`crate::CompilerStamp`] did not match.
+    /// Hello `canon_hash`, `epoch`, or [`crate::CompilerStamp`] did not match.
     HelloMismatch,
-    /// v1 is two players (`PlayerId` 0 host, 1 remote).
+    /// Listen-server is two players (`PlayerId` 0 host, 1 remote).
     ThirdPlayer,
+    /// Dedicated server already holds [`crate::MAX_DEDICATED_PLAYERS`].
+    ServerFull,
     /// Trace prefix / delta ancestry mismatch. Disconnect and write a replay.
     Desync,
     /// Space, Motion, Mind, and Infer run on the host only.
@@ -52,6 +54,7 @@ impl fmt::Display for NetError {
             Self::Keygen => write!(f, "Keygen"),
             Self::HelloMismatch => write!(f, "HelloMismatch"),
             Self::ThirdPlayer => write!(f, "ThirdPlayer"),
+            Self::ServerFull => write!(f, "ServerFull"),
             Self::Desync => write!(f, "Desync"),
             Self::HostOnly => write!(f, "HostOnly"),
             Self::NotJoined => write!(f, "NotJoined"),

@@ -1,8 +1,9 @@
-//! Frozen v1 packets. Canonical little-endian; hashed/signed bytes never go
+//! Frozen packets. Canonical little-endian; hashed/signed bytes never go
 //! through serde.
 
 use klotho_core::{
-    AffordanceId, Hash, LawId, PlayerId, RejectReason, ResourceId, Sigil, Tick, YawMd,
+    AffordanceId, Epoch, Hash, LawId, PlayerId, PoseMm, RejectReason, ResourceId, Sigil, Tick,
+    Vel3, YawMd,
 };
 use klotho_ir::{Agency, Analog, AssistLevel, Channel, IntentTarget, Name, PlayerIntent, Verb};
 use klotho_prove::hash_bytes;
@@ -20,15 +21,25 @@ pub const MAX_EVENTS: usize = 4_096;
 pub const MAX_BLOB: usize = MAX_PACKET - 256;
 /// Maximum canonical [`PlayerIntent`] encoding.
 pub const MAX_INTENT: usize = 64 * 1024;
+/// Maximum [`Packet::PoseDelta`] payload per client per tick.
+pub const MAX_POSE_DELTA: usize = 64 * 1024;
+/// Maximum Interest places or codebook sigils (`local_ix` is `u16`).
+pub const MAX_INTEREST: usize = 65_535;
 
 /// ASCII token whose blake3 is [`CompilerStamp::current`].
-pub const STAMP_TOKEN: &[u8] = b"klotho-net/0.1.0";
+pub const STAMP_TOKEN: &[u8] = b"klotho-net/0.2.0";
 
 const TAG_HELLO: u8 = 1;
 const TAG_INTENT: u8 = 2;
 const TAG_TRACE_DELTA: u8 = 3;
 const TAG_NACK: u8 = 4;
 const TAG_SNAPSHOT: u8 = 5;
+const TAG_INTEREST: u8 = 6;
+const TAG_POSE_DELTA: u8 = 7;
+const TAG_RESYNC: u8 = 8;
+
+const KIND_FULL: u8 = 0;
+const KIND_DELTA: u8 = 1;
 
 const INTENT_VERSION: u8 = 1;
 
@@ -52,7 +63,7 @@ const REJ_ISLAND_TOO_LARGE: u8 = 13;
 const REJ_RESIDENCY: u8 = 14;
 const REJ_EPOCH_MISMATCH: u8 = 15;
 
-/// blake3 of [`STAMP_TOKEN`]. Hello mismatch on stamp or canon_hash disconnects.
+/// blake3 of [`STAMP_TOKEN`]. Hello mismatch on stamp, epoch, or canon_hash disconnects.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct CompilerStamp(pub Hash);
 
@@ -64,25 +75,69 @@ impl CompilerStamp {
     }
 }
 
-/// Opaque join/resync blob. v1 reconstruction uses TraceDelta, not this payload.
+/// Opaque join/resync blob. Reconstruction uses TraceDelta, not this payload.
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct SnapshotBlob(pub Vec<u8>);
 
-/// Frozen listen-server packet.
+/// Ordered Interest codebook. `local_ix` indexes [`Self::sigils`].
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
+pub struct InterestDict {
+    /// Dictionary generation. Wraps mod 65536.
+    pub interest_gen: u16,
+    /// Interested places.
+    pub places: Vec<Sigil>,
+    /// Mover codebook. Hot [`Packet::PoseDelta`] carries indexes, not these bytes.
+    pub sigils: Vec<Sigil>,
+}
+
+/// Full pose row after Resync or an Interest generation change.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct PoseFull {
+    /// Index into the client's current Interest codebook.
+    pub local_ix: u16,
+    /// Absolute pose (XYZ millimetres, then yaw/pitch/roll millidegrees).
+    pub pose: PoseMm,
+    /// Velocity (VelFx raw 16.16 per axis).
+    pub vel: Vel3,
+}
+
+/// Hot delta row. 12 B `dpose` plus `u16` index; no Sigil.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct PoseDeltaEntry {
+    /// Index into the client's current Interest codebook.
+    pub local_ix: u16,
+    /// `(dx, dy, dz, dyaw, dpitch, droll)` vs last applied full-or-delta pose.
+    pub dpose: [i16; 6],
+}
+
+/// PoseDelta body: Full after Resync or dictionary change, Delta in steady state.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum PoseBlock {
+    /// Absolute poses. Idle movers may still appear.
+    Full(Vec<PoseFull>),
+    /// Millimetre / millidegree deltas. Idle movers omitted.
+    Delta(Vec<PoseDeltaEntry>),
+}
+
+/// Frozen listen / dedicated-server packet.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum Packet {
-    /// Join advertisement. `slot` is 0 on the client request; host replies with 1.
+    /// Join advertisement. `slot` is 0 on the client request; the reply assigns it.
     Hello {
         /// Cooked Canon identity. Mismatch → disconnect (no replay).
         canon_hash: Hash,
+        /// Cook / hull epoch. Mismatch → disconnect (no replay).
+        epoch: Epoch,
         /// [`CompilerStamp::current`]. Mismatch → disconnect (no replay).
         build: CompilerStamp,
         /// 32-byte ed25519 verifying key. Truncated or invalid → error, not a default.
         verifying_key: [u8; 32],
-        /// Assigned [`PlayerId`] (host reply) or 0 (client request).
+        /// Assigned [`PlayerId`] (reply) or 0 (client request).
         slot: PlayerId,
+        /// Advertised intent rate. Listen default 20; dedicated may use 30 or 60.
+        intent_hz: u8,
     },
-    /// Signed PlayerIntent. Host verifies then keeps the latest unconsumed slot.
+    /// Signed PlayerIntent. Host/Server verifies then keeps the latest unconsumed slot.
     Intent {
         /// Signature over the canonical LE intent bytes.
         signed: Signed<PlayerIntent>,
@@ -91,6 +146,8 @@ pub enum Packet {
     TraceDelta {
         /// Parent tick the receiver must currently be at.
         from: Tick,
+        /// Interest generation this delta was packed against.
+        interest_gen: u16,
         /// Admitted events, commit order.
         events: Vec<TraceEvent>,
     },
@@ -105,12 +162,43 @@ pub enum Packet {
     Snapshot {
         /// Tick of this checkpoint.
         tick: Tick,
+        /// Cook / hull epoch at this checkpoint.
+        epoch: Epoch,
         /// Canon identity.
         canon_hash: Hash,
         /// Trace prefix at `tick`.
         trace_prefix_hash: Hash,
+        /// Optional place Sigil (`place_present` on the wire).
+        place: Option<Sigil>,
         /// Capped opaque bytes; empty is valid.
         blob: SnapshotBlob,
+    },
+    /// Server→client ordered codebook. Loss or a generation skip is Resync.
+    Interest {
+        /// Dictionary generation. Wraps mod 65536.
+        interest_gen: u16,
+        /// Interested places.
+        places: Vec<Sigil>,
+        /// Mover codebook used by [`Packet::PoseDelta`].
+        sigils: Vec<Sigil>,
+    },
+    /// Unhashed overlay input. Never a Trace prefix input.
+    PoseDelta {
+        /// Tick these poses were published.
+        tick: Tick,
+        /// Interest generation this payload indexes.
+        interest_gen: u16,
+        /// Full or packed delta poses.
+        block: PoseBlock,
+    },
+    /// Recover from Interest generation skip or dictionary loss.
+    Resync {
+        /// Tick to resume from.
+        tick: Tick,
+        /// Session epoch.
+        epoch: Epoch,
+        /// Trace prefix at `tick`.
+        prefix: Hash,
     },
 }
 
@@ -150,15 +238,19 @@ pub fn encode_packet(pkt: &Packet) -> Result<Vec<u8>, NetError> {
     match pkt {
         Packet::Hello {
             canon_hash,
+            epoch,
             build,
             verifying_key,
             slot,
+            intent_hz,
         } => {
             b.u8(TAG_HELLO);
             b.hash(*canon_hash);
+            b.u64_le(epoch.0);
             b.hash(build.0);
             b.bytes.extend_from_slice(verifying_key);
             b.u8(slot.0);
+            b.u8(*intent_hz);
         }
         Packet::Intent { signed } => {
             b.u8(TAG_INTENT);
@@ -170,12 +262,17 @@ pub fn encode_packet(pkt: &Packet) -> Result<Vec<u8>, NetError> {
             b.u32_le(payload.len() as u32);
             b.bytes.extend_from_slice(&payload);
         }
-        Packet::TraceDelta { from, events } => {
+        Packet::TraceDelta {
+            from,
+            interest_gen,
+            events,
+        } => {
             if events.len() > MAX_EVENTS {
                 return Err(NetError::Oversize);
             }
             b.u8(TAG_TRACE_DELTA);
             b.u64_le(from.0);
+            b.u16_le(*interest_gen);
             b.u32_le(events.len() as u32);
             for e in events {
                 let enc = encode_event(e);
@@ -190,8 +287,10 @@ pub fn encode_packet(pkt: &Packet) -> Result<Vec<u8>, NetError> {
         }
         Packet::Snapshot {
             tick,
+            epoch,
             canon_hash,
             trace_prefix_hash,
+            place,
             blob,
         } => {
             if blob.0.len() > MAX_BLOB {
@@ -199,10 +298,60 @@ pub fn encode_packet(pkt: &Packet) -> Result<Vec<u8>, NetError> {
             }
             b.u8(TAG_SNAPSHOT);
             b.u64_le(tick.0);
+            b.u64_le(epoch.0);
             b.hash(*canon_hash);
             b.hash(*trace_prefix_hash);
+            match place {
+                None => b.u8(0),
+                Some(s) => {
+                    b.u8(1);
+                    b.sigil(*s);
+                }
+            }
             b.u32_le(blob.0.len() as u32);
             b.bytes.extend_from_slice(&blob.0);
+        }
+        Packet::Interest {
+            interest_gen,
+            places,
+            sigils,
+        } => {
+            if places.len() > MAX_INTEREST || sigils.len() > MAX_INTEREST {
+                return Err(NetError::Oversize);
+            }
+            b.u8(TAG_INTEREST);
+            b.u16_le(*interest_gen);
+            b.u32_le(places.len() as u32);
+            for s in places {
+                b.sigil(*s);
+            }
+            b.u32_le(sigils.len() as u32);
+            for s in sigils {
+                b.sigil(*s);
+            }
+        }
+        Packet::PoseDelta {
+            tick,
+            interest_gen,
+            block,
+        } => {
+            b.u8(TAG_POSE_DELTA);
+            b.u64_le(tick.0);
+            b.u16_le(*interest_gen);
+            encode_pose_block(&mut b, block)?;
+            if b.bytes.len() > MAX_POSE_DELTA {
+                return Err(NetError::Oversize);
+            }
+        }
+        Packet::Resync {
+            tick,
+            epoch,
+            prefix,
+        } => {
+            b.u8(TAG_RESYNC);
+            b.u64_le(tick.0);
+            b.u64_le(epoch.0);
+            b.hash(*prefix);
         }
     }
     if b.bytes.len() > MAX_PACKET {
@@ -221,15 +370,19 @@ pub fn decode_packet(bytes: &[u8]) -> Result<Packet, NetError> {
     let pkt = match tag {
         TAG_HELLO => {
             let canon_hash = r.hash()?;
+            let epoch = Epoch(r.u64_le()?);
             let build = CompilerStamp(r.hash()?);
             let mut verifying_key = [0u8; 32];
             verifying_key.copy_from_slice(r.take(32)?);
             let slot = PlayerId(r.u8()?);
+            let intent_hz = r.u8()?;
             Packet::Hello {
                 canon_hash,
+                epoch,
                 build,
                 verifying_key,
                 slot,
+                intent_hz,
             }
         }
         TAG_INTENT => {
@@ -244,6 +397,7 @@ pub fn decode_packet(bytes: &[u8]) -> Result<Packet, NetError> {
         }
         TAG_TRACE_DELTA => {
             let from = Tick(r.u64_le()?);
+            let interest_gen = r.u16_le()?;
             let n = r.u32_capped(MAX_EVENTS)?;
             let mut events = Vec::new();
             for _ in 0..n {
@@ -252,7 +406,11 @@ pub fn decode_packet(bytes: &[u8]) -> Result<Packet, NetError> {
                 let e = decode_event(ev).map_err(|_| NetError::BadEvent)?;
                 events.push(e);
             }
-            Packet::TraceDelta { from, events }
+            Packet::TraceDelta {
+                from,
+                interest_gen,
+                events,
+            }
         }
         TAG_NACK => {
             let tick = Tick(r.u64_le()?);
@@ -261,15 +419,64 @@ pub fn decode_packet(bytes: &[u8]) -> Result<Packet, NetError> {
         }
         TAG_SNAPSHOT => {
             let tick = Tick(r.u64_le()?);
+            let epoch = Epoch(r.u64_le()?);
             let canon_hash = r.hash()?;
             let trace_prefix_hash = r.hash()?;
+            let place = match r.u8()? {
+                0 => None,
+                1 => Some(r.sigil()?),
+                _ => return Err(NetError::UnknownTag),
+            };
             let n = r.u32_capped(MAX_BLOB)?;
             let blob = SnapshotBlob(r.take(n)?.to_vec());
             Packet::Snapshot {
                 tick,
+                epoch,
                 canon_hash,
                 trace_prefix_hash,
+                place,
                 blob,
+            }
+        }
+        TAG_INTEREST => {
+            let interest_gen = r.u16_le()?;
+            let np = r.u32_capped(MAX_INTEREST)?;
+            let mut places = Vec::new();
+            for _ in 0..np {
+                places.push(r.sigil()?);
+            }
+            let ns = r.u32_capped(MAX_INTEREST)?;
+            let mut sigils = Vec::new();
+            for _ in 0..ns {
+                sigils.push(r.sigil()?);
+            }
+            Packet::Interest {
+                interest_gen,
+                places,
+                sigils,
+            }
+        }
+        TAG_POSE_DELTA => {
+            if bytes.len() > MAX_POSE_DELTA {
+                return Err(NetError::Oversize);
+            }
+            let tick = Tick(r.u64_le()?);
+            let interest_gen = r.u16_le()?;
+            let block = decode_pose_block(&mut r)?;
+            Packet::PoseDelta {
+                tick,
+                interest_gen,
+                block,
+            }
+        }
+        TAG_RESYNC => {
+            let tick = Tick(r.u64_le()?);
+            let epoch = Epoch(r.u64_le()?);
+            let prefix = r.hash()?;
+            Packet::Resync {
+                tick,
+                epoch,
+                prefix,
             }
         }
         _ => return Err(NetError::UnknownTag),
@@ -278,6 +485,109 @@ pub fn decode_packet(bytes: &[u8]) -> Result<Packet, NetError> {
         return Err(NetError::Truncated);
     }
     Ok(pkt)
+}
+
+fn encode_pose_block(b: &mut Buf, block: &PoseBlock) -> Result<(), NetError> {
+    match block {
+        PoseBlock::Full(entries) => {
+            if entries.len() > u16::MAX as usize {
+                return Err(NetError::Oversize);
+            }
+            b.u8(KIND_FULL);
+            b.u16_le(entries.len() as u16);
+            for e in entries {
+                b.u16_le(e.local_ix);
+                encode_pose_mm(b, &e.pose);
+                encode_vel3(b, &e.vel);
+            }
+        }
+        PoseBlock::Delta(entries) => {
+            if entries.len() > u16::MAX as usize {
+                return Err(NetError::Oversize);
+            }
+            b.u8(KIND_DELTA);
+            b.u16_le(entries.len() as u16);
+            for e in entries {
+                b.u16_le(e.local_ix);
+                for d in e.dpose {
+                    b.i16_le(d);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn decode_pose_block(r: &mut Reader<'_>) -> Result<PoseBlock, NetError> {
+    match r.u8()? {
+        KIND_FULL => {
+            let n = r.u16_le()? as usize;
+            let mut entries = Vec::new();
+            for _ in 0..n {
+                let local_ix = r.u16_le()?;
+                let pose = decode_pose_mm(r)?;
+                let vel = decode_vel3(r)?;
+                entries.push(PoseFull {
+                    local_ix,
+                    pose,
+                    vel,
+                });
+            }
+            Ok(PoseBlock::Full(entries))
+        }
+        KIND_DELTA => {
+            let n = r.u16_le()? as usize;
+            let mut entries = Vec::new();
+            for _ in 0..n {
+                let local_ix = r.u16_le()?;
+                let dpose = [
+                    r.i16_le()?,
+                    r.i16_le()?,
+                    r.i16_le()?,
+                    r.i16_le()?,
+                    r.i16_le()?,
+                    r.i16_le()?,
+                ];
+                entries.push(PoseDeltaEntry { local_ix, dpose });
+            }
+            Ok(PoseBlock::Delta(entries))
+        }
+        _ => Err(NetError::UnknownTag),
+    }
+}
+
+fn encode_pose_mm(b: &mut Buf, p: &PoseMm) {
+    b.i32_le(p.x.0);
+    b.i32_le(p.y.0);
+    b.i32_le(p.z.0);
+    b.i32_le(p.yaw.0);
+    b.i32_le(p.pitch.0);
+    b.i32_le(p.roll.0);
+}
+
+fn decode_pose_mm(r: &mut Reader<'_>) -> Result<PoseMm, NetError> {
+    Ok(PoseMm {
+        x: klotho_core::Mm(r.i32_le()?),
+        y: klotho_core::Mm(r.i32_le()?),
+        z: klotho_core::Mm(r.i32_le()?),
+        yaw: YawMd(r.i32_le()?),
+        pitch: YawMd(r.i32_le()?),
+        roll: YawMd(r.i32_le()?),
+    })
+}
+
+fn encode_vel3(b: &mut Buf, v: &Vel3) {
+    b.i32_le(v.x.0);
+    b.i32_le(v.y.0);
+    b.i32_le(v.z.0);
+}
+
+fn decode_vel3(r: &mut Reader<'_>) -> Result<Vel3, NetError> {
+    Ok(Vel3 {
+        x: klotho_core::VelFx(r.i32_le()?),
+        y: klotho_core::VelFx(r.i32_le()?),
+        z: klotho_core::VelFx(r.i32_le()?),
+    })
 }
 
 /// Canonical LE bytes of a [`PlayerIntent`]. This is the signature payload.
@@ -561,7 +871,7 @@ impl Reader<'_> {
 
 #[cfg(test)]
 mod tests {
-    use klotho_core::{LocusKind, Mm, PoseMm, Vel3};
+    use klotho_core::{LocusKind, Mm, PoseMm, Vel3, VelFx};
     use klotho_ir::Agency;
     use klotho_trace::{IslandSnap, PoseReason, TraceBody};
 
@@ -593,14 +903,29 @@ mod tests {
         assert_eq!(decode_packet(payload).unwrap(), pkt);
     }
 
+    fn six_dof() -> PoseMm {
+        PoseMm {
+            x: Mm(10),
+            y: Mm(20),
+            z: Mm(30),
+            yaw: YawMd(40),
+            pitch: YawMd(50),
+            roll: YawMd(60),
+        }
+    }
+
     #[test]
     fn packet_round_trip_every_variant() {
         let stamp = CompilerStamp::current();
+        let actor = Sigil::pack(LocusKind::Actor, 0, 1).unwrap();
+        let place = Sigil::pack(LocusKind::Place, 0, 2).unwrap();
         round_trip(Packet::Hello {
             canon_hash: Hash::from_bytes([0x11; 32]),
+            epoch: Epoch(7),
             build: stamp,
             verifying_key: [0x22; 32],
             slot: PlayerId(1),
+            intent_hz: 30,
         });
         round_trip(Packet::Intent {
             signed: Signed {
@@ -608,7 +933,6 @@ mod tests {
                 value: look(),
             },
         });
-        let actor = Sigil::pack(LocusKind::Actor, 0, 1).unwrap();
         let events = vec![
             TraceEvent::new(Tick(1), TraceBody::SaveRequested),
             TraceEvent::new(
@@ -654,6 +978,7 @@ mod tests {
         ];
         round_trip(Packet::TraceDelta {
             from: Tick(0),
+            interest_gen: 3,
             events,
         });
         round_trip(Packet::Nack {
@@ -674,15 +999,46 @@ mod tests {
         });
         round_trip(Packet::Snapshot {
             tick: Tick(2),
+            epoch: Epoch(1),
             canon_hash: Hash::from_bytes([0x44; 32]),
             trace_prefix_hash: Hash::from_bytes([0x55; 32]),
+            place: Some(place),
             blob: SnapshotBlob(vec![1, 2, 3]),
         });
         round_trip(Packet::Snapshot {
             tick: Tick(0),
+            epoch: Epoch::ZERO,
             canon_hash: Hash::ZERO,
             trace_prefix_hash: Hash::ZERO,
+            place: None,
             blob: SnapshotBlob(Vec::new()),
+        });
+        round_trip(Packet::Interest {
+            interest_gen: 9,
+            places: vec![place],
+            sigils: vec![actor],
+        });
+        round_trip(Packet::PoseDelta {
+            tick: Tick(5),
+            interest_gen: 9,
+            block: PoseBlock::Full(vec![PoseFull {
+                local_ix: 0,
+                pose: six_dof(),
+                vel: Vel3::new(VelFx(1), VelFx(2), VelFx(3)),
+            }]),
+        });
+        round_trip(Packet::PoseDelta {
+            tick: Tick(6),
+            interest_gen: 9,
+            block: PoseBlock::Delta(vec![PoseDeltaEntry {
+                local_ix: 0,
+                dpose: [1, -2, 3, -4, 5, -6],
+            }]),
+        });
+        round_trip(Packet::Resync {
+            tick: Tick(7),
+            epoch: Epoch(1),
+            prefix: Hash::from_bytes([0x66; 32]),
         });
         let named = PlayerIntent {
             target: IntentTarget::Name(Name::from("oak_door")),
@@ -701,15 +1057,60 @@ mod tests {
     }
 
     #[test]
+    fn pose_delta_6dof_round_trip_no_sigil_in_hot_payload() {
+        let actor = Sigil::pack(LocusKind::Actor, 7, 99).unwrap();
+        let sigil_bytes = actor.raw().to_le_bytes();
+        let delta = Packet::PoseDelta {
+            tick: Tick(11),
+            interest_gen: 2,
+            block: PoseBlock::Delta(vec![PoseDeltaEntry {
+                local_ix: 0,
+                dpose: [10, 20, 30, 40, 50, 60],
+            }]),
+        };
+        let enc = encode_packet(&delta).unwrap();
+        assert_eq!(decode_packet(&enc).unwrap(), delta);
+        assert!(
+            !enc.windows(16).any(|w| w == sigil_bytes),
+            "hot Delta payload must not contain Sigil bytes"
+        );
+
+        let full = Packet::PoseDelta {
+            tick: Tick(12),
+            interest_gen: 2,
+            block: PoseBlock::Full(vec![PoseFull {
+                local_ix: 0,
+                pose: six_dof(),
+                vel: Vel3::new(VelFx(4), VelFx(5), VelFx(6)),
+            }]),
+        };
+        let enc_full = encode_packet(&full).unwrap();
+        match decode_packet(&enc_full).unwrap() {
+            Packet::PoseDelta {
+                block: PoseBlock::Full(entries),
+                ..
+            } => {
+                assert_eq!(entries[0].pose, six_dof());
+                assert_ne!(entries[0].pose.y, Mm(0));
+                assert_ne!(entries[0].pose.pitch, YawMd(0));
+                assert_ne!(entries[0].pose.roll, YawMd(0));
+            }
+            other => panic!("expected Full PoseDelta, got {other:?}"),
+        }
+        assert_eq!(decode_packet(&enc_full).unwrap(), full);
+    }
+
+    #[test]
     fn truncated_oversize_event_count_error() {
         assert_eq!(decode_packet(&[]), Err(NetError::Truncated));
         assert_eq!(decode_packet(&[TAG_HELLO]), Err(NetError::Truncated));
         let mut hello = vec![TAG_HELLO];
-        hello.extend_from_slice(&[0u8; 32 + 32 + 31]);
+        hello.extend_from_slice(&[0u8; 32 + 8 + 32 + 31]);
         assert_eq!(decode_packet(&hello), Err(NetError::Truncated));
 
         let mut oversize_count = vec![TAG_TRACE_DELTA];
         oversize_count.extend_from_slice(&0u64.to_le_bytes());
+        oversize_count.extend_from_slice(&0u16.to_le_bytes());
         oversize_count.extend_from_slice(&((MAX_EVENTS as u32) + 1).to_le_bytes());
         assert_eq!(decode_packet(&oversize_count), Err(NetError::Oversize));
 
@@ -727,8 +1128,10 @@ mod tests {
         assert_eq!(
             encode_packet(&Packet::Snapshot {
                 tick: Tick(0),
+                epoch: Epoch::ZERO,
                 canon_hash: Hash::ZERO,
                 trace_prefix_hash: Hash::ZERO,
+                place: None,
                 blob,
             }),
             Err(NetError::Oversize)
@@ -742,6 +1145,7 @@ mod tests {
         assert_eq!(
             encode_packet(&Packet::TraceDelta {
                 from: Tick(0),
+                interest_gen: 0,
                 events: too_many,
             }),
             Err(NetError::Oversize)
@@ -754,10 +1158,40 @@ mod tests {
 
         let mut blob_len = vec![TAG_SNAPSHOT];
         blob_len.extend_from_slice(&0u64.to_le_bytes());
+        blob_len.extend_from_slice(&0u64.to_le_bytes());
         blob_len.extend_from_slice(&[0u8; 32]);
         blob_len.extend_from_slice(&[0u8; 32]);
+        blob_len.push(0);
         blob_len.extend_from_slice(&((MAX_BLOB as u32) + 1).to_le_bytes());
         assert_eq!(decode_packet(&blob_len), Err(NetError::Oversize));
+
+        let mut interest_len = vec![TAG_INTEREST];
+        interest_len.extend_from_slice(&0u16.to_le_bytes());
+        interest_len.extend_from_slice(&((MAX_INTEREST as u32) + 1).to_le_bytes());
+        assert_eq!(decode_packet(&interest_len), Err(NetError::Oversize));
+
+        let many: Vec<PoseDeltaEntry> = (0..5_000)
+            .map(|i| PoseDeltaEntry {
+                local_ix: i as u16,
+                dpose: [0; 6],
+            })
+            .collect();
+        assert_eq!(
+            encode_packet(&Packet::PoseDelta {
+                tick: Tick(0),
+                interest_gen: 0,
+                block: PoseBlock::Delta(many),
+            }),
+            Err(NetError::Oversize)
+        );
+
+        let mut pose_over = vec![TAG_POSE_DELTA];
+        pose_over.extend_from_slice(&0u64.to_le_bytes());
+        pose_over.extend_from_slice(&0u16.to_le_bytes());
+        pose_over.push(KIND_DELTA);
+        pose_over.extend_from_slice(&0u16.to_le_bytes());
+        pose_over.resize(MAX_POSE_DELTA + 1, 0);
+        assert_eq!(decode_packet(&pose_over), Err(NetError::Oversize));
     }
 
     #[test]
@@ -765,6 +1199,7 @@ mod tests {
         fn wrap_event(ev: &[u8]) -> Vec<u8> {
             let mut pkt = vec![TAG_TRACE_DELTA];
             pkt.extend_from_slice(&0u64.to_le_bytes());
+            pkt.extend_from_slice(&0u16.to_le_bytes());
             pkt.extend_from_slice(&1u32.to_le_bytes());
             pkt.extend_from_slice(&(ev.len() as u32).to_le_bytes());
             pkt.extend_from_slice(ev);
@@ -793,12 +1228,15 @@ mod tests {
     fn unknown_packet_tag_error() {
         assert_eq!(decode_packet(&[99]), Err(NetError::UnknownTag));
         assert_eq!(decode_packet(&[0]), Err(NetError::UnknownTag));
-        assert_eq!(decode_packet(&[6]), Err(NetError::UnknownTag));
+        assert_eq!(decode_packet(&[9]), Err(NetError::UnknownTag));
+        assert_eq!(decode_packet(&[TAG_INTEREST]), Err(NetError::Truncated));
+        assert_eq!(decode_packet(&[TAG_POSE_DELTA]), Err(NetError::Truncated));
+        assert_eq!(decode_packet(&[TAG_RESYNC]), Err(NetError::Truncated));
     }
 
     #[test]
     fn no_predicted_in_packets() {
-        // Exhaustive match: a new variant is a compile error. Tags 1..=5 only.
+        // Exhaustive match: a new variant is a compile error.
         let pkt = Packet::Nack {
             tick: Tick(0),
             reason: RejectReason::Budget,
@@ -808,7 +1246,10 @@ mod tests {
             | Packet::Intent { .. }
             | Packet::TraceDelta { .. }
             | Packet::Nack { .. }
-            | Packet::Snapshot { .. } => {}
+            | Packet::Snapshot { .. }
+            | Packet::Interest { .. }
+            | Packet::PoseDelta { .. }
+            | Packet::Resync { .. } => {}
         }
         assert_eq!(
             encode_packet(&Packet::Nack {
@@ -821,12 +1262,41 @@ mod tests {
         assert_eq!(
             encode_packet(&Packet::Hello {
                 canon_hash: Hash::ZERO,
+                epoch: Epoch::ZERO,
                 build: CompilerStamp::current(),
                 verifying_key: [0; 32],
                 slot: PlayerId(0),
+                intent_hz: 20,
             })
             .unwrap()[0],
             1
+        );
+        assert_eq!(
+            encode_packet(&Packet::Interest {
+                interest_gen: 0,
+                places: vec![],
+                sigils: vec![],
+            })
+            .unwrap()[0],
+            6
+        );
+        assert_eq!(
+            encode_packet(&Packet::PoseDelta {
+                tick: Tick(0),
+                interest_gen: 0,
+                block: PoseBlock::Delta(vec![]),
+            })
+            .unwrap()[0],
+            7
+        );
+        assert_eq!(
+            encode_packet(&Packet::Resync {
+                tick: Tick(0),
+                epoch: Epoch::ZERO,
+                prefix: Hash::ZERO,
+            })
+            .unwrap()[0],
+            8
         );
     }
 
@@ -843,9 +1313,11 @@ mod tests {
     fn truncated_key_is_error() {
         let mut bytes = encode_packet(&Packet::Hello {
             canon_hash: Hash::ZERO,
+            epoch: Epoch::ZERO,
             build: CompilerStamp::current(),
             verifying_key: [1; 32],
             slot: PlayerId(0),
+            intent_hz: 20,
         })
         .unwrap();
         bytes.pop();

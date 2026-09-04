@@ -1,4 +1,4 @@
-//! 2-player listen-server. Host runs the only kernel; clients send signed intent.
+//! Listen-server session: Host runs the only kernel; clients send signed intent.
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
@@ -6,45 +6,51 @@ use std::path::Path;
 use std::rc::Rc;
 
 use ed25519_dalek::VerifyingKey;
-use klotho_core::{Hash, PlayerId, RejectReason, Tick};
+use klotho_core::{Epoch, Hash, PlayerId, PoseMm, RejectReason, Sigil, Tick, Vel3};
 use klotho_ir::PlayerIntent;
 use klotho_trace::{ProposalKind, TraceEvent, fold_prefix, genesis_hash};
 
 use crate::error::NetError;
 use crate::overlay::Overlay;
 use crate::packet::{
-    CompilerStamp, Packet, SnapshotBlob, decode_frame, decode_packet, encode_frame, encode_packet,
+    CompilerStamp, Packet, PoseBlock, PoseFull, SnapshotBlob, decode_frame, decode_packet,
+    encode_frame, encode_packet,
 };
 use crate::replay::write_replay;
 use crate::sign::{Keypair, Signed, sign_intent, verify_intent, verifying_key_from_bytes};
 
+/// Listen-server advertised intent rate (Hearth / Role::Host).
+pub const LISTEN_INTENT_HZ: u8 = 20;
+
 /// Whether this side may ingest mind and infer proposals.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum Role {
-    /// Mind and infer ingest allowed.
+    /// 2-player listen: kernel on this process, intent_hz 20.
     Host,
+    /// Dedicated: many clients, kernel on this process.
+    Server,
     /// Overlay only; never hashed. Mind and infer ingest refused.
     Client,
 }
 
 impl Role {
-    /// Host-only proposers.
+    /// Host- and Server-only proposers.
     #[must_use]
     pub fn allows_mind(self) -> bool {
-        matches!(self, Self::Host)
+        matches!(self, Self::Host | Self::Server)
     }
 
-    /// Host-only proposers.
+    /// Host- and Server-only proposers.
     #[must_use]
     pub fn allows_infer(self) -> bool {
-        matches!(self, Self::Host)
+        matches!(self, Self::Host | Self::Server)
     }
 }
 
 /// Why the session ended.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum DisconnectReason {
-    /// Hello canon_hash or CompilerStamp mismatch. No replay file.
+    /// Hello canon_hash, epoch, or CompilerStamp mismatch. No replay file.
     HelloMismatch,
     /// Trace prefix / ancestry mismatch. Write a replay.
     Desync,
@@ -97,6 +103,8 @@ impl Wire {
 /// Host side of a 2-player listen-server.
 pub struct Host {
     canon_hash: Hash,
+    epoch: Epoch,
+    intent_hz: u8,
     stamp: CompilerStamp,
     keys: BTreeMap<PlayerId, VerifyingKey>,
     slots: BTreeMap<PlayerId, Option<PlayerIntent>>,
@@ -110,10 +118,11 @@ pub struct Host {
     disconnect_reason: Option<DisconnectReason>,
     tick: Tick,
     prefix: Hash,
+    interest_gen: u16,
 }
 
 impl Host {
-    /// PlayerId 0 is the host. No remote until Hello.
+    /// PlayerId 0 is the host. No remote until Hello. Epoch 0, intent_hz 20.
     pub fn new(canon_hash: Hash) -> Result<Self, NetError> {
         let kp = Keypair::generate()?;
         let mut keys = BTreeMap::new();
@@ -122,6 +131,8 @@ impl Host {
         slots.insert(PlayerId(0), None);
         Ok(Self {
             canon_hash,
+            epoch: Epoch::ZERO,
+            intent_hz: LISTEN_INTENT_HZ,
             stamp: CompilerStamp::current(),
             keys,
             slots,
@@ -135,6 +146,7 @@ impl Host {
             disconnect_reason: None,
             tick: Tick(0),
             prefix: genesis_hash(),
+            interest_gen: 0,
         })
     }
 
@@ -147,6 +159,18 @@ impl Host {
     #[must_use]
     pub fn role(&self) -> Role {
         Role::Host
+    }
+
+    /// Session epoch advertised on Hello.
+    #[must_use]
+    pub fn epoch(&self) -> Epoch {
+        self.epoch
+    }
+
+    /// Advertised intent rate.
+    #[must_use]
+    pub fn intent_hz(&self) -> u8 {
+        self.intent_hz
     }
 
     /// Remote slot after a successful join.
@@ -271,7 +295,11 @@ impl Host {
     ) -> Result<Vec<Packet>, NetError> {
         self.prefix = fold_prefix(self.prefix, &events);
         self.tick = Tick(from.0.saturating_add(1));
-        let mut pkts = vec![Packet::TraceDelta { from, events }];
+        let mut pkts = vec![Packet::TraceDelta {
+            from,
+            interest_gen: self.interest_gen,
+            events,
+        }];
         for (_, reason) in rejects {
             pkts.push(Packet::Nack {
                 tick: self.tick,
@@ -286,13 +314,53 @@ impl Host {
         Ok(pkts)
     }
 
+    /// One-off Interest codebook plus Full PoseDelta for the listen overlay.
+    pub fn flush_pose(
+        &mut self,
+        tick: Tick,
+        poses: &[(Sigil, PoseMm, Vel3)],
+    ) -> Result<Vec<Packet>, NetError> {
+        if poses.len() > u16::MAX as usize {
+            return Err(NetError::Oversize);
+        }
+        let sigils: Vec<Sigil> = poses.iter().map(|(s, _, _)| *s).collect();
+        let interest = Packet::Interest {
+            interest_gen: self.interest_gen,
+            places: Vec::new(),
+            sigils,
+        };
+        let entries: Vec<PoseFull> = poses
+            .iter()
+            .enumerate()
+            .map(|(i, (_, pose, vel))| PoseFull {
+                local_ix: i as u16,
+                pose: *pose,
+                vel: *vel,
+            })
+            .collect();
+        let pose = Packet::PoseDelta {
+            tick,
+            interest_gen: self.interest_gen,
+            block: PoseBlock::Full(entries),
+        };
+        let pkts = vec![interest, pose];
+        if let Some(wire) = &self.wire {
+            for p in &pkts {
+                wire.send(p)?;
+            }
+        }
+        Ok(pkts)
+    }
+
     /// Join/resync snapshot (hashes plus a capped blob; empty is valid).
     #[must_use]
     pub fn snapshot_packet(&self, blob: SnapshotBlob) -> Packet {
         Packet::Snapshot {
             tick: self.tick,
+            epoch: self.epoch,
             canon_hash: self.canon_hash,
             trace_prefix_hash: self.prefix,
+            place: None,
             blob,
         }
     }
@@ -318,20 +386,24 @@ impl Host {
         match pkt {
             Packet::Hello {
                 canon_hash,
+                epoch,
                 build,
                 verifying_key,
                 slot: _,
+                intent_hz: _,
             } => {
-                if canon_hash != self.canon_hash || build != self.stamp {
+                if canon_hash != self.canon_hash || epoch != self.epoch || build != self.stamp {
                     self.disconnect(DisconnectReason::HelloMismatch);
                     return Err(NetError::HelloMismatch);
                 }
                 let id = self.accept_join(&verifying_key)?;
                 let reply = Packet::Hello {
                     canon_hash: self.canon_hash,
+                    epoch: self.epoch,
                     build: self.stamp,
                     verifying_key: self.kp.verifying_bytes(),
                     slot: id,
+                    intent_hz: self.intent_hz,
                 };
                 Ok(vec![reply, self.snapshot_packet(SnapshotBlob(Vec::new()))])
             }
@@ -340,9 +412,12 @@ impl Host {
                 let _queued = self.ingest_signed(player, &signed)?;
                 Ok(Vec::new())
             }
-            Packet::TraceDelta { .. } | Packet::Nack { .. } | Packet::Snapshot { .. } => {
-                Ok(Vec::new())
-            }
+            Packet::TraceDelta { .. }
+            | Packet::Nack { .. }
+            | Packet::Snapshot { .. }
+            | Packet::Interest { .. }
+            | Packet::PoseDelta { .. }
+            | Packet::Resync { .. } => Ok(Vec::new()),
         }
     }
 
@@ -381,6 +456,8 @@ impl Host {
 /// Client side: overlay + prefix tracking. Does not run CommitKernel.
 pub struct Client {
     canon_hash: Hash,
+    epoch: Epoch,
+    intent_hz: u8,
     stamp: CompilerStamp,
     kp: Keypair,
     player: Option<PlayerId>,
@@ -388,16 +465,26 @@ pub struct Client {
     expected_prefix: Hash,
     last_tick: Tick,
     saw_snapshot: bool,
-    wire: Option<Wire>,
+    pub(crate) wire: Option<Wire>,
     disconnected: bool,
     disconnect_reason: Option<DisconnectReason>,
+    interest_gen: u16,
+    interest_sigils: Vec<Sigil>,
+    needs_resync: bool,
 }
 
 impl Client {
-    /// New client for `canon_hash`. Generates a join key.
+    /// New client for `canon_hash`. Generates a join key. Epoch 0, intent_hz 20.
     pub fn new(canon_hash: Hash) -> Result<Self, NetError> {
+        Self::with_join(canon_hash, Epoch::ZERO, LISTEN_INTENT_HZ)
+    }
+
+    /// New client expecting `epoch` on Hello.
+    pub fn with_join(canon_hash: Hash, epoch: Epoch, intent_hz: u8) -> Result<Self, NetError> {
         Ok(Self {
             canon_hash,
+            epoch,
+            intent_hz,
             stamp: CompilerStamp::current(),
             kp: Keypair::generate()?,
             player: None,
@@ -408,6 +495,9 @@ impl Client {
             wire: None,
             disconnected: false,
             disconnect_reason: None,
+            interest_gen: 0,
+            interest_sigils: Vec::new(),
+            needs_resync: false,
         })
     }
 
@@ -428,6 +518,30 @@ impl Client {
         self.player
     }
 
+    /// Epoch this client will accept on Hello.
+    #[must_use]
+    pub fn epoch(&self) -> Epoch {
+        self.epoch
+    }
+
+    /// Intent rate stored from the last Hello (server-advertised on reply).
+    #[must_use]
+    pub fn intent_hz(&self) -> u8 {
+        self.intent_hz
+    }
+
+    /// Current Interest generation.
+    #[must_use]
+    pub fn interest_gen(&self) -> u16 {
+        self.interest_gen
+    }
+
+    /// Set when Interest generation skips; Server answers with [`Packet::Resync`].
+    #[must_use]
+    pub fn needs_resync(&self) -> bool {
+        self.needs_resync
+    }
+
     /// Folded prefix of applied deltas / last snapshot.
     #[must_use]
     pub fn prefix(&self) -> Hash {
@@ -438,6 +552,11 @@ impl Client {
     #[must_use]
     pub fn overlay(&self) -> &Overlay {
         &self.overlay
+    }
+
+    /// Mutable overlay (local pawn mark, tests).
+    pub fn overlay_mut(&mut self) -> &mut Overlay {
+        &mut self.overlay
     }
 
     /// Disconnect reason, if any.
@@ -470,9 +589,11 @@ impl Client {
     pub fn hello_packet(&self) -> Packet {
         Packet::Hello {
             canon_hash: self.canon_hash,
+            epoch: self.epoch,
             build: self.stamp,
             verifying_key: self.kp.verifying_bytes(),
             slot: PlayerId(0),
+            intent_hz: self.intent_hz,
         }
     }
 
@@ -491,7 +612,7 @@ impl Client {
         Ok(pkt)
     }
 
-    /// Apply a host packet. Prefix mismatch disconnects (caller writes replay).
+    /// Apply a host/server packet. Prefix mismatch disconnects (caller writes replay).
     pub fn handle(&mut self, pkt: Packet) -> Result<(), NetError> {
         if self.disconnected {
             return Err(NetError::Disconnected);
@@ -499,24 +620,29 @@ impl Client {
         match pkt {
             Packet::Hello {
                 canon_hash,
+                epoch,
                 build,
                 verifying_key: _,
                 slot,
+                intent_hz,
             } => {
-                if canon_hash != self.canon_hash || build != self.stamp {
+                if canon_hash != self.canon_hash || epoch != self.epoch || build != self.stamp {
                     self.disconnect(DisconnectReason::HelloMismatch);
                     return Err(NetError::HelloMismatch);
                 }
                 self.player = Some(slot);
+                self.intent_hz = intent_hz;
                 Ok(())
             }
             Packet::Snapshot {
                 tick,
+                epoch,
                 canon_hash,
                 trace_prefix_hash,
+                place: _,
                 blob: _,
             } => {
-                if canon_hash != self.canon_hash {
+                if canon_hash != self.canon_hash || epoch != self.epoch {
                     self.disconnect(DisconnectReason::Desync);
                     return Err(NetError::Desync);
                 }
@@ -529,18 +655,63 @@ impl Client {
                 self.saw_snapshot = true;
                 Ok(())
             }
-            Packet::TraceDelta { from, events } => {
+            Packet::TraceDelta {
+                from,
+                interest_gen,
+                events,
+            } => {
                 if from != self.last_tick {
                     self.disconnect(DisconnectReason::Desync);
                     return Err(NetError::Desync);
                 }
-                self.overlay.apply_delta(&events);
+                if !gen_ok(self.interest_gen, interest_gen) {
+                    self.needs_resync = true;
+                    return Ok(());
+                }
                 self.expected_prefix = fold_prefix(self.expected_prefix, &events);
                 self.last_tick = Tick(from.0.saturating_add(1));
                 Ok(())
             }
-            Packet::Nack { .. } => Ok(()),
-            Packet::Intent { .. } => Ok(()),
+            Packet::Interest {
+                interest_gen,
+                places: _,
+                sigils,
+            } => {
+                if !gen_ok(self.interest_gen, interest_gen) {
+                    self.needs_resync = true;
+                    return Ok(());
+                }
+                self.interest_gen = interest_gen;
+                self.interest_sigils = sigils;
+                Ok(())
+            }
+            Packet::PoseDelta {
+                tick: _,
+                interest_gen,
+                block,
+            } => {
+                if !gen_ok(self.interest_gen, interest_gen) {
+                    self.needs_resync = true;
+                    return Ok(());
+                }
+                self.overlay.apply_pose_delta(&self.interest_sigils, &block);
+                Ok(())
+            }
+            Packet::Resync {
+                tick,
+                epoch,
+                prefix,
+            } => {
+                if epoch != self.epoch {
+                    self.disconnect(DisconnectReason::Desync);
+                    return Err(NetError::Desync);
+                }
+                self.last_tick = tick;
+                self.expected_prefix = prefix;
+                self.needs_resync = false;
+                Ok(())
+            }
+            Packet::Nack { .. } | Packet::Intent { .. } => Ok(()),
         }
     }
 
@@ -559,6 +730,10 @@ impl Client {
         self.disconnected = true;
         self.disconnect_reason = Some(reason);
     }
+}
+
+pub(crate) fn gen_ok(client_gen: u16, packet_gen: u16) -> bool {
+    packet_gen == client_gen || packet_gen == client_gen.wrapping_add(1)
 }
 
 /// Handshake an in-memory host+client pair (PlayerId 0 and 1).
@@ -581,7 +756,7 @@ pub fn memory_session(canon_hash: Hash) -> Result<(Host, Client), NetError> {
 
 #[cfg(test)]
 mod tests {
-    use klotho_core::{LocusKind, Mm, PoseMm, Sigil, YawMd};
+    use klotho_core::{Epoch, LocusKind, Mm, PoseMm, Sigil, Vel3, YawMd};
     use klotho_ir::{Agency, Analog, IntentTarget, Verb};
     use klotho_trace::{PoseReason, TraceBody, fold_prefix, genesis_hash};
 
@@ -601,6 +776,17 @@ mod tests {
                 ..Analog::default()
             },
             agency: Agency::none(),
+        }
+    }
+
+    fn hello(canon: Hash, vk: [u8; 32]) -> Packet {
+        Packet::Hello {
+            canon_hash: canon,
+            epoch: Epoch::ZERO,
+            build: CompilerStamp::current(),
+            verifying_key: vk,
+            slot: PlayerId(0),
+            intent_hz: LISTEN_INTENT_HZ,
         }
     }
 
@@ -634,11 +820,26 @@ mod tests {
         let err = host
             .handle(Packet::Hello {
                 canon_hash: canon,
+                epoch: Epoch::ZERO,
                 build,
                 verifying_key: kp.verifying_bytes(),
                 slot: PlayerId(0),
+                intent_hz: LISTEN_INTENT_HZ,
             })
             .unwrap_err();
+        assert_eq!(err, NetError::HelloMismatch);
+        assert_eq!(
+            host.disconnect_reason(),
+            Some(DisconnectReason::HelloMismatch)
+        );
+    }
+
+    #[test]
+    fn hello_epoch_mismatch_disconnects() {
+        let canon = Hash::from_bytes([13; 32]);
+        let mut host = Host::new(canon).unwrap();
+        let client = Client::with_join(canon, Epoch(1), LISTEN_INTENT_HZ).unwrap();
+        let err = host.handle(client.hello_packet()).unwrap_err();
         assert_eq!(err, NetError::HelloMismatch);
         assert_eq!(
             host.disconnect_reason(),
@@ -706,21 +907,9 @@ mod tests {
         let mut host = Host::new(canon).unwrap();
         let a = Keypair::generate().unwrap();
         let b = Keypair::generate().unwrap();
-        host.handle(Packet::Hello {
-            canon_hash: canon,
-            build: CompilerStamp::current(),
-            verifying_key: a.verifying_bytes(),
-            slot: PlayerId(0),
-        })
-        .unwrap();
+        host.handle(hello(canon, a.verifying_bytes())).unwrap();
         assert_eq!(
-            host.handle(Packet::Hello {
-                canon_hash: canon,
-                build: CompilerStamp::current(),
-                verifying_key: b.verifying_bytes(),
-                slot: PlayerId(0),
-            })
-            .unwrap_err(),
+            host.handle(hello(canon, b.verifying_bytes())).unwrap_err(),
             NetError::ThirdPlayer
         );
         assert_eq!(host.disconnect_reason(), None);
@@ -739,6 +928,8 @@ mod tests {
         assert!(!client.role().allows_infer());
         assert!(host.role().allows_mind());
         assert!(host.role().allows_infer());
+        assert!(Role::Server.allows_mind());
+        assert!(Role::Server.allows_infer());
         assert_eq!(
             client.ingest_kind(ProposalKind::Mind),
             Err(NetError::HostOnly)
@@ -785,8 +976,10 @@ mod tests {
         let err = client
             .handle(Packet::Snapshot {
                 tick: Tick(0),
+                epoch: Epoch::ZERO,
                 canon_hash: canon,
                 trace_prefix_hash: Hash::from_bytes([0xab; 32]),
+                place: None,
                 blob: SnapshotBlob(Vec::new()),
             })
             .unwrap_err();
@@ -815,6 +1008,8 @@ mod tests {
         let (mut host, mut client) = memory_session(canon).unwrap();
         assert_eq!(host.role(), Role::Host);
         assert_eq!(client.player(), Some(PlayerId(1)));
+        assert_eq!(client.intent_hz(), LISTEN_INTENT_HZ);
+        assert_eq!(client.epoch(), Epoch::ZERO);
 
         host.submit_local(look(0, 3));
         let _ = client.send_intent(look(1, 4)).unwrap();
@@ -825,20 +1020,49 @@ mod tests {
         assert_eq!(got[1].player, PlayerId(1));
 
         let s = Sigil::pack(LocusKind::Actor, 0, 1).unwrap();
+        let pose = PoseMm::new(Mm(5), Mm(0), Mm(6), YawMd(0));
         let events = vec![TraceEvent::new(
             Tick(1),
             TraceBody::PoseCommitted {
                 s,
-                pose: PoseMm::new(Mm(5), Mm(0), Mm(6), YawMd(0)),
+                pose,
                 reason: PoseReason::Land,
             },
         )];
         let expected = fold_prefix(genesis_hash(), &events);
         host.flush_delta(Tick(0), events, &[]).unwrap();
+        host.flush_pose(Tick(1), &[(s, pose, Vel3::ZERO)]).unwrap();
         client.pump().unwrap();
         assert_eq!(client.prefix(), expected);
         assert_eq!(client.overlay().pose(s).unwrap().x, Mm(5));
         assert!(!client.disconnected());
+    }
+
+    #[test]
+    fn trace_delta_does_not_fill_or_wipe_overlay() {
+        let canon = Hash::from_bytes([14; 32]);
+        let (mut host, mut client) = memory_session(canon).unwrap();
+        let s = Sigil::pack(LocusKind::Actor, 0, 1).unwrap();
+        let pose = PoseMm::new(Mm(5), Mm(1), Mm(6), YawMd(0));
+        host.flush_pose(Tick(0), &[(s, pose, Vel3::ZERO)]).unwrap();
+        client.pump().unwrap();
+        assert_eq!(client.overlay().pose(s).unwrap().x, Mm(5));
+
+        let events = vec![TraceEvent::new(
+            Tick(1),
+            TraceBody::PoseCommitted {
+                s,
+                pose: PoseMm::new(Mm(99), Mm(0), Mm(0), YawMd(0)),
+                reason: PoseReason::Land,
+            },
+        )];
+        host.flush_delta(Tick(0), events, &[]).unwrap();
+        client.pump().unwrap();
+        assert_eq!(client.overlay().pose(s).unwrap().x, Mm(5));
+
+        host.flush_delta(Tick(1), vec![], &[]).unwrap();
+        client.pump().unwrap();
+        assert_eq!(client.overlay().pose(s).unwrap().x, Mm(5));
     }
 
     #[test]
@@ -848,12 +1072,51 @@ mod tests {
         let err = client
             .handle(Packet::TraceDelta {
                 from: Tick(99),
+                interest_gen: 0,
                 events: vec![],
             })
             .unwrap_err();
         assert_eq!(err, NetError::Desync);
         assert!(client.disconnected());
         assert_eq!(client.disconnect_reason(), Some(DisconnectReason::Desync));
+    }
+
+    #[test]
+    fn interest_gen_skip_sets_needs_resync() {
+        let (_host, mut client) = memory_session(Hash::from_bytes([15; 32])).unwrap();
+        client
+            .handle(Packet::TraceDelta {
+                from: Tick(0),
+                interest_gen: 2,
+                events: vec![],
+            })
+            .unwrap();
+        assert!(client.needs_resync());
+        assert!(!client.disconnected());
+        let prefix = client.prefix();
+        client
+            .handle(Packet::Resync {
+                tick: Tick(0),
+                epoch: Epoch::ZERO,
+                prefix,
+            })
+            .unwrap();
+        assert!(!client.needs_resync());
+    }
+
+    #[test]
+    fn interest_gen_wrapping_add_one_is_accepted() {
+        let (_host, mut client) = memory_session(Hash::from_bytes([16; 32])).unwrap();
+        client
+            .handle(Packet::TraceDelta {
+                from: Tick(0),
+                interest_gen: 1,
+                events: vec![],
+            })
+            .unwrap();
+        assert!(!client.needs_resync());
+        assert_eq!(client.prefix(), genesis_hash());
+        assert_eq!(client.player().unwrap(), PlayerId(1));
     }
 
     #[test]

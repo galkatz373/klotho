@@ -17,9 +17,16 @@ path = "src/lib.rs"
 name = "klotho-runtime"
 path = "src/main.rs"
 
+[[bin]]
+name = "klotho-server"
+path = "src/bin/klotho-server.rs"
+required-features = ["net-dedicated"]
+
 [features]
 default = []
 net = ["dep:klotho-net"]
+net-listen = ["net"]
+net-dedicated = ["net"]
 phys = ["dep:klotho-phys"]
 
 [dependencies]

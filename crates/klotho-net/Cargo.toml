@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Klotho listen-server: signed PlayerIntent, TraceDelta, 2-player local"
+description = "Klotho net: signed PlayerIntent, TraceDelta, PoseDelta overlay, listen and dedicated"
 readme = false
 publish = false
 

@@ -16,7 +16,7 @@ pub use residency::residency_proposals;
 pub use stream::{load_place_snap, open_stream_catalog};
 pub use warp::{kernel_from_cooked, load_cooked_warp, load_cooked_warp_capped, load_warp};
 
-#[cfg(feature = "net")]
+#[cfg(any(feature = "net", feature = "net-listen", feature = "net-dedicated"))]
 mod net;
-#[cfg(feature = "net")]
+#[cfg(any(feature = "net", feature = "net-listen", feature = "net-dedicated"))]
 pub use net::listen_pair;

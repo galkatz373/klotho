@@ -1,4 +1,7 @@
 //! Optional listen-server helper. Default runtime play does not enable this.
+//!
+//! Feature `net` / `net-listen` expose [`listen_pair`]. Dedicated Role::Server
+//! lives in `klotho-net` and the `klotho-server` bin (`net-dedicated`).
 
 use klotho_core::Hash;
 use klotho_net::{Client, Host, NetError, memory_session};

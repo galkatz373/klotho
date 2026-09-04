@@ -16,6 +16,7 @@ mod grid;
 mod heap;
 mod mutate;
 mod proj;
+mod rewind;
 mod snap;
 mod spec;
 mod view;
@@ -28,10 +29,11 @@ pub use klotho_core::{MAX_LOCI_HEARTH, MAX_LOCI_PROCESS, PackedIx};
 #[cfg(any(test, feature = "mutate"))]
 pub use mutate::WorldMut;
 pub use proj::{Projection, RiteMachine};
+pub use rewind::RewindRing;
 pub use snap::{MAX_PLACE_ROWS, PlaceRow, PlaceSnap};
 #[cfg(any(test, feature = "mutate"))]
 pub use spec::SpecDelta;
-pub use view::WorldView;
+pub use view::{HITSCAN_RANGE_MM, WorldView};
 pub use world::{World, WorldSnapshot};
 
 /// Hearth packed-row cap. Process cap is [`MAX_LOCI_PROCESS`].

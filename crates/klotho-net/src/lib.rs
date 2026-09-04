@@ -20,6 +20,7 @@ mod packet;
 mod replay;
 mod server;
 mod session;
+mod sidecar;
 mod sign;
 
 pub use error::NetError;
@@ -33,6 +34,9 @@ pub use packet::{
 pub use replay::{ReplayFile, load_replay, load_replay_intents, write_replay};
 pub use server::{MAX_DEDICATED_PLAYERS, Server, dedicated_session, dedicated_session_at};
 pub use session::{Client, DisconnectReason, Host, LISTEN_INTENT_HZ, Role, Wire, memory_session};
+pub use sidecar::{
+    LOOK_PITCH_MAX_MD, LOOK_YAW_MAX_MD, STICK_MAX, Sidecar, SidecarFlag, SidecarReport,
+};
 pub use sign::{Keypair, Signed, sign_intent, verify_bytes, verify_intent};
 
 pub use klotho_ir::PlayerIntent;
@@ -51,6 +55,7 @@ mod tests {
             include_str!("replay.rs"),
             include_str!("error.rs"),
             include_str!("server.rs"),
+            include_str!("sidecar.rs"),
         ] {
             assert!(
                 !src.contains(needle),

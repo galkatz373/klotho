@@ -13,6 +13,18 @@ const COS: [i32; 91] = [
     13626, 12505, 11380, 10252, 9121, 7987, 6850, 5712, 4572, 3430, 2287, 1144, 0,
 ];
 
+/// Forward millimetre offset of length `range_mm` for yaw/pitch. Yaw 0 is +Z.
+/// Pitch is clamped to ±90°.
+#[must_use]
+pub fn look_offset(yaw: YawMd, pitch: YawMd, range_mm: i32) -> IVec3 {
+    let pitch_md = pitch.0.clamp(-YawMd::QUARTER_TURN, YawMd::QUARTER_TURN);
+    let (c, s) = cos_sin_pitch_deg(pitch_md.div_euclid(1000));
+    let range = i64::from(range_mm);
+    let y = ((range * i64::from(s)) >> 16) as i32;
+    let z = ((range * i64::from(c)) >> 16) as i32;
+    rotate_xz(IVec3 { x: 0, y, z }, yaw)
+}
+
 /// Rotate an XZ millimetre vector by yaw about Y. Yaw 0 faces +Z.
 #[must_use]
 pub fn rotate_xz(v: IVec3, yaw: YawMd) -> IVec3 {
@@ -37,6 +49,16 @@ fn cos_sin_deg(deg: i32) -> (i32, i32) {
         1 => (-COS[90 - r], COS[r]),
         2 => (-COS[r], -COS[90 - r]),
         _ => (COS[90 - r], -COS[r]),
+    }
+}
+
+fn cos_sin_pitch_deg(deg: i32) -> (i32, i32) {
+    let d = deg.clamp(-90, 90);
+    if d >= 0 {
+        (COS[d as usize], COS[90 - d as usize])
+    } else {
+        let p = (-d) as usize;
+        (COS[p], -COS[90 - p])
     }
 }
 
@@ -82,5 +104,29 @@ mod tests {
             z: 0,
         };
         assert_eq!(rotate_xz(v, YawMd(45_000)).y, 1800);
+    }
+
+    #[test]
+    fn look_offset_yaw_zero_is_plus_z() {
+        assert_eq!(
+            look_offset(YawMd::ZERO, YawMd::ZERO, 20),
+            IVec3 { x: 0, y: 0, z: 20 }
+        );
+    }
+
+    #[test]
+    fn look_offset_quarter_yaw_is_plus_x() {
+        assert_eq!(
+            look_offset(YawMd(YawMd::QUARTER_TURN), YawMd::ZERO, 20),
+            IVec3 { x: 20, y: 0, z: 0 }
+        );
+    }
+
+    #[test]
+    fn look_offset_pitch_up_is_plus_y() {
+        let v = look_offset(YawMd::ZERO, YawMd(YawMd::QUARTER_TURN), 20);
+        assert_eq!(v.x, 0);
+        assert_eq!(v.y, 20);
+        assert_eq!(v.z, 0);
     }
 }

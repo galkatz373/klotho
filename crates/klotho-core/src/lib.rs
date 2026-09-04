@@ -32,7 +32,7 @@ pub use id::{
 };
 pub use reject::{KernelFault, RejectReason};
 pub use rng::Rng;
-pub use space::{AabbMm, HullWitness, IVec3, PhysRequest, PoseMm, Support, Vel3};
+pub use space::{AabbMm, HullWitness, IVec3, PhysRequest, PoseMm, Support, Vel3, frac_cmp};
 pub use tick::{Epoch, Tick};
 pub use units::{Mm, VelFx, YawMd};
-pub use yaw::rotate_xz;
+pub use yaw::{look_offset, rotate_xz};

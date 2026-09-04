@@ -7,13 +7,13 @@ use std::time::Instant;
 use klotho_canon::Canon;
 use klotho_core::{
     Budget, IVec3, KernelFault, Mm, NO_ISLAND, PlayerId, PoseMm, RejectReason, Sigil, Tick, Vel3,
-    rotate_xz,
+    YawMd, look_offset, rotate_xz,
 };
-use klotho_ir::{Channel, IntentTarget, Rel, SourceKind, Verb};
+use klotho_ir::{Channel, IntentTarget, PlayerIntent, Rel, SourceKind, Verb};
 use klotho_trace::{
     ISLAND_SNAP_PERIOD_TICKS, IslandSnap, ProposalKind, TraceBody, TraceDelta, TraceEvent,
 };
-use klotho_world::{World, WorldMut, WorldSnapshot, WorldView};
+use klotho_world::{HITSCAN_RANGE_MM, RewindRing, World, WorldMut, WorldSnapshot, WorldView};
 
 use crate::admit::{AdmitBuf, SyncProposer};
 use crate::laws::admit_laws;
@@ -29,6 +29,8 @@ pub struct CommitKernel {
     players: BTreeMap<PlayerId, Sigil>,
     /// Fail-closed partition rejects, flushed on the next [`Self::step`].
     partition_rejects: Vec<(ProposalKind, RejectReason)>,
+    ring: RewindRing,
+    last_rewind_ticks_used: u16,
 }
 
 impl CommitKernel {
@@ -40,6 +42,8 @@ impl CommitKernel {
             heap: Vec::new(),
             players: BTreeMap::new(),
             partition_rejects: Vec::new(),
+            ring: RewindRing::new(0),
+            last_rewind_ticks_used: 0,
         }
     }
 
@@ -121,6 +125,18 @@ impl CommitKernel {
         self.world.snapshot()
     }
 
+    /// Last `rewind_ticks` published snapshots. Unhashed, not in Trace.
+    #[must_use]
+    pub fn rewind_ring(&self) -> &RewindRing {
+        &self.ring
+    }
+
+    /// [`crate::METRIC_REWIND_TICKS_USED`] from the last [`Self::step`].
+    #[must_use]
+    pub fn last_rewind_ticks_used(&self) -> u16 {
+        self.last_rewind_ticks_used
+    }
+
     /// One tick. Legal rejects are in the delta. `Err` is a kernel bug.
     pub fn step(
         &mut self,
@@ -130,6 +146,8 @@ impl CommitKernel {
     ) -> Result<TraceDelta, KernelFault> {
         let tick = self.world.tick().saturating_add(dt.0.max(1));
         self.world.mutate().set_tick(tick);
+        self.ring.set_cap(budget.rewind_ticks);
+        self.last_rewind_ticks_used = 0;
 
         let mut batch = core::mem::take(&mut self.heap);
         {
@@ -160,7 +178,14 @@ impl CommitKernel {
                 delta.rejects.push((kind, RejectReason::Budget));
                 continue;
             }
-            match self.admit_one(p, tick, &mut pred_ops, &mut rite_steps, &mut written) {
+            match self.admit_one(
+                p,
+                tick,
+                budget,
+                &mut pred_ops,
+                &mut rite_steps,
+                &mut written,
+            ) {
                 Ok(events) => delta.events.extend(events),
                 Err(r) => delta.rejects.push((kind, r)),
             }
@@ -174,6 +199,7 @@ impl CommitKernel {
         }
 
         let snap = self.world.snapshot();
+        self.ring.push(Arc::clone(&snap));
         delta.snap_bytes = u32::try_from(snap.approx_bytes()).unwrap_or(u32::MAX);
         Ok(delta)
     }
@@ -182,11 +208,20 @@ impl CommitKernel {
         &mut self,
         p: Proposal,
         tick: Tick,
+        budget: Budget,
         pred_ops: &mut u32,
         rite_steps: &mut u32,
         written: &mut BTreeMap<(u128, u8), ()>,
     ) -> Result<Vec<TraceEvent>, RejectReason> {
-        let (actor, target, verb, source, claimed, swept_hits) = self.preflight(&p, tick)?;
+        let (actor, mut target, verb, source, claimed, swept_hits) =
+            self.preflight(&p, tick, budget)?;
+        if let Proposal::Player(pi) = &p {
+            if budget.rewind_ticks > 0 && pi.verb == Verb::Fire {
+                target = self.rewind_hitscan(pi, actor, tick)?;
+                self.last_rewind_ticks_used =
+                    u16::try_from(tick.0.saturating_sub(pi.at.0)).unwrap_or(u16::MAX);
+            }
+        }
 
         let cells = write_cells(&p, actor, &self.world.view());
         for c in &cells {
@@ -317,14 +352,25 @@ impl CommitKernel {
         &self,
         p: &Proposal,
         tick: Tick,
+        budget: Budget,
     ) -> Result<(Sigil, Option<Sigil>, Verb, SourceKind, Vec<Channel>, bool), RejectReason> {
         match p {
             Proposal::Player(pi) => {
-                if tick.0.saturating_sub(pi.at.0) > self.slo() {
-                    return Err(RejectReason::StaleEpoch);
-                }
                 let actor = *self.players.get(&pi.player).ok_or(RejectReason::Budget)?;
                 let target = resolve_target(&pi.target, self.world.canon());
+                let age = tick.0.saturating_sub(pi.at.0);
+                let rewind = u64::from(budget.rewind_ticks);
+                let combat = pi.verb == Verb::Fire
+                    || (pi.verb == Verb::Use
+                        && target
+                            .is_some_and(|t| hittable_target(&self.world.view(), self.canon(), t)));
+                if rewind > 0 && combat {
+                    if age > rewind {
+                        return Err(RejectReason::StaleEpoch);
+                    }
+                } else if age > self.slo() {
+                    return Err(RejectReason::StaleEpoch);
+                }
                 if pi.verb == Verb::Time && pi.agency.claimed.is_empty() {
                     return Err(RejectReason::UnclaimedAgency);
                 }
@@ -471,6 +517,47 @@ impl CommitKernel {
         // Bound from last snapshot budget is per-step; default 12.
         u64::from(Budget::HEARTH.eval_slo_ticks)
     }
+
+    fn rewind_hitscan(
+        &self,
+        pi: &PlayerIntent,
+        actor: Sigil,
+        tick: Tick,
+    ) -> Result<Option<Sigil>, RejectReason> {
+        let age = tick.0.saturating_sub(pi.at.0);
+        if age == 0 {
+            return Ok(hitscan_fire(&self.world.view(), self.canon(), pi, actor));
+        }
+        let snap = self
+            .ring
+            .lookup(tick, pi.at)
+            .ok_or(RejectReason::StaleEpoch)?;
+        Ok(hitscan_fire(&snap.view(), self.canon(), pi, actor))
+    }
+}
+
+fn hitscan_fire(
+    view: &WorldView<'_>,
+    canon: &Canon,
+    pi: &PlayerIntent,
+    actor: Sigil,
+) -> Option<Sigil> {
+    let hittable = canon.affordance_id("Hittable")?;
+    let pose = view.pose(actor).unwrap_or_default();
+    let yaw = pose.yaw.wrapping_add(pi.analog.look_yaw);
+    let pitch = YawMd(pose.pitch.0.saturating_add(pi.analog.look_pitch));
+    view.hitscan(
+        pose.translation(),
+        look_offset(yaw, pitch, HITSCAN_RANGE_MM),
+        actor,
+        hittable,
+    )
+}
+
+fn hittable_target(view: &WorldView<'_>, canon: &Canon, t: Sigil) -> bool {
+    canon
+        .affordance_id("Hittable")
+        .is_some_and(|id| view.has_affordance(t, id))
 }
 
 fn resolve_target(t: &IntentTarget, canon: &Canon) -> Option<Sigil> {

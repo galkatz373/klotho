@@ -14,7 +14,7 @@ use hearth_slice::boot;
 use klotho_core::{Epoch, Tick, Vel3};
 use klotho_motion::Motion;
 use klotho_net::{InterestDict, Keypair, LISTEN_INTENT_HZ, Role, Server};
-use klotho_runtime::{kernel_from_cooked, load_cooked_warp};
+use klotho_runtime::{ingest_server_intents, kernel_from_cooked, load_cooked_warp};
 use klotho_sim::Sim;
 use klotho_space::Space;
 
@@ -48,10 +48,14 @@ fn run() -> Result<(), String> {
         .map_err(|e| e.to_string())?;
 
     let mut sim = Sim::new(kernel);
+    server
+        .sidecar_mut()
+        .set_rewind_ticks(sim.budget().rewind_ticks);
     let mut space = Space;
     let mut motion = Motion::hearth();
     let mut dict_set = false;
     for _ in 0..3 {
+        ingest_server_intents(&mut sim, &mut server);
         let report = sim
             .tick(Tick(1), &mut [&mut space, &mut motion])
             .map_err(|e| format!("sim tick: {e:?}"))?;

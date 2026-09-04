@@ -14,6 +14,7 @@ use crate::packet::{
 };
 use crate::replay::write_replay;
 use crate::session::{Client, DisconnectReason, Role, Wire};
+use crate::sidecar::{Sidecar, SidecarFlag};
 use crate::sign::{Keypair, Signed, verify_intent, verifying_key_from_bytes};
 
 /// Hard cap on joined dedicated clients.
@@ -46,6 +47,8 @@ pub struct Server {
     disconnect_reason: Option<DisconnectReason>,
     tick: Tick,
     prefix: Hash,
+    sidecar: Sidecar,
+    last_sidecar_flag: SidecarFlag,
 }
 
 impl Server {
@@ -68,7 +71,26 @@ impl Server {
             disconnect_reason: None,
             tick: Tick(0),
             prefix: genesis_hash(),
+            sidecar: Sidecar::new(intent_hz, 0),
+            last_sidecar_flag: SidecarFlag::None,
         })
+    }
+
+    /// Read-only anti-cheat sidecar.
+    #[must_use]
+    pub fn sidecar(&self) -> &Sidecar {
+        &self.sidecar
+    }
+
+    /// Sidecar (rewind cap, inspect).
+    pub fn sidecar_mut(&mut self) -> &mut Sidecar {
+        &mut self.sidecar
+    }
+
+    /// Last inspect flag from [`Self::ingest_signed`].
+    #[must_use]
+    pub fn last_sidecar_flag(&self) -> SidecarFlag {
+        self.last_sidecar_flag
     }
 
     /// Attach an in-memory wire used by [`dedicated_session`].
@@ -203,6 +225,9 @@ impl Server {
         match verify_intent(&vk, signed) {
             Ok(mut intent) => {
                 intent.player = player;
+                let report = self.sidecar.inspect(&intent, self.tick);
+                intent.analog = report.analog;
+                self.last_sidecar_flag = report.flag;
                 self.queue(player, intent);
                 Ok(true)
             }

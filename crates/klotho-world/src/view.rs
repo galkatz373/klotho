@@ -3,11 +3,14 @@
 use klotho_canon::{PredStore, RiteId};
 use klotho_core::{
     AabbMm, AffordanceId, Hash, IVec3, LocusKind, PackedIx, PhysRequest, PoseMm, ResourceId, Sigil,
-    SimLod, Support, Tick, Vel3,
+    SimLod, Support, Tick, Vel3, frac_cmp,
 };
 use klotho_ir::{Channel, Rel};
 
 use crate::proj::Projection;
+
+/// Hitscan segment length, millimetres.
+pub const HITSCAN_RANGE_MM: i32 = 50_000;
 
 /// Borrowed projection queries. No writes.
 #[derive(Copy, Clone, Debug)]
@@ -168,6 +171,44 @@ impl WorldView<'_> {
             .into_iter()
             .filter_map(|ix| self.proj.sigil(ix))
             .collect()
+    }
+
+    /// First `hittable` locus along the closed segment, excluding `skip`.
+    /// Ties break by packed-index order from [`Self::space_candidates`].
+    #[must_use]
+    pub fn hitscan(
+        self,
+        origin: IVec3,
+        dir: IVec3,
+        skip: Sigil,
+        hittable: AffordanceId,
+    ) -> Option<Sigil> {
+        let end = IVec3 {
+            x: origin.x.wrapping_add(dir.x),
+            y: origin.y.wrapping_add(dir.y),
+            z: origin.z.wrapping_add(dir.z),
+        };
+        let swept = AabbMm::from_point(origin).swept_union(AabbMm::from_point(end));
+        let mut best: Option<((i64, i64), Sigil)> = None;
+        for s in self.space_candidates(swept, false) {
+            if s == skip || !self.has_affordance(s, hittable) {
+                continue;
+            }
+            let Some(hull) = self.posed_hull(s) else {
+                continue;
+            };
+            let Some(t) = hull.segment_hit(origin, dir) else {
+                continue;
+            };
+            match best {
+                None => best = Some((t, s)),
+                Some((bt, _)) if frac_cmp(t.0, t.1, bt.0, bt.1) == core::cmp::Ordering::Less => {
+                    best = Some((t, s));
+                }
+                _ => {}
+            }
+        }
+        best.map(|(_, s)| s)
     }
 
     /// Canonical hull blob. [`klotho_core::BlobId::ZERO`] if unbound.

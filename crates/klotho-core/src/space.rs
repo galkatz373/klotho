@@ -157,6 +157,75 @@ impl AabbMm {
     pub const fn swept_union(self, other: Self) -> Self {
         self.union(other)
     }
+
+    /// First hit of the closed segment `origin` → `origin+dir`, as `(t_num, t_den)`
+    /// with `t` in `[0, 1]` and `t_den > 0`. `None` if the segment misses.
+    #[must_use]
+    pub fn segment_hit(self, origin: IVec3, dir: IVec3) -> Option<(i64, i64)> {
+        if self.is_empty() {
+            return None;
+        }
+        if dir == IVec3::ZERO {
+            return self.contains_point(origin).then_some((0, 1));
+        }
+        let mut t = Slab {
+            tmin_n: 0,
+            tmin_d: 1,
+            tmax_n: 1,
+            tmax_d: 1,
+        };
+        if !clip_axis(origin.x, dir.x, self.min.x, self.max.x, &mut t)
+            || !clip_axis(origin.y, dir.y, self.min.y, self.max.y, &mut t)
+            || !clip_axis(origin.z, dir.z, self.min.z, self.max.z, &mut t)
+        {
+            return None;
+        }
+        if frac_cmp(t.tmin_n, t.tmin_d, t.tmax_n, t.tmax_d) == core::cmp::Ordering::Greater {
+            return None;
+        }
+        if frac_cmp(t.tmin_n, t.tmin_d, 1, 1) == core::cmp::Ordering::Greater {
+            return None;
+        }
+        if frac_cmp(t.tmax_n, t.tmax_d, 0, 1) == core::cmp::Ordering::Less {
+            return None;
+        }
+        Some((t.tmin_n, t.tmin_d))
+    }
+}
+
+struct Slab {
+    tmin_n: i64,
+    tmin_d: i64,
+    tmax_n: i64,
+    tmax_d: i64,
+}
+
+fn clip_axis(origin: i32, dir: i32, min: i32, max: i32, t: &mut Slab) -> bool {
+    if dir == 0 {
+        return origin >= min && origin <= max;
+    }
+    let (enter_b, exit_b) = if dir > 0 { (min, max) } else { (max, min) };
+    let (en, ed) = pos_den((enter_b as i64) - i64::from(origin), i64::from(dir));
+    let (xn, xd) = pos_den((exit_b as i64) - i64::from(origin), i64::from(dir));
+    if frac_cmp(en, ed, t.tmin_n, t.tmin_d) == core::cmp::Ordering::Greater {
+        t.tmin_n = en;
+        t.tmin_d = ed;
+    }
+    if frac_cmp(xn, xd, t.tmax_n, t.tmax_d) == core::cmp::Ordering::Less {
+        t.tmax_n = xn;
+        t.tmax_d = xd;
+    }
+    true
+}
+
+fn pos_den(n: i64, d: i64) -> (i64, i64) {
+    if d < 0 { (-n, -d) } else { (n, d) }
+}
+
+/// Compare `an/ad` and `bn/bd` with positive denominators.
+#[must_use]
+pub fn frac_cmp(an: i64, ad: i64, bn: i64, bd: i64) -> core::cmp::Ordering {
+    (an as i128 * bd as i128).cmp(&(bn as i128 * ad as i128))
 }
 
 /// Integer 3-velocity in 16.16 millimetres per tick (K20).
@@ -322,5 +391,66 @@ mod tests {
         let w = HullWitness::new(mover, PoseMm::default(), true);
         assert!(w.overlaps_closed_opaque);
         assert_eq!(w.mover, mover);
+    }
+
+    fn unit_box() -> AabbMm {
+        AabbMm::new(
+            IVec3 { x: 0, y: 0, z: 0 },
+            IVec3 {
+                x: 10,
+                y: 10,
+                z: 10,
+            },
+        )
+    }
+
+    #[test]
+    fn segment_hit_enters_front_face() {
+        let hit = unit_box()
+            .segment_hit(IVec3 { x: -5, y: 5, z: 5 }, IVec3 { x: 20, y: 0, z: 0 })
+            .expect("hit");
+        assert_eq!(frac_cmp(hit.0, hit.1, 0, 1), core::cmp::Ordering::Greater);
+        assert_eq!(frac_cmp(hit.0, hit.1, 1, 1), core::cmp::Ordering::Less);
+    }
+
+    #[test]
+    fn segment_hit_closed_face_counts() {
+        assert!(
+            unit_box()
+                .segment_hit(IVec3 { x: 10, y: 5, z: 5 }, IVec3 { x: 0, y: 0, z: 0 })
+                .is_some()
+        );
+        assert!(
+            unit_box()
+                .segment_hit(IVec3 { x: -10, y: 5, z: 5 }, IVec3 { x: 10, y: 0, z: 0 })
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn segment_misses_off_axis_and_behind() {
+        assert!(
+            unit_box()
+                .segment_hit(IVec3 { x: -5, y: 50, z: 5 }, IVec3 { x: 20, y: 0, z: 0 })
+                .is_none()
+        );
+        assert!(
+            unit_box()
+                .segment_hit(IVec3 { x: 5, y: 5, z: -5 }, IVec3 { x: 0, y: 0, z: -10 })
+                .is_none()
+        );
+        assert!(
+            unit_box()
+                .segment_hit(IVec3 { x: -20, y: 5, z: 5 }, IVec3 { x: 5, y: 0, z: 0 })
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn segment_origin_inside_is_t_zero() {
+        let hit = unit_box()
+            .segment_hit(IVec3 { x: 5, y: 5, z: 5 }, IVec3 { x: 10, y: 0, z: 0 })
+            .expect("inside");
+        assert_eq!(frac_cmp(hit.0, hit.1, 0, 1), core::cmp::Ordering::Equal);
     }
 }

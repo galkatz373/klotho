@@ -19,4 +19,4 @@ pub use warp::{kernel_from_cooked, load_cooked_warp, load_cooked_warp_capped, lo
 #[cfg(any(feature = "net", feature = "net-listen", feature = "net-dedicated"))]
 mod net;
 #[cfg(any(feature = "net", feature = "net-listen", feature = "net-dedicated"))]
-pub use net::listen_pair;
+pub use net::{ingest_server_intents, listen_pair};

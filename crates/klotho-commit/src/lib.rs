@@ -30,6 +30,8 @@ pub use proposal::{Proposal, ResidencyOp};
 pub const METRIC_RESIDENCY_ROWS_APPLIED: &str = "klotho.residency.rows_applied";
 /// Wall time of a Place load `step`, microseconds.
 pub const METRIC_STREAM_HITCH_US: &str = "klotho.stream.hitch_us";
+/// `now - at` for an admitted rewind Fire. 0 if same tick or rewind disabled.
+pub const METRIC_REWIND_TICKS_USED: &str = "klotho.rewind.ticks_used";
 
 #[cfg(test)]
 mod tests {

@@ -597,4 +597,42 @@ mod tests {
         );
         assert!(g.occluded);
     }
+
+    #[test]
+    fn extreme_i32_coords_neither_panic_nor_spurious() {
+        let eye = observer_at(i32::MIN, 0, 0);
+        let pos = IVec3 {
+            x: i32::MAX,
+            y: 0,
+            z: 0,
+        };
+        let empty = extract_opaque(&[], eye, pos);
+        assert!(!empty.occluded);
+        let off = AabbMm::new(
+            IVec3 {
+                x: -10,
+                y: 1_000,
+                z: -10,
+            },
+            IVec3 {
+                x: 10,
+                y: 2_000,
+                z: 10,
+            },
+        );
+        assert!(!extract_opaque(&[off], eye, pos).occluded);
+        let between = AabbMm::new(
+            IVec3 {
+                x: -10,
+                y: -10,
+                z: -10,
+            },
+            IVec3 {
+                x: 10,
+                y: 10,
+                z: 10,
+            },
+        );
+        assert!(extract_opaque(&[between], eye, pos).occluded);
+    }
 }

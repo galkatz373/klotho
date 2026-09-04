@@ -3,7 +3,9 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
+#[cfg(feature = "audio-device")]
 use cpal::Sample;
+#[cfg(feature = "audio-device")]
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
 /// Mix and device sample rate, hertz.
@@ -19,9 +21,11 @@ pub trait AudioSink: Send {
     fn push(&mut self, pcm: &[i16]);
 }
 
-/// Why [`CpalDevice::open`] failed.
+/// Why opening an output device failed.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum AudioDeviceError {
+    /// Audio host could not be initialised.
+    Host,
     /// Host has no default output device.
     NoDevice,
     /// Device cannot run 48 kHz stereo i16 or f32.
@@ -33,6 +37,7 @@ pub enum AudioDeviceError {
 impl std::fmt::Display for AudioDeviceError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Host => f.write_str("audio host is unavailable"),
             Self::NoDevice => f.write_str("no default audio output device"),
             Self::Unsupported => f.write_str("audio output does not support 48 kHz stereo"),
             Self::Stream => f.write_str("audio output stream failed"),
@@ -64,10 +69,12 @@ impl PcmQueue {
         self.samples.iter().copied().collect()
     }
 
+    #[cfg(feature = "audio-device")]
     fn pop(&mut self) -> i16 {
         self.samples.pop_front().unwrap_or(0)
     }
 
+    #[cfg(feature = "audio-device")]
     fn pull(&mut self, dest: &mut [i16]) {
         for s in dest.iter_mut() {
             *s = self.pop();
@@ -153,15 +160,17 @@ impl AudioSink for MemorySink {
 }
 
 /// cpal output wrapping a bounded PCM queue. Failure to open is a [`Result`].
+#[cfg(feature = "audio-device")]
 pub struct CpalDevice {
     _stream: cpal::Stream,
     queue: Arc<Mutex<PcmQueue>>,
 }
 
+#[cfg(feature = "audio-device")]
 impl CpalDevice {
     /// Open the default output at 48 kHz stereo. Does not panic if hardware is missing.
     pub fn open() -> Result<Self, AudioDeviceError> {
-        let host = cpal::default_host();
+        let host = open_host()?;
         let device = host
             .default_output_device()
             .ok_or(AudioDeviceError::NoDevice)?;
@@ -172,7 +181,7 @@ impl CpalDevice {
         };
         let queue = Arc::new(Mutex::new(PcmQueue::with_cap(PCM_QUEUE_CAP)));
         let stream = build_stream(&device, config, Arc::clone(&queue))?;
-        stream.play().map_err(|_| AudioDeviceError::Stream)?;
+        stream.play().map_err(map_cpal_err)?;
         Ok(Self {
             _stream: stream,
             queue,
@@ -180,29 +189,72 @@ impl CpalDevice {
     }
 }
 
+#[cfg(feature = "audio-device")]
 impl AudioSink for CpalDevice {
     fn push(&mut self, pcm: &[i16]) {
         lock_queue(&self.queue).push(pcm);
     }
 }
 
+#[cfg(feature = "audio-device")]
+fn open_host() -> Result<cpal::Host, AudioDeviceError> {
+    // `default_host()` panics on Linux when ALSA init fails; host_from_id does not.
+    let ids = cpal::available_hosts();
+    if ids.is_empty() {
+        return Err(AudioDeviceError::Host);
+    }
+    let mut last = AudioDeviceError::Host;
+    for id in ids {
+        match cpal::host_from_id(id) {
+            Ok(host) => return Ok(host),
+            Err(e) => last = map_cpal_err(e),
+        }
+    }
+    Err(last)
+}
+
+#[cfg(feature = "audio-device")]
+fn map_cpal_err(err: cpal::Error) -> AudioDeviceError {
+    match err.kind() {
+        cpal::ErrorKind::UnsupportedConfig | cpal::ErrorKind::UnsupportedOperation => {
+            AudioDeviceError::Unsupported
+        }
+        cpal::ErrorKind::DeviceNotAvailable => AudioDeviceError::NoDevice,
+        cpal::ErrorKind::HostUnavailable => AudioDeviceError::Host,
+        _ => AudioDeviceError::Stream,
+    }
+}
+
+#[cfg(feature = "audio-device")]
+fn is_unsupported(err: &cpal::Error) -> bool {
+    matches!(
+        err.kind(),
+        cpal::ErrorKind::UnsupportedConfig | cpal::ErrorKind::UnsupportedOperation
+    )
+}
+
+#[cfg(feature = "audio-device")]
+fn ignore_stream_err(_err: cpal::Error) {}
+
+#[cfg(feature = "audio-device")]
 fn build_stream(
     device: &cpal::Device,
     config: cpal::StreamConfig,
     queue: Arc<Mutex<PcmQueue>>,
 ) -> Result<cpal::Stream, AudioDeviceError> {
-    let err_fn = |_err| {};
     let q_i16 = Arc::clone(&queue);
-    if let Ok(stream) = device.build_output_stream(
+    match device.build_output_stream(
         config,
         move |data: &mut [i16], _| match q_i16.try_lock() {
             Ok(mut q) => q.pull(data),
             Err(_) => data.fill(0),
         },
-        err_fn,
+        ignore_stream_err,
         None,
     ) {
-        return Ok(stream);
+        Ok(stream) => return Ok(stream),
+        Err(e) if is_unsupported(&e) => {}
+        Err(e) => return Err(map_cpal_err(e)),
     }
     let q_f32 = queue;
     device
@@ -216,10 +268,10 @@ fn build_stream(
                 }
                 Err(_) => data.fill(0.0),
             },
-            err_fn,
+            ignore_stream_err,
             None,
         )
-        .map_err(|_| AudioDeviceError::Unsupported)
+        .map_err(map_cpal_err)
 }
 
 const _: () = assert!(OUTPUT_HZ == 48_000);
@@ -268,6 +320,10 @@ mod tests {
     #[test]
     fn device_error_display_matches_kind() {
         assert_eq!(
+            AudioDeviceError::Host.to_string(),
+            "audio host is unavailable"
+        );
+        assert_eq!(
             AudioDeviceError::NoDevice.to_string(),
             "no default audio output device"
         );
@@ -278,6 +334,23 @@ mod tests {
         assert_eq!(
             AudioDeviceError::Stream.to_string(),
             "audio output stream failed"
+        );
+    }
+
+    #[cfg(feature = "audio-device")]
+    #[test]
+    fn cpal_error_kind_maps_stream_vs_unsupported() {
+        assert_eq!(
+            map_cpal_err(cpal::Error::new(cpal::ErrorKind::UnsupportedConfig)),
+            AudioDeviceError::Unsupported
+        );
+        assert_eq!(
+            map_cpal_err(cpal::Error::new(cpal::ErrorKind::DeviceBusy)),
+            AudioDeviceError::Stream
+        );
+        assert_eq!(
+            map_cpal_err(cpal::Error::new(cpal::ErrorKind::HostUnavailable)),
+            AudioDeviceError::Host
         );
     }
 

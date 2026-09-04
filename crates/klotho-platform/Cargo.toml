@@ -9,8 +9,13 @@ description = "Klotho platform: window, OS events, Look accumulation, audio devi
 readme = false
 publish = false
 
+[features]
+default = []
+# OS output via cpal (ALSA headers on Linux). Off for headless / CI.
+audio-device = ["dep:cpal"]
+
 [dependencies]
-cpal = "0.18"
+cpal = { version = "0.18", optional = true }
 klotho-core.workspace = true
 klotho-input.workspace = true
 klotho-ir.workspace = true

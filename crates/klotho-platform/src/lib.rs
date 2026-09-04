@@ -16,8 +16,10 @@ mod event;
 mod look;
 mod window;
 
+#[cfg(feature = "audio-device")]
+pub use audio::CpalDevice;
 pub use audio::{
-    AudioDeviceError, AudioSink, CpalDevice, MemorySink, OUTPUT_CHANNELS, OUTPUT_HZ, PCM_QUEUE_CAP,
+    AudioDeviceError, AudioSink, MemorySink, OUTPUT_CHANNELS, OUTPUT_HZ, PCM_QUEUE_CAP,
 };
 pub use event::{PlatEvent, apply_event, from_device_event, from_window_event};
 pub use look::LookAccum;

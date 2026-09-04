@@ -25,7 +25,7 @@ pub struct AudioThread {
 }
 
 impl AudioThread {
-    /// Spawn. The mixer moves onto the audio thread.
+    /// Mixer is moved here so the sim thread does not mix.
     pub fn spawn<M: Mixer + 'static>(mut mixer: M) -> Self {
         let (tx, rx) = mpsc::channel();
         let join = thread::Builder::new()

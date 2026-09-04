@@ -9,6 +9,10 @@ description = "Klotho audio presenter: grains from Trace, one bed, integer mix, 
 readme = false
 publish = false
 
+[features]
+default = []
+audio-device = ["klotho-platform/audio-device"]
+
 [dependencies]
 klotho-compile.workspace = true
 klotho-core.workspace = true

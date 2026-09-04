@@ -1065,6 +1065,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "klotho-editor"
+version = "0.1.0"
+dependencies = [
+ "klotho-author",
+ "klotho-commit",
+ "klotho-core",
+ "klotho-ir",
+ "klotho-manifest",
+ "klotho-render",
+ "klotho-ui",
+ "klotho-world",
+]
+
+[[package]]
 name = "klotho-infer"
 version = "0.1.0"
 dependencies = [

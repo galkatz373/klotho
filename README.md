@@ -83,6 +83,7 @@ klotho/
   crates/klotho-audio/    # grains from Trace, one bed, integer mix
   crates/klotho-ui/       # attention IR from snapshot, pause save (K17/K19)
   crates/klotho-author/   # Distaff: RON/kdown, cook-time Pin, CLI cook/preview
+  crates/klotho-editor/   # Distaff viewport: Manifest, outliner, Pin, cook, play-in-editor
   crates/klotho-debug/    # Trace player, reject inspector, 4 ms budget gate
   crates/klotho-runtime/  # headless Intent-script / .warp player
   crates/klotho-net/      # listen-server packets, ed25519, TraceDelta

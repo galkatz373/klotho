@@ -71,6 +71,7 @@ check_gameplay_jobs examples/ash-slice
 check_gameplay_jobs examples/ember-slice
 check_gameplay_jobs examples/drift-slice
 check_gameplay_jobs crates/klotho-author
+check_gameplay_jobs crates/klotho-editor
 
 # Gameplay and authoring must not import cook-time DCC.
 check_no_dcc() {
@@ -95,6 +96,7 @@ check_no_dcc examples/ash-slice
 check_no_dcc examples/ember-slice
 check_no_dcc examples/drift-slice
 check_no_dcc crates/klotho-author
+check_no_dcc crates/klotho-editor
 check_no_dcc crates/klotho-sim
 check_no_dcc crates/klotho-commit
 
@@ -121,6 +123,7 @@ check_no_phys examples/ash-slice
 check_no_phys examples/ember-slice
 check_no_phys examples/drift-slice
 check_no_phys crates/klotho-author
+check_no_phys crates/klotho-editor
 check_no_phys crates/klotho-motion
 check_no_phys crates/klotho-sim
 check_no_phys crates/klotho-commit
@@ -149,6 +152,7 @@ check_no_stream examples/ash-slice
 check_no_stream examples/ember-slice
 check_no_stream examples/drift-slice
 check_no_stream crates/klotho-author
+check_no_stream crates/klotho-editor
 check_no_stream crates/klotho-sim
 check_no_stream crates/klotho-commit
 

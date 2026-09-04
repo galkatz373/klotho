@@ -28,6 +28,7 @@ members = [
     "crates/klotho-ui",
     "crates/klotho-vfx",
     "crates/klotho-author",
+    "crates/klotho-editor",
     "crates/klotho-debug",
     "crates/klotho-runtime",
     "crates/klotho-net",
@@ -75,6 +76,7 @@ klotho-audio = { path = "crates/klotho-audio" }
 klotho-ui = { path = "crates/klotho-ui" }
 klotho-vfx = { path = "crates/klotho-vfx" }
 klotho-author = { path = "crates/klotho-author" }
+klotho-editor = { path = "crates/klotho-editor" }
 klotho-debug = { path = "crates/klotho-debug" }
 klotho-net = { path = "crates/klotho-net" }
 ron = "0.11.0"

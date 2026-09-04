@@ -1,6 +1,7 @@
 # Klotho clippy policy.
 #
 # `forbidden_gameplay_imports` (HLD K2 / PR 11a): gameplay crates and slices
+# (hearth, ash, ember, drift, chorus, netlock, klotho-author, klotho-editor)
 # must not import `klotho-manifest::tables`. That lint is enforced by
 # `scripts/ci/forbidden-imports.sh` until a custom dylint exists. Only
 # `klotho-render`, `klotho-audio`, `klotho-compile`, `klotho-vfx`, and

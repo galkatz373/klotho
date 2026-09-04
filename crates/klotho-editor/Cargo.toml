@@ -1,0 +1,27 @@
+[package]
+name = "klotho-editor"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Distaff viewport: Manifest presenter, outliner, Pin UI, cook dashboard, play-in-editor"
+readme = false
+publish = false
+
+[[bin]]
+name = "distaff-editor"
+path = "src/main.rs"
+
+[dependencies]
+klotho-author.workspace = true
+klotho-commit.workspace = true
+klotho-core.workspace = true
+klotho-ir.workspace = true
+klotho-manifest.workspace = true
+klotho-render.workspace = true
+klotho-ui.workspace = true
+klotho-world.workspace = true
+
+[lints]
+workspace = true

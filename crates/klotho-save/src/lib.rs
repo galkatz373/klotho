@@ -96,11 +96,14 @@ mod tests {
         let snap = empty_snap();
         let blob = pause_save(&snap).unwrap();
         assert_eq!(
-            check_load(&blob, Hash::from_bytes([1; 32]), None),
+            check_load(&blob, Hash::from_bytes([1; 32]), snap.canon_hash),
             Err(SaveError::PrefixMismatch)
         );
-        assert_eq!(check_load(&blob, snap.trace_prefix_hash, None), Ok(()));
-        let loaded = load(blob, snap.trace_prefix_hash, None).unwrap();
+        assert_eq!(
+            check_load(&blob, snap.trace_prefix_hash, snap.canon_hash),
+            Ok(())
+        );
+        let loaded = load(blob, snap.trace_prefix_hash, snap.canon_hash).unwrap();
         assert_eq!(loaded.prefix, snap.trace_prefix_hash);
     }
 
@@ -109,15 +112,11 @@ mod tests {
         let snap = empty_snap();
         let blob = pause_save(&snap).unwrap();
         assert_eq!(
-            check_load(
-                &blob,
-                snap.trace_prefix_hash,
-                Some(Hash::from_bytes([1; 32]))
-            ),
+            check_load(&blob, snap.trace_prefix_hash, Hash::from_bytes([1; 32])),
             Err(SaveError::CanonMismatch)
         );
         assert_eq!(
-            check_load(&blob, snap.trace_prefix_hash, Some(snap.canon_hash)),
+            check_load(&blob, snap.trace_prefix_hash, snap.canon_hash),
             Ok(())
         );
     }

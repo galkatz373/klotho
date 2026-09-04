@@ -6,12 +6,12 @@ use klotho_core::{
     AabbMm, BlobId, Hash, IVec3, LocusKind, Mm, PhysRequest, PoseMm, ResourceId, Sigil, SimLod,
     Vel3, VelFx, YawMd,
 };
-use klotho_ir::Rel;
+use klotho_ir::{Channel, Rel};
 use klotho_prove::{
     CATALOG_CAP, KCAS_VOLUME_CAP, LicenseSpan, MAX_BLOB_BYTES, MAX_BLOBS, PLACE_SHARD_CAP,
     blob_id_of, hash_bytes,
 };
-use klotho_world::{MAX_PLACE_ROWS, PlaceRow, PlaceSnap};
+use klotho_world::{MAX_PLACE_ROWS, PlaceRow, PlaceSnap, RiteMachine};
 
 use crate::error::StreamError;
 
@@ -31,8 +31,9 @@ pub const KCAS_VERSION: u8 = 1;
 pub const KCAS_HEADER_LEN: usize = 12;
 /// Place shard magic.
 pub const KPLC_MAGIC: [u8; 4] = *b"KPLC";
-/// Shard version.
-pub const KPLC_VERSION: u8 = 1;
+/// Shard version. v2 adds pitch/roll rates, support, attach_local, and rites
+/// to each row; v1 shards fail closed with [`StreamError::Version`].
+pub const KPLC_VERSION: u8 = 2;
 /// Fixed KPLC prefix: magic, version, pad, place, hashes, counts.
 pub const PLACE_HEADER_LEN: usize = 96;
 /// Places named by one catalog.
@@ -49,6 +50,8 @@ pub const MAX_ROW_QTY: usize = 1_024;
 pub const MAX_ROW_RELS: usize = 1_024;
 /// Per-row knows list cap.
 pub const MAX_ROW_KNOWS: usize = 1_024;
+/// Per-row active-rite list cap.
+pub const MAX_ROW_RITES: usize = 256;
 
 /// One KCAS blob plus the license that must be exportable at cook.
 #[derive(Clone, Debug)]
@@ -555,6 +558,8 @@ fn encode_row(buf: &mut Vec<u8>, row: &PlaceRow) -> Result<(), StreamError> {
     put_i32(buf, row.vel.y.0);
     put_i32(buf, row.vel.z.0);
     put_i32(buf, row.yaw_rate);
+    put_i32(buf, row.pitch_rate);
+    put_i32(buf, row.roll_rate);
     match row.hull {
         None => buf.push(0),
         Some(h) => {
@@ -597,6 +602,46 @@ fn encode_row(buf: &mut Vec<u8>, row: &PlaceRow) -> Result<(), StreamError> {
             put_ivec3(buf, r.ang);
         }
     }
+    match row.support {
+        None => buf.push(0),
+        Some((nx, ny, nz, depth)) => {
+            buf.push(1);
+            put_i16(buf, nx);
+            put_i16(buf, ny);
+            put_i16(buf, nz);
+            put_i32(buf, depth);
+        }
+    }
+    match row.attach_local {
+        None => buf.push(0),
+        Some(v) => {
+            buf.push(1);
+            put_ivec3(buf, v);
+        }
+    }
+    if row.rites.len() > MAX_ROW_RITES {
+        return Err(StreamError::Oversize {
+            size: row.rites.len(),
+            cap: MAX_ROW_RITES,
+        });
+    }
+    put_u32(buf, u32_len(row.rites.len())?);
+    for (rite, m) in &row.rites {
+        put_u16(buf, *rite);
+        put_u16(buf, m.pc);
+        put_u16(buf, m.wait_left);
+        match m.target {
+            None => buf.push(0),
+            Some(t) => {
+                buf.push(1);
+                buf.extend_from_slice(&t.raw().to_le_bytes());
+            }
+        }
+        match m.wait_ch {
+            None => buf.push(0),
+            Some(ch) => buf.push(ch.as_u8()),
+        }
+    }
     if row.knows.len() > MAX_ROW_KNOWS {
         return Err(StreamError::Oversize {
             size: row.knows.len(),
@@ -625,6 +670,8 @@ fn decode_row(rest: &mut &[u8]) -> Result<PlaceRow, StreamError> {
         VelFx(take_i32(rest)?),
     );
     row.yaw_rate = take_i32(rest)?;
+    row.pitch_rate = take_i32(rest)?;
+    row.roll_rate = take_i32(rest)?;
     row.hull = match take_u8(rest)? {
         0 => None,
         1 => Some(take_aabb(rest)?),
@@ -655,6 +702,45 @@ fn decode_row(rest: &mut &[u8]) -> Result<PlaceRow, StreamError> {
         }),
         _ => return Err(StreamError::Kind),
     };
+    row.support = match take_u8(rest)? {
+        0 => None,
+        1 => Some((
+            take_i16(rest)?,
+            take_i16(rest)?,
+            take_i16(rest)?,
+            take_i32(rest)?,
+        )),
+        _ => return Err(StreamError::Kind),
+    };
+    row.attach_local = match take_u8(rest)? {
+        0 => None,
+        1 => Some(take_ivec3(rest)?),
+        _ => return Err(StreamError::Kind),
+    };
+    let nr_rites = take_capped_count(rest, MAX_ROW_RITES)?;
+    for _ in 0..nr_rites {
+        let rite = take_u16(rest)?;
+        let pc = take_u16(rest)?;
+        let wait_left = take_u16(rest)?;
+        let target = match take_u8(rest)? {
+            0 => None,
+            1 => Some(Sigil::from_raw(take_u128(rest)?)),
+            _ => return Err(StreamError::Kind),
+        };
+        let wait_ch = match take_u8(rest)? {
+            0 => None,
+            v => Some(Channel::from_u8(v).ok_or(StreamError::Kind)?),
+        };
+        row.rites.push((
+            rite,
+            RiteMachine {
+                pc,
+                wait_left,
+                target,
+                wait_ch,
+            },
+        ));
+    }
     let nk = take_capped_count(rest, MAX_ROW_KNOWS)?;
     for _ in 0..nk {
         row.knows.push(take_u16(rest)?);
@@ -769,6 +855,18 @@ fn put_u32(buf: &mut Vec<u8>, v: u32) {
     buf.extend_from_slice(&v.to_le_bytes());
 }
 
+fn put_u16(buf: &mut Vec<u8>, v: u16) {
+    buf.extend_from_slice(&v.to_le_bytes());
+}
+
+fn put_i16(buf: &mut Vec<u8>, v: i16) {
+    buf.extend_from_slice(&v.to_le_bytes());
+}
+
+fn take_i16(rest: &mut &[u8]) -> Result<i16, StreamError> {
+    Ok(i16::from_le_bytes(take_arr::<2>(rest)?))
+}
+
 fn put_i32(buf: &mut Vec<u8>, v: i32) {
     buf.extend_from_slice(&v.to_le_bytes());
 }
@@ -873,6 +971,8 @@ mod tests {
         row.pose = Some(PoseMm::new(Mm(1), Mm(2), Mm(3), YawMd(4)));
         row.vel = Vel3::new(VelFx(5), VelFx(6), VelFx(7));
         row.yaw_rate = 8;
+        row.pitch_rate = -9;
+        row.roll_rate = 10;
         row.hull = Some(AabbMm::new(
             IVec3 { x: -1, y: 0, z: -1 },
             IVec3 { x: 1, y: 2, z: 1 },
@@ -888,6 +988,17 @@ mod tests {
             lin: IVec3 { x: 1, y: 0, z: 0 },
             ang: IVec3::ZERO,
         });
+        row.support = Some((100, 200, -300, 42));
+        row.attach_local = Some(IVec3 { x: 7, y: 8, z: 9 });
+        row.rites = vec![(
+            3,
+            RiteMachine {
+                pc: 4,
+                wait_left: 5,
+                target: Some(relic(7)),
+                wait_ch: Some(Channel::Timing),
+            },
+        )];
         row.knows = vec![1, 2];
         let mut other = PlaceRow::new(relic(2), LocusKind::Relic);
         other.rels = vec![(Rel::In, p)];

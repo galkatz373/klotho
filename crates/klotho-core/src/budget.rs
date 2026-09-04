@@ -1,10 +1,11 @@
 //! Per-tick kernel budgets. These are gates, not established facts (K14).
 
-/// Caps applied to one `CommitKernel::step`. Exceeding a cap is
+/// Deterministic caps applied to one `CommitKernel::step`. Exceeding a cap is
 /// [`crate::RejectReason::Budget`], never a [`crate::KernelFault`].
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct Budget {
-    /// Kernel step wall time, microseconds. Hearth target is 4_000 (4 ms).
+    /// Kernel step wall-time target, microseconds. This is telemetry only and
+    /// never changes admission.
     pub us_sim: u32,
     /// Predicate bytecode ops per tick. Hearth cap is 8_192.
     pub pred_ops: u32,

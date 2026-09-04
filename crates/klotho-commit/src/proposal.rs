@@ -17,7 +17,7 @@ pub enum ResidencyOp {
 }
 
 /// One transaction grain (K21).
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Proposal {
     /// Signed / device player packet.
     Player(PlayerIntent),
@@ -149,7 +149,9 @@ impl Proposal {
         }
     }
 
-    /// Total admit comparator (K18 / K34). Not insertion order.
+    /// Admission equivalence key (K18 / K34). Equal keys never fall back to
+    /// insertion order: distinct grains in one class all Conflict, while
+    /// byte-identical grains collapse to a single admit (idempotent retry).
     #[must_use]
     pub fn admit_key(&self, proposer_reg_ix: u8) -> (u8, u128, u16, u8) {
         (

@@ -692,7 +692,8 @@ mod tests {
     }
 
     #[test]
-    fn us_sim_zero_nacks_remaining_budget() {
+    fn us_sim_zero_still_admits() {
+        // us_sim is telemetry only (K14): it never changes admission.
         let mut k = empty_kernel();
         let s = relic(1);
         plant_mover(&mut k, s, PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)), 0, 0);
@@ -701,11 +702,63 @@ mod tests {
         budget.us_sim = 0;
         let d = k.step(Tick(1), budget, &mut []).unwrap();
         assert!(
-            d.rejects.iter().any(|(_, r)| *r == RejectReason::Budget),
+            d.rejects.iter().all(|(_, r)| *r != RejectReason::Budget),
+            "{d:?}"
+        );
+        assert_eq!(k.world().view().pose(s).unwrap().x, Mm(10));
+    }
+
+    #[test]
+    fn equal_spatial_keys_reject_whole_class() {
+        // No arrival-order fallback: two same-key grains both Conflict and
+        // neither is admitted.
+        let mut k = empty_kernel();
+        let s = relic(1);
+        plant_mover(&mut k, s, PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)), 0, 0);
+        k.ingest(space_delta(s, PoseMm::new(Mm(10), Mm(0), Mm(0), YawMd(0))));
+        k.ingest(space_delta(s, PoseMm::new(Mm(20), Mm(0), Mm(0), YawMd(0))));
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert_eq!(d.rejects.len(), 2, "{d:?}");
+        assert!(
+            d.rejects.iter().all(|(_, r)| *r == RejectReason::Conflict),
             "{d:?}"
         );
         assert!(d.events.is_empty(), "{d:?}");
         assert_eq!(k.world().view().pose(s).unwrap().x, Mm(0));
+    }
+
+    #[test]
+    fn equal_player_keys_reject_whole_class() {
+        // Same-slot Player intents share one admit key. Distinct grains are
+        // ambiguous: both lose instead of racing on ingest order.
+        // (Byte-identical retries collapse instead; see below.)
+        let mut k = empty_kernel();
+        let mut other = player_use();
+        other.verb = Verb::Move;
+        k.ingest(Proposal::Player(player_use()));
+        k.ingest(Proposal::Player(other));
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert_eq!(d.rejects.len(), 2, "{d:?}");
+        assert!(
+            d.rejects.iter().all(|(_, r)| *r == RejectReason::Conflict),
+            "{d:?}"
+        );
+        assert!(d.events.is_empty(), "{d:?}");
+    }
+
+    #[test]
+    fn identical_retries_admit_exactly_once() {
+        // Byte-identical grains are an idempotent retry, not ambiguity: one
+        // admits, the rest drop silently with no reject.
+        let mut k = empty_kernel();
+        let s = relic(1);
+        plant_mover(&mut k, s, PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)), 0, 0);
+        let retry = space_delta(s, PoseMm::new(Mm(10), Mm(0), Mm(0), YawMd(0)));
+        k.ingest(retry.clone());
+        k.ingest(retry);
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(d.rejects.is_empty(), "{d:?}");
+        assert_eq!(k.world().view().pose(s).unwrap().x, Mm(10));
     }
 
     #[test]

@@ -1,7 +1,9 @@
 //! Place column blob carried on a residency proposal. Not a source.
 
+use crate::proj::RiteMachine;
 use klotho_core::{
-    AabbMm, BlobId, Hash, LocusKind, PhysRequest, PoseMm, ResourceId, Sigil, SimLod, Vel3,
+    AabbMm, BlobId, Hash, IVec3, LocusKind, PhysRequest, PoseMm, ResourceId, Sigil, SimLod,
+    Support, Vel3,
 };
 use klotho_ir::Rel;
 
@@ -33,6 +35,10 @@ pub struct PlaceRow {
     pub vel: Vel3,
     /// Yaw rate, millideg / tick.
     pub yaw_rate: i32,
+    /// Pitch rate, millideg / tick.
+    pub pitch_rate: i32,
+    /// Roll rate, millideg / tick.
+    pub roll_rate: i32,
     /// Local hull AABB.
     pub hull: Option<AabbMm>,
     /// Canonical hull blob.
@@ -51,6 +57,12 @@ pub struct PlaceRow {
     pub sim_lod: SimLod,
     /// Pending `PHYS_REQ`, if any.
     pub phys_req: Option<PhysRequest>,
+    /// Last admitted contact support.
+    pub support: Option<Support>,
+    /// Seat offset in the parent's yaw frame.
+    pub attach_local: Option<IVec3>,
+    /// Active rites `(rite_id, machine)`.
+    pub rites: Vec<(u16, RiteMachine)>,
     /// Known fact ids.
     pub knows: Vec<u16>,
 }
@@ -65,6 +77,8 @@ impl PlaceRow {
             pose: None,
             vel: Vel3::ZERO,
             yaw_rate: 0,
+            pitch_rate: 0,
+            roll_rate: 0,
             hull: None,
             hull_id: BlobId::ZERO,
             afford: 0,
@@ -74,6 +88,9 @@ impl PlaceRow {
             sleep: 0,
             sim_lod: SimLod::Full,
             phys_req: None,
+            support: None,
+            attach_local: None,
+            rites: Vec::new(),
             knows: Vec::new(),
         }
     }

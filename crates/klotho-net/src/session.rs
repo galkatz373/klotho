@@ -17,6 +17,7 @@ use crate::packet::{
     encode_frame, encode_packet,
 };
 use crate::replay::write_replay;
+use crate::sidecar::Sidecar;
 use crate::sign::{Keypair, Signed, sign_intent, verify_intent, verifying_key_from_bytes};
 
 /// Listen-server advertised intent rate (Hearth / Role::Host).
@@ -255,6 +256,7 @@ impl Host {
         match verify_intent(&vk, signed) {
             Ok(mut intent) => {
                 intent.player = player;
+                intent.analog = Sidecar::clamp_analog(intent.analog);
                 self.queue(player, intent);
                 Ok(true)
             }
@@ -679,7 +681,15 @@ impl Client {
                 places: _,
                 sigils,
             } => {
-                let accept = self.awaiting_interest || gen_ok(self.interest_gen, interest_gen);
+                // A Resync re-sends the current dictionary, which may be more
+                // than one generation ahead of this client: the Interest
+                // payload is the complete codebook, so a forward jump lands
+                // on a consistent (dictionary, gen) pair. Backward jumps are
+                // still refused: a delayed packet must not roll the
+                // dictionary back (it just re-arms needs_resync).
+                let forward = interest_gen.wrapping_sub(self.interest_gen);
+                let accept = gen_ok(self.interest_gen, interest_gen)
+                    || (self.awaiting_interest && forward != 0 && forward < 0x8000);
                 if !accept {
                     self.needs_resync = true;
                     return Ok(());
@@ -1120,6 +1130,30 @@ mod tests {
             .unwrap();
         assert_eq!(client.interest_gen(), 2);
         assert!(!client.needs_resync());
+    }
+
+    #[test]
+    fn stale_interest_while_awaiting_does_not_roll_back() {
+        let (_host, mut client) = memory_session(Hash::from_bytes([15; 32])).unwrap();
+        let prefix = client.prefix();
+        client
+            .handle(Packet::Resync {
+                tick: Tick(0),
+                epoch: Epoch::ZERO,
+                prefix,
+            })
+            .unwrap();
+        // Gen 0xFFFF is behind gen 0 in wrapping order: a delayed packet.
+        client
+            .handle(Packet::Interest {
+                interest_gen: 0xFFFF,
+                places: vec![],
+                sigils: vec![],
+            })
+            .unwrap();
+        assert_eq!(client.interest_gen(), 0);
+        assert!(client.needs_resync());
+        assert!(client.overlay().is_empty());
     }
 
     #[test]

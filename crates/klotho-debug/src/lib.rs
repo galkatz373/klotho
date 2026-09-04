@@ -54,11 +54,14 @@ mod tests {
         let snap = k.snapshot();
         let quad = save_from_snapshot(&snap);
         assert_eq!(
-            check_load(&quad, Hash::ZERO),
+            check_load(&quad, Hash::ZERO, snap.canon_hash),
             Err(LoadError::PrefixMismatch)
         );
-        assert_eq!(check_load(&quad, snap.trace_prefix_hash), Ok(()));
-        let loaded = load(quad, snap.trace_prefix_hash).unwrap();
+        assert_eq!(
+            check_load(&quad, snap.trace_prefix_hash, snap.canon_hash),
+            Ok(())
+        );
+        let loaded = load(quad, snap.trace_prefix_hash, snap.canon_hash).unwrap();
         assert_eq!(loaded.tick, snap.tick);
         assert_eq!(loaded.trace_prefix_hash, snap.trace_prefix_hash);
     }

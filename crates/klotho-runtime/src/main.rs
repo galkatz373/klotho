@@ -279,10 +279,13 @@ mod tests {
         assert_eq!(quad.trace_prefix_hash, snap.trace_prefix_hash);
         assert_eq!(quad.trace_from_tick, snap.tick);
         assert_eq!(
-            check_load(&quad, Hash::ZERO),
+            check_load(&quad, Hash::ZERO, snap.canon_hash),
             Err(LoadError::PrefixMismatch)
         );
-        assert_eq!(check_load(&quad, snap.trace_prefix_hash), Ok(()));
+        assert_eq!(
+            check_load(&quad, snap.trace_prefix_hash, snap.canon_hash),
+            Ok(())
+        );
     }
 
     #[test]

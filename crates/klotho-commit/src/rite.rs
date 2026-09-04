@@ -34,6 +34,11 @@ pub fn run_burst(
     let pins = canon.pin_sigils.as_slice();
     let view_pins = pins;
     loop {
+        // K21 budget split, signed off in docs/hld.md (§Rite ISA): pred-op
+        // exhaustion rejects the whole proposal, but rite-step exhaustion
+        // ends the burst — the delta admits together with RiteEnded
+        // {FailBudget} as the atomic outcome (progress with its marker,
+        // never an unmarked half-burst).
         if steps >= cap || *rite_steps == 0 {
             spec.push(TraceEvent::new(
                 tick,

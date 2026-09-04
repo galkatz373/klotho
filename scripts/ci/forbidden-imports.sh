@@ -196,6 +196,27 @@ if [[ -d crates/klotho-save ]]; then
   fi
 fi
 
+# The world write path (`mutate`) may be enabled in [dependencies] solely by
+# klotho-commit. Any crate may enable it in [dev-dependencies] for tests:
+# dev-dependencies never ship, so that cannot unify the write API into
+# production builds. Section-aware: a bare grep cannot tell the two apart.
+if [[ -d crates ]]; then
+  for manifest in crates/*/Cargo.toml; do
+    awk -v file="$manifest" '
+      /^\[/ { section = $0; next }
+      /mutate/ {
+        if ($0 ~ /required-features/) next
+        if (file == "crates/klotho-world/Cargo.toml" && section == "[features]") next
+        if (file == "crates/klotho-commit/Cargo.toml" && section == "[dependencies]") next
+        if (section == "[dev-dependencies]") next
+        print "klotho-world/mutate outside allowlist: " file ":" FNR ": " $0
+        bad = 1
+      }
+      END { exit bad }
+    ' "$manifest" || fail=1
+  done
+fi
+
 # InferHost::{new,submit,poll} may appear only in klotho-runtime and klotho-infer.
 if [[ -d crates ]]; then
   hits=""

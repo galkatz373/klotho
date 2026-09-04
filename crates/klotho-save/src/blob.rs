@@ -37,19 +37,18 @@ pub fn pause_save(snap: &Arc<WorldSnapshot>) -> Result<SaveBlob, SaveError> {
     })
 }
 
-/// Refuse mismatched ancestry. `expected_canon` is checked when `Some`.
+/// Refuse mismatched ancestry. The canon hash is always checked: a save from
+/// another Canon (or epoch) must never restore, even in-process.
 pub fn check_load(
     blob: &SaveBlob,
     expected_prefix: Hash,
-    expected_canon: Option<Hash>,
+    expected_canon: Hash,
 ) -> Result<(), SaveError> {
     if blob.prefix != expected_prefix {
         return Err(SaveError::PrefixMismatch);
     }
-    if let Some(c) = expected_canon {
-        if blob.canon_hash != c {
-            return Err(SaveError::CanonMismatch);
-        }
+    if blob.canon_hash != expected_canon {
+        return Err(SaveError::CanonMismatch);
     }
     Ok(())
 }
@@ -58,7 +57,7 @@ pub fn check_load(
 pub fn load(
     blob: SaveBlob,
     expected_prefix: Hash,
-    expected_canon: Option<Hash>,
+    expected_canon: Hash,
 ) -> Result<SaveBlob, SaveError> {
     check_load(&blob, expected_prefix, expected_canon)?;
     Ok(blob)

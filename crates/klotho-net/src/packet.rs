@@ -608,7 +608,7 @@ pub fn encode_player_intent(pi: &PlayerIntent) -> Result<Vec<u8>, NetError> {
     }
     b.u8(pi.agency.claimed.len() as u8);
     for ch in &pi.agency.claimed {
-        b.u8(*ch as u8);
+        b.u8(ch.as_u8());
     }
     b.u8(match pi.agency.assist {
         AssistLevel::None => 0,
@@ -698,13 +698,7 @@ fn decode_target(r: &mut Reader<'_>) -> Result<IntentTarget, NetError> {
 }
 
 fn channel(v: u8) -> Result<Channel, NetError> {
-    match v {
-        1 => Ok(Channel::Timing),
-        2 => Ok(Channel::Aim),
-        3 => Ok(Channel::ResourceSpend),
-        4 => Ok(Channel::DialogueChoice),
-        _ => Err(NetError::BadIntent),
-    }
+    Channel::from_u8(v).ok_or(NetError::BadIntent)
 }
 
 fn encode_reject(b: &mut Buf, r: RejectReason) {

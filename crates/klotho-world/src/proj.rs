@@ -296,15 +296,15 @@ impl Projection {
             self.pose.push(row.pose);
             self.vel.push(row.vel);
             self.yaw_rate.push(row.yaw_rate);
-            self.pitch_rate.push(0);
-            self.roll_rate.push(0);
+            self.pitch_rate.push(row.pitch_rate);
+            self.roll_rate.push(row.roll_rate);
             self.island_id.push(row.island);
             self.sleep_ticks.push(row.sleep);
             self.sim_lod.push(row.sim_lod);
             self.in_place
                 .push(row_in_place(&row.rels).expect("validated"));
-            self.support.push(None);
-            self.attach_local.push(None);
+            self.support.push(row.support);
+            self.attach_local.push(row.attach_local);
             for &(res, v) in &row.qty {
                 Arc::make_mut(&mut self.qty).insert((i, res), v);
             }
@@ -313,6 +313,9 @@ impl Projection {
             }
             for &fact in &row.knows {
                 Arc::make_mut(&mut self.knows).insert((i, fact));
+            }
+            for &(rite, machine) in &row.rites {
+                Arc::make_mut(&mut self.rites).insert((i, rite), machine);
             }
         }
     }
@@ -324,10 +327,10 @@ impl Projection {
         self.afford.set(ix, row.afford);
         self.vel.set(ix, row.vel);
         self.yaw_rate.set(ix, row.yaw_rate);
-        self.pitch_rate.set(ix, 0);
-        self.roll_rate.set(ix, 0);
-        self.support.set(ix, None);
-        self.attach_local.set(ix, None);
+        self.pitch_rate.set(ix, row.pitch_rate);
+        self.roll_rate.set(ix, row.roll_rate);
+        self.support.set(ix, row.support);
+        self.attach_local.set(ix, row.attach_local);
         self.island_id.set(ix, row.island);
         self.sleep_ticks.set(ix, row.sleep);
         self.sim_lod.set(ix, row.sim_lod);
@@ -351,6 +354,12 @@ impl Projection {
             let knows = Arc::make_mut(&mut self.knows);
             for fact in &row.knows {
                 knows.insert((i, *fact));
+            }
+        }
+        if !row.rites.is_empty() {
+            let rites = Arc::make_mut(&mut self.rites);
+            for &(rite, machine) in &row.rites {
+                rites.insert((i, rite), machine);
             }
         }
     }
@@ -619,9 +628,9 @@ impl Projection {
             support: self.support.get(ix).copied().flatten(),
             phys_req: self.phys_req.get(&i).copied(),
             attach_local: self.attach_local.get(ix).copied().flatten(),
+            rites: self.rites_of(s),
             rels,
             qty,
-            rites: self.rites_of(s),
             knows,
             hull: self.hull_local.get(ix).copied().flatten(),
             hull_id: self.hull_id.get(ix).copied().unwrap_or(BlobId::ZERO),
@@ -737,6 +746,8 @@ impl Projection {
             pose: self.pose.get(ix).copied().flatten(),
             vel: self.vel.get(ix).copied().unwrap_or(Vel3::ZERO),
             yaw_rate: self.yaw_rate.get(ix).copied().unwrap_or(0),
+            pitch_rate: self.pitch_rate.get(ix).copied().unwrap_or(0),
+            roll_rate: self.roll_rate.get(ix).copied().unwrap_or(0),
             hull: self.hull_local.get(ix).copied().flatten(),
             hull_id: self.hull_id.get(ix).copied().unwrap_or(BlobId::ZERO),
             afford: self.afford.get(ix).copied().unwrap_or(0),
@@ -746,6 +757,9 @@ impl Projection {
             sleep: self.sleep_ticks.get(ix).copied().unwrap_or(0),
             sim_lod: self.sim_lod.get(ix).copied().unwrap_or(SimLod::Full),
             phys_req: self.phys_req.get(&i).copied(),
+            support: self.support.get(ix).copied().flatten(),
+            attach_local: self.attach_local.get(ix).copied().flatten(),
+            rites: self.rites_of(s),
             knows,
         })
     }

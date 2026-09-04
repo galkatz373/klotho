@@ -27,11 +27,9 @@ default = []
 net = ["dep:klotho-net"]
 net-listen = ["net"]
 net-dedicated = ["net"]
-phys = ["dep:klotho-phys"]
 
 [dependencies]
 klotho-net = { workspace = true, optional = true }
-klotho-phys = { workspace = true, optional = true }
 hearth-slice = { path = "../../examples/hearth-slice" }
 klotho-commit.workspace = true
 klotho-compile.workspace = true

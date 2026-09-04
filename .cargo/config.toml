@@ -1,3 +1,5 @@
-# Phys f32 must not contract FMA (OS-varying). Used when RUSTFLAGS is unset.
+# Baseline workspace protection when RUSTFLAGS is unset. Cargo configuration is
+# workspace-scoped, not crate-scoped; the authoritative Phys build contract is
+# the pinned-Linux `phys-golden` CI job and its deployed server artifact.
 [target.'cfg(all())']
 rustflags = ["-C", "llvm-args=--fp-contract=off"]

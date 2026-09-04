@@ -90,6 +90,11 @@ pub struct SolveOut {
     pub proposals: Vec<Proposal>,
     /// [`crate::METRIC_QUANT_RESIDUAL_MM`] samples.
     pub residuals_mm: Vec<f32>,
+    /// Bodies whose f32 output was non-finite and was therefore discarded.
+    ///
+    /// A non-finite value must never be converted into an apparently valid
+    /// integer `PhysDelta` (in particular, never into an origin pose).
+    pub rejected_non_finite: Vec<Sigil>,
 }
 
 /// Solve every Relic in `island`. Attached children and Actors are skipped.
@@ -99,6 +104,7 @@ pub fn solve_island(island: u16, view: &WorldView<'_>) -> SolveOut {
         return SolveOut {
             proposals: Vec::new(),
             residuals_mm: Vec::new(),
+            rejected_non_finite: Vec::new(),
         };
     }
     let mut bodies = collect_bodies(island, view);
@@ -106,6 +112,7 @@ pub fn solve_island(island: u16, view: &WorldView<'_>) -> SolveOut {
         return SolveOut {
             proposals: Vec::new(),
             residuals_mm: Vec::new(),
+            rejected_non_finite: Vec::new(),
         };
     }
     let statics = collect_statics(view, &bodies);
@@ -333,7 +340,9 @@ fn fill_support(bodies: &[Body], contacts: &[Contact], out: &mut [Option<Support
         if n[1] <= 0.0 {
             continue;
         }
-        let packed = pack_support(n, depth);
+        let Some(packed) = pack_support(n, depth) else {
+            continue;
+        };
         match out[c.a] {
             Some((_, ny, _, d)) if ny >= packed.1 && d >= packed.3 => {}
             _ => out[c.a] = Some(packed),
@@ -346,7 +355,9 @@ fn fill_support(bodies: &[Body], contacts: &[Contact], out: &mut [Option<Support
             if n_b[1] <= 0.0 {
                 continue;
             }
-            let packed_b = pack_support(n_b, depth);
+            let Some(packed_b) = pack_support(n_b, depth) else {
+                continue;
+            };
             match out[j] {
                 Some((_, ny, _, d)) if ny >= packed_b.1 && d >= packed_b.3 => {}
                 _ => out[j] = Some(packed_b),
@@ -355,22 +366,37 @@ fn fill_support(bodies: &[Body], contacts: &[Contact], out: &mut [Option<Support
     }
 }
 
-fn pack_support(n: [f32; 3], depth: f32) -> Support {
+fn pack_support(n: [f32; 3], depth: f32) -> Option<Support> {
+    // Support is optional advisory contact metadata. A non-finite support
+    // normal/depth is omitted; pose/velocity are independently quantized and
+    // the kernel still re-derives gameplay-visible swept overlap (K24).
+    if !n.into_iter().all(f32::is_finite) || !depth.is_finite() {
+        return None;
+    }
     let s = 32767.0;
-    (
+    Some((
         (n[0] * s).round().clamp(-32767.0, 32767.0) as i16,
         (n[1] * s).round().clamp(-32767.0, 32767.0) as i16,
         (n[2] * s).round().clamp(-32767.0, 32767.0) as i16,
-        crate::quant::trunc_mm(depth),
-    )
+        crate::quant::trunc_mm(depth)?,
+    ))
 }
 
 fn emit(view: &WorldView<'_>, bodies: &[Body], support: &[Option<Support>]) -> SolveOut {
     let mut proposals = Vec::with_capacity(bodies.len());
     let mut residuals_mm = Vec::with_capacity(bodies.len());
+    let mut rejected_non_finite = Vec::new();
     for (i, b) in bodies.iter().enumerate() {
-        let (pose, residual) = pose_and_residual(b.x[0], b.x[1], b.x[2], b.yaw, b.pitch, b.roll);
-        let vel = vel3(b.v[0], b.v[1], b.v[2]);
+        let Some((pose, residual)) =
+            pose_and_residual(b.x[0], b.x[1], b.x[2], b.yaw, b.pitch, b.roll)
+        else {
+            rejected_non_finite.push(b.sigil);
+            continue;
+        };
+        let Some(vel) = vel3(b.v[0], b.v[1], b.v[2]) else {
+            rejected_non_finite.push(b.sigil);
+            continue;
+        };
         let from = world_aabb(b.local, b.prev.translation());
         let to = world_aabb(b.local, pose.translation());
         let hint = hits_closed(view, b.sigil, from.swept_union(to));
@@ -392,6 +418,7 @@ fn emit(view: &WorldView<'_>, bodies: &[Body], support: &[Option<Support>]) -> S
     SolveOut {
         proposals,
         residuals_mm,
+        rejected_non_finite,
     }
 }
 

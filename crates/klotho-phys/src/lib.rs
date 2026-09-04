@@ -17,7 +17,7 @@ use klotho_commit::{AdmitBuf, IslandProposer, SyncProposer};
 use klotho_core::{NO_ISLAND, Tick};
 use klotho_world::WorldView;
 
-pub use quant::METRIC_QUANT_RESIDUAL_MM;
+pub use quant::{METRIC_QUANT_RESIDUAL_MM, METRIC_REJECTED_NON_FINITE};
 pub use solver::{SolveOut, solve_island};
 
 /// Zero-sized proposer. All inputs come from `&WorldView` (K22).
@@ -47,7 +47,16 @@ impl SyncProposer for Phys {
             }
         }
         for id in islands {
-            for p in solve_island(id, view).proposals {
+            let solved = solve_island(id, view);
+            // No I/O in the proposer: discards stay pure data on SolveOut.
+            // In debug builds a non-finite body trips loudly instead of
+            // hiding as a sleeping body.
+            debug_assert!(
+                solved.rejected_non_finite.is_empty(),
+                "{}: discarded solver bodies",
+                METRIC_REJECTED_NON_FINITE
+            );
+            for p in solved.proposals {
                 out.push(p);
             }
         }
@@ -60,7 +69,13 @@ impl IslandProposer for Phys {
     }
 
     fn propose_island(&self, island: u16, view: &WorldView, out: &mut AdmitBuf) {
-        for p in solve_island(island, view).proposals {
+        let solved = solve_island(island, view);
+        debug_assert!(
+            solved.rejected_non_finite.is_empty(),
+            "{}: discarded solver bodies",
+            METRIC_REJECTED_NON_FINITE
+        );
+        for p in solved.proposals {
             out.push(p);
         }
     }
@@ -227,6 +242,39 @@ mod tests {
         assert!(
             p <= 1.0 && max <= 4.0,
             "{METRIC_QUANT_RESIDUAL_MM} p99={p} max={max}"
+        );
+    }
+
+    #[test]
+    fn long_run_quantized_stack_stays_bounded() {
+        // Per-tick residuals alone cannot show whether repeated f32 solve →
+        // integer Projection feedback walks a quantization bin. Exercise a
+        // non-zero origin, where f32 precision is less forgiving in v1.
+        let mut k = CommitKernel::new(empty_world());
+        let _floor = plant_floor(&mut k);
+        let s = relic(1);
+        plant_crate(&mut k, s, 800, 0);
+        k.world_mut()
+            .set_pose(s, PoseMm::new(Mm(20_000), Mm(800), Mm(-20_000), YawMd(0)))
+            .unwrap();
+        let mut phys = Phys;
+        for tick in 1..=1_500 {
+            k.partition();
+            k.step(Tick(tick), Budget::HEARTH, &mut [&mut phys])
+                .unwrap();
+        }
+        let pose = k.world().view().pose(s).unwrap();
+        assert!(
+            (0..=4).contains(&pose.y.0),
+            "long-run stack drifted vertically: {pose:?}"
+        );
+        assert!(
+            (19_998..=20_002).contains(&pose.x.0),
+            "long-run stack drifted in x: {pose:?}"
+        );
+        assert!(
+            (-20_002..=-19_998).contains(&pose.z.0),
+            "long-run stack drifted in z: {pose:?}"
         );
     }
 

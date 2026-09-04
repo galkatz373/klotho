@@ -1343,7 +1343,6 @@ dependencies = [
  "klotho-mind",
  "klotho-motion",
  "klotho-net",
- "klotho-phys",
  "klotho-platform",
  "klotho-sim",
  "klotho-space",

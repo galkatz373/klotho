@@ -467,10 +467,16 @@ fn build_pose_block(slot: &Joined, poses: &[(Sigil, PoseMm, Vel3)]) -> PoseBlock
         return full_block(&mapped);
     }
     let mut deltas = Vec::new();
-    for (ix, pose, vel) in &mapped {
+    for (ix, pose, _) in &mapped {
         match slot.last_sent.get(ix) {
             None => return full_block(&mapped),
-            Some((lp, lv)) if lp == pose && lv == vel => {}
+            // Delta rows carry pose only and the overlay never reads
+            // velocity, so a velocity-only change is baseline-tracked (via
+            // update_last_sent after every flush) with no transmission.
+            // Revisit if the overlay ever consumes velocity (prediction):
+            // the honest options then are per-row Full (wire-format change)
+            // or carrying vel in every delta entry (14 B -> 26 B each).
+            Some((lp, _)) if lp == pose => {}
             Some((lp, _)) => match dpose6(lp, pose) {
                 Some(d) => deltas.push(PoseDeltaEntry {
                     local_ix: *ix,
@@ -556,7 +562,7 @@ pub fn dedicated_session_at(
 
 #[cfg(test)]
 mod tests {
-    use klotho_core::{LocusKind, Mm, PoseMm, Sigil, Vel3, YawMd};
+    use klotho_core::{LocusKind, Mm, PoseMm, Sigil, Vel3, VelFx, YawMd};
 
     use klotho_ir::{Agency, Analog, IntentTarget, Verb};
 
@@ -731,6 +737,63 @@ mod tests {
                 let enc = encode_packet(&moved).unwrap();
                 let raw = s.raw().to_le_bytes();
                 assert!(!enc.windows(16).any(|w| w == raw));
+            }
+            other => panic!("expected Delta, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn flush_pose_vel_only_change_is_silent() {
+        // Velocity is baseline-tracked but never transmitted (the overlay
+        // holds poses only): a vel-only change must not force a Full block
+        // for every mover.
+        let canon = Hash::from_bytes([23; 32]);
+        let mut server = Server::new(canon, Epoch::ZERO, 30).unwrap();
+        let kp = Keypair::generate().unwrap();
+        let player = server.accept_join(&kp.verifying_bytes()).unwrap();
+        let s = actor();
+        server
+            .set_interest(
+                player,
+                InterestDict {
+                    interest_gen: 1,
+                    places: vec![],
+                    sigils: vec![s],
+                },
+            )
+            .unwrap();
+        let first = server
+            .flush_pose(player, Tick(1), &[(s, pose(10), Vel3::ZERO)])
+            .unwrap();
+        assert!(matches!(
+            first,
+            Packet::PoseDelta {
+                block: PoseBlock::Full(_),
+                ..
+            }
+        ));
+        let kicked = Vel3::new(VelFx::from_mm_per_tick(40), VelFx::ZERO, VelFx::ZERO);
+        let vel_only = server
+            .flush_pose(player, Tick(2), &[(s, pose(10), kicked)])
+            .unwrap();
+        match vel_only {
+            Packet::PoseDelta {
+                block: PoseBlock::Delta(ref d),
+                ..
+            } => assert!(d.is_empty(), "vel-only change transmitted: {d:?}"),
+            other => panic!("expected silent Delta, got {other:?}"),
+        }
+        // Baseline pose is intact: the next real move diffs correctly.
+        let moved = server
+            .flush_pose(player, Tick(3), &[(s, pose(14), kicked)])
+            .unwrap();
+        match moved {
+            Packet::PoseDelta {
+                block: PoseBlock::Delta(ref d),
+                ..
+            } => {
+                assert_eq!(d.len(), 1);
+                assert_eq!(d[0].dpose[0], 4);
             }
             other => panic!("expected Delta, got {other:?}"),
         }

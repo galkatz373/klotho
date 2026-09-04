@@ -152,14 +152,22 @@ pub fn save_from_snapshot(snap: &Arc<WorldSnapshot>) -> SaveQuad {
 /// Hard refuse when a save quadruple cannot be loaded. Not a [`klotho_core::RejectReason`].
 pub type LoadError = klotho_save::SaveError;
 
-/// Refuse if `quad.trace_prefix_hash` is not `expected_prefix`.
-pub fn check_load(quad: &SaveQuad, expected_prefix: Hash) -> Result<(), LoadError> {
-    klotho_save::check_load(&quad.as_blob(), expected_prefix, None)
+/// Refuse if `quad` ancestry does not match the live world.
+pub fn check_load(
+    quad: &SaveQuad,
+    expected_prefix: Hash,
+    expected_canon: Hash,
+) -> Result<(), LoadError> {
+    klotho_save::check_load(&quad.as_blob(), expected_prefix, expected_canon)
 }
 
-/// Restore the snapshot blob if the prefix matches.
-pub fn load(quad: SaveQuad, expected_prefix: Hash) -> Result<Arc<WorldSnapshot>, LoadError> {
-    check_load(&quad, expected_prefix)?;
+/// Restore the snapshot blob if ancestry matches.
+pub fn load(
+    quad: SaveQuad,
+    expected_prefix: Hash,
+    expected_canon: Hash,
+) -> Result<Arc<WorldSnapshot>, LoadError> {
+    check_load(&quad, expected_prefix, expected_canon)?;
     Ok(quad.snapshot)
 }
 
@@ -286,11 +294,14 @@ mod tests {
         let snap = k.snapshot();
         let quad = save_from_snapshot(&snap);
         assert_eq!(
-            check_load(&quad, Hash::ZERO),
+            check_load(&quad, Hash::ZERO, snap.canon_hash),
             Err(LoadError::PrefixMismatch)
         );
-        assert_eq!(check_load(&quad, snap.trace_prefix_hash), Ok(()));
-        let loaded = load(quad, snap.trace_prefix_hash).unwrap();
+        assert_eq!(
+            check_load(&quad, snap.trace_prefix_hash, snap.canon_hash),
+            Ok(())
+        );
+        let loaded = load(quad, snap.trace_prefix_hash, snap.canon_hash).unwrap();
         assert_eq!(loaded.tick, snap.tick);
         assert_eq!(loaded.trace_prefix_hash, snap.trace_prefix_hash);
     }

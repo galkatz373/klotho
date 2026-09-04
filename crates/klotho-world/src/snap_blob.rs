@@ -306,7 +306,7 @@ fn encode_row(buf: &mut Vec<u8>, row: &SnapRow) -> Result<(), SnapError> {
         }
         match m.wait_ch {
             None => buf.push(0),
-            Some(ch) => buf.push(ch as u8),
+            Some(ch) => buf.push(ch.as_u8()),
         }
     }
     put_u32(buf, u32_len(row.knows.len())?);
@@ -392,7 +392,7 @@ fn decode_row(rest: &mut &[u8]) -> Result<SnapRow, SnapError> {
         };
         let wait_ch = match take_u8(rest)? {
             0 => None,
-            v => Some(channel_from_u8(v).ok_or(SnapError::Kind)?),
+            v => Some(Channel::from_u8(v).ok_or(SnapError::Kind)?),
         };
         row.rites.push((
             rite,
@@ -445,16 +445,6 @@ pub(crate) fn check_row_caps(row: &SnapRow) -> Result<(), SnapError> {
         });
     }
     Ok(())
-}
-
-fn channel_from_u8(v: u8) -> Option<Channel> {
-    match v {
-        1 => Some(Channel::Timing),
-        2 => Some(Channel::Aim),
-        3 => Some(Channel::ResourceSpend),
-        4 => Some(Channel::DialogueChoice),
-        _ => None,
-    }
 }
 
 fn put_pose(buf: &mut Vec<u8>, p: PoseMm) {

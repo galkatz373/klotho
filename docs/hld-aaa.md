@@ -4,13 +4,16 @@
 | --- | --- |
 | Document | Successor High-Level Design — Klotho at AAA production scale |
 | Author | Grok (for Gal Katz) |
-| Date | 2026-08-27 |
-| Status | Draft (rev 4 — partition seed+caps, pose rebuild matrix, phys FMA/residual, Place sizing; Q8–Q16 still closed) |
+| Date | 2026-09-04 |
+| Status | Draft (rev 5 — Era 1 + Era 2 + AAA-18/19/20 landed; Q8–Q16 closed; remaining: AAA-21–27) |
+| Last verified | 2026-09-04 @ `69feeb1` (`git log --oneline --reverse | grep -iE "AAA-"`) |
 | Supersedes | `docs/hld.md` rev 5 (2026-08-22) — v1 semantic kernel, Hearth/Ash slice |
 | Audience | Senior engine, tools, gameplay systems, and production engineers |
 | Language | Rust (edition 2024; 2021-compatible crates OK) |
 
-This is not a patch note on rev 5. It is the architecture for a studio that wants Klotho's programming model **and** a contemporary first-party quality bar. Rev 5 remains the law for crates that have not yet taken an AAA PR. **Landed on `main`:** AAA-01, AAA-02, AAA-03, AAA-04, AAA-05, AAA-08.1 (and the rev-4 K58 caps). Next unblocked work is AAA-06 ∥ AAA-08.
+This is not a patch note on rev 5. It is the architecture for a studio that wants Klotho's programming model **and** a contemporary first-party quality bar. Rev 5 remains the law for crates that have not yet taken an AAA PR. **Landed on `main` (verified 2026-09-04 @ `69feeb1`):** AAA-01, AAA-02, AAA-03, AAA-04, AAA-05, AAA-08.1, AAA-06, AAA-08, AAA-07, AAA-09, AAA-10, AAA-11, AAA-11b, AAA-12, AAA-13, AAA-14, AAA-15, AAA-16, AAA-17, AAA-18, AAA-19, AAA-20 (plus rev-4 K58 caps). **Next unblocked work:** AAA-21 ∥ AAA-21b ∥ AAA-22 → AAA-23, AAA-24 → Era 4 (AAA-25–27).
+
+> **Freshness rule (keeps this doc from going stale):** every AAA PR that lands must bump the `Last verified` row, the landed list in this paragraph, the `Landed on main` line in §PR Plan, and the `— landed` suffix on its `#### AAA-NN` header in the same commit. `git log` is the source of truth; this list is a cached view of it.
 
 ---
 
@@ -243,10 +246,10 @@ CI: same `.warp` + Intent file ⇒ same Trace prefix hash on linux/mac/windows f
 | **K38** | **Renderer consumes Manifest, period.** `VisualManifest` grows instance lists, skinned palettes, lights, **cook-baked irradiance probes**, decals, post settings. Clustered deferred or forward+ is an impl of `Presenter`. **GI = probes + SSGI (Q8)**; SSGI is presenter-only, not Trace. Gameplay crates and slices still must not import `klotho-manifest::tables`. | Scales pixels without leaking the programming model. No SDF volume. |
 | **K39** | **Unsafe allowlist: infer, render, audio, platform, phys, jobs, stream.** Phys Era 1: SIMD of the **scalar XPBD**, no solver FFI (Q9). FFI re-opens only after Ember stacking goldens exist. Jobs: steal queues (**landed**; Miri + Loom on the deque are merge gates). Stream: mmap after header validate (Miri). Stream/jobs/phys never enable `world/mutate`. | Forbidding SIMD is how you miss the budget. Optional Jolt FFI is how hashed truth sneaks back. An allowlist without Miri/Loom is a quiet leak. |
 | **K40** | **Canon epochs for live ops.** Packs wait until AAA-25; Hello/save **plumb `epoch` earlier**. Halt protocol: stop `step`; in-flight `WAIT`s `RiteEnd::Evicted` or Canon-mapped resume; apply pack + `EpochMap`; resume. Hello-mismatch → download or disconnect. No runtime `AddLaw`. | K16's "frozen at cook" forked every client on hotfix. The `Epoch` struct already exists. |
-| **K41** | **Rite ISA may grow; hot loops are Laws.** AAA-08.1 RFC adds atoms `RayHits`, `SimLodIs`, `InPlace`; op `SPAWN template`; op `PHYS_REQ` writing a **`PhysRequest` Projection column** (not `Qty`). Combat tick is Laws (Ash hitscan). Designers never see `PhysRequest` in Distaff (author/engine split). Caps live in `Budget`. Verb adds (`Steer`, `Reload`) are IR enum extensions with frozen discriminants, scheduled in AAA-08.1. | `IMPULSE` as Qty is how `DamageComponent` returns. |
+| **K41** | **Rite ISA may grow; hot loops are Laws.** AAA-08.1 RFC adds atoms `RayHits`, `SimLodIs`, `InPlace`; op `SPAWN template`; op `PHYS_REQ` writing a **`PhysRequest` Projection column** (not `Qty`). Combat tick is Laws (Ash hitscan). Designers never see `PhysRequest` in Distaff (author/engine split). Caps live in `Budget`. The K21 budget split is re-affirmed: pred-op exhaustion rejects the proposal, rite-step exhaustion admits the burst-so-far with `RiteEnd::FailBudget` as the atomic outcome. Verb adds (`Steer`, `Reload`) are IR enum extensions with frozen discriminants, scheduled in AAA-08.1. | `IMPULSE` as Qty is how `DamageComponent` returns. |
 | **K42** | **New slices, not a bigger Hearth.** Ember (combat fidelity), Drift (vehicles + streaming Place), Chorus (sim LOD crowds), Netlock (dedicated 8p + prediction). Each is an `examples/*-slice` with goldens on the same kernel. | K26 generalized. |
 | **K43** | **Distaff production UX is Pin-shaped.** Viewport, gizmos, outliner, sequencer (timeline of Intents/Pins), cook, profiler, retarget, lighting. Saving the viewport = Pin selected facts. Play-in-editor = `klotho-runtime` with `step` pausable (already `klotho-ui::Pause`). No hidden "editor world" that differs from cook. | Prevents the editor from becoming the ontology. |
-| **K44** | **Phys determinism law (Q9 closed).** (A) The **only** path that may emit `PhysDelta` is a **pinned scalar XPBD/SI** (one software ISA). Dedicated servers and CI use that path. Client-predicted phys is Overlay-only and never admitted. Quantize at admit (mm trunc −∞, vel 16.16). **Do not claim** linux/mac/windows Trace equality for slices that include `PhysDelta`; Ember/Drift phys goldens are **pinned-Linux**. Kinematic Hearth/Ash remain three-OS. No warm-start lambdas unless hashed in Projection. (B) — f32 stacking as Manifest — is rejected because it kills Drift/Ember. **AAA-08 crate flags (not optional comments):** `rust-toolchain.toml` pin (already `1.98.0`); phys crate `RUSTFLAGS` / `.cargo/config.toml` **in that crate only**: no `fast-math`, `-C llvm-args=-ffp-contract=off`, do not enable FMA as an OS-varying target feature. Same binary on CI and every dedicated server. **Gate:** `klotho.phys.quant_residual_mm` — Ember stacking CI **fails** if p99 \|residual\| > 1 mm **or** any sample > 4 mm. | Quantize-at-admit does not stop f32 from crossing millimetre bins. Rev 5 A5 still applies to hashed contacts. A residual metric without a fail threshold is not a gate. |
+| **K44** | **Phys determinism law (Q9 closed).** (A) The **only** path that may emit `PhysDelta` is a **pinned scalar XPBD/SI** (one software ISA). Dedicated servers deploy the pinned-Linux Phys artifact tested by CI; they do not rebuild it with host-native features. Client-predicted phys is Overlay-only and never admitted. Quantize at admit (mm trunc −∞, vel 16.16); non-finite solver output emits no `PhysDelta`. **Do not claim** linux/mac/windows Trace equality for slices that include `PhysDelta`; Ember/Drift phys goldens are **pinned-Linux**. Kinematic Hearth/Ash remain three-OS. No warm-start lambdas unless hashed in Projection. (B) — f32 stacking as Manifest — is rejected because it kills Drift/Ember. **AAA-08 build contract (not optional comments):** `rust-toolchain.toml` pins `1.98.0`; the pinned-Linux CI build asserts `x86_64` and supplies `-C llvm-args=--fp-contract=off -C target-cpu=x86-64 -C target-feature=-fma`. Cargo config is workspace-scoped only and is fallback protection when `RUSTFLAGS` is unset. **Gates:** `klotho.phys.quant_residual_mm` fails CI if p99 \|residual\| > 1 mm or any sample > 4 mm; long-run stacking goldens bound trajectory, not merely individual quantizations. | Quantize-at-admit does not stop f32 from crossing millimetre bins. Rev 5 A5 still applies to hashed contacts. A residual metric without a fail threshold is not a gate. |
 | **K45** | **Console path is `klotho-platform` + GPU HAL, not a kernel fork.** Era 4 spike: devkit bring-up, **HAL TBD** (GDK is D3D12, not wgpu-as-cert; Prospero is Gnm/AGC). Same `CommitKernel` semantics. Cert evidence = replay files. | Do not imply wgpu is the SKU. |
 | **K46** | **Job system is not a sim API.** `klotho-jobs` is engine-only: island propose, cook, stream decompress, parallel extract. Gameplay never schedules jobs. Registration order of proposers stays a static list in `klotho-runtime`. | Stops "jobified Update." |
 | **K47** | **Sharded warp.** `KWRP` catalog (small) + CAS volumes (`KCAS` files, content-addressed, 1–4 GB each) + Place shards. Loader caps become **per-shard** (32 MB blob stays until virtual geo). Catalog mmap is tens of MB. | 512 MB desktop cap is the v1 bomb-prevention; AAA needs volume without removing caps. |
@@ -737,8 +740,8 @@ flowchart TB
 | --- | --- |
 | Trace Rite/Rel/Qty | 0.5–2 k events/s ≈ 20–80 KB/s raw **server-side**; per client interest-filtered ≪ that |
 | Trace IslandSnap 2 Hz, awake islands only | replay/save, **not** sent at 10 Hz to clients |
-| PoseDelta typical | 8 players + ~40 movers × **12 B packed** × 30 Hz ≈ **14 KB/s ≈ 115 kb/s** (not 16 B Sigil + pose) |
-| PoseDelta spike | 128 movers × 16 B × 30 Hz ≈ **61 KB/s ≈ 490 kb/s** |
+| PoseDelta typical | 8 players + ~40 movers × **14 B delta entry** (`u16 local_ix` + six `i16`) × 30 Hz ≈ **20.2 KB/s ≈ 161 kb/s**, plus packet framing |
+| PoseDelta spike | 128 movers × **38 B full entry** (`u16 local_ix` + 6×`i32` pose + 3×`i32` vel) × 30 Hz ≈ **146 KB/s ≈ 1.17 Mb/s**, plus framing; steady-state deltas are ≈ 54 KB/s |
 | Epoch snapshot 30 s, 50k × ~64 B | ~3 MB; Place-chunked, not a 1 MiB packet |
 
 **Delta publish:** stop cloning entire `Projection` (`World::snapshot` today `Arc::new(self.view.clone())`). CoW columns + dirty bitmask. Target ≤ 1.0 ms. Rewind ring holds **Arc** snapshots, not extra clones.
@@ -761,7 +764,7 @@ Resync { tick, epoch, prefix }              // TAG 8
 
 `Role::Host` = listen (K8, `net-listen`). `Role::Server` = dedicated (`net-dedicated`). `Role::Client` = overlay only. Caps: `MAX_PACKET = 1 MiB`, `MAX_EVENTS = 4_096` stay as bombs. PoseDelta payload cap e.g. 64 KiB/client/tick.
 
-`Interest.gen` is `u16`; wrap is defined (mod 65536); packets with `gen != client.gen && gen != client.gen.wrapping_add(1)` are dropped and trigger Resync. Loss of the Interest dictionary or a gen skip **is** Resync (TAG 8) — do not accept a broader reorder window. 128 movers × 16 B is under MTU; 50 GB warp catalog sync is AAA-18/24/25 (Hello mismatch → download or disconnect), not an Era 1 codebook problem.
+`Interest.gen` is `u16`; wrap is defined (mod 65536); packets with `gen != client.gen && gen != client.gen.wrapping_add(1)` are dropped and trigger Resync. Current AAA-18 recovery is Resync + Full after a dictionary loss or generation skip; it does **not** implement per-generation ACK/retransmit. A reliable ordered control stream is a production follow-up before UDP PoseDelta transport, rather than an implicit guarantee of this packet codec. Do not treat an arbitrary wider reorder window as decodable state. 128 movers × 14 B delta entries exceeds a 1,500-B MTU and must be framed/fragmented by the transport; 50 GB warp catalog sync is AAA-18/24/25 (Hello mismatch → download or disconnect), not an Era 1 codebook problem.
 
 ### Pose-channel rebuild matrix (K53)
 
@@ -1179,9 +1182,9 @@ flowchart LR
 | Era | What "AAA" means that year | What you still cannot claim |
 | --- | --- | --- |
 | **0** (now) | Semantic kernel, Hearth/Ash, unlit pixels, 20 Hz optional listen-server | Engine |
-| **1** Kernel-scale | `PackedIx=u32`, Partition, Places, interest, parallel propose, Trace thinned, PoseDelta codebook, scalar phys, Ember+Drift **headless** | Lumen, lag-comp, DCC farm, ragdoll-as-gameplay, 4 km terrain |
-| **2** Presentation-scale | PBR, shadows, **probes+SSGI**, skinned ClipSet (MotionDb optional), spatial audio, Distaff viewport, glTF cook, Chorus headless, VFX decals | Console SKU, live packs, GPU particles, loc/UI framework, SDFGI |
-| **3** Production-scale | Dedicated Netlock 8p, PoseDelta+lag-comp, 50 GB warp, cinematics, HUD skin, infer sidecar, save 64 MiB | Marketplace, NL→Rite, Nanite, 64p |
+| **1** Kernel-scale — **landed** | `PackedIx=u32`, Partition, Places, interest, parallel propose, Trace thinned, scalar phys, Ember+Drift **headless** (AAA-01–10) | Lumen, lag-comp, DCC farm, ragdoll-as-gameplay, 4 km terrain |
+| **2** Presentation-scale — **landed** | PBR, shadows, **probes+SSGI**, skinned ClipSet (MotionDb optional), spatial audio, Distaff viewport, glTF cook, Chorus headless, VFX decals (AAA-11–17) | Console SKU, live packs, GPU particles, loc/UI framework, SDFGI |
+| **3** Production-scale — **partial (AAA-18/19/20 landed)** | Dedicated PoseDelta+lag-comp transport + save epochs done; remaining: cinematics, HUD skin, infer sidecar, Netlock slice, 50 GB warp (AAA-21–24) | Marketplace, NL→Rite, Nanite, 64p |
 | **4** Live / console | Canon epoch **packs**, HAL TBD console spike, first-title freeze | Every Unreal checkbox |
 
 **Explicitly not in Era 1–2:** terrain mesh as Phys, foliage colliders, shader graph, loc/UI framework, GPU particle VFX, console SKU, live epoch packs, cinematic time-scale, Drift heightfield, Ember lag-comp, Chorus skinned crowds.
@@ -1190,7 +1193,7 @@ flowchart LR
 
 **Rollback:** see per-flag table. Golden Trace tags every milestone.
 
-**Staffing (indicative):** Era 1 is a **second engine**, not four people finishing rev 5. Plan: 2 kernel + 1 phys + 1 stream/tools as a *minimum*. **AAA-01..05 and AAA-08.1 already landed.** Remaining Era 1 is short and sequentialized: **06 ∥ 08 → 07 → 09, 10**. A 4-person team should **not** start Era 2 until Ember+Drift goldens exist. Do not claim 27 PRs are independently mergeable; claim **main green, Hearth/Ash goldens pass**.
+**Staffing (indicative):** Era 1 is a **second engine**, not four people finishing rev 5. Plan: 2 kernel + 1 phys + 1 stream/tools as a *minimum*. **Era 1 (AAA-01–10), Era 2 (AAA-11–17), and AAA-18/19/20 already landed; Ember+Drift+Chorus goldens exist.** Remaining: **AAA-21 ∥ AAA-21b ∥ AAA-22 → AAA-23, AAA-24 → Era 4 (AAA-25–27)**. Do not claim PRs are independently mergeable; claim **main green, Hearth/Ash goldens pass**.
 
 ---
 
@@ -1249,7 +1252,7 @@ flowchart LR
 
 This plan **supersedes rev 5 PRs after the already-landed 01–20 work**. Do not relitigate `klotho-core` existence. **Do not claim 27 independent merges.** Claim: each PR leaves `main` green; Hearth/Ash goldens pass (AAA-01 was the first allowed hash rewrite; later ABI flag-days already landed with 02/03/08.1). Flags keep Hearth playable if phys/stream/jobs are off.
 
-**Landed on `main` (do not re-implement):** AAA-01 Trace tape, AAA-02 6DOF+budgets, AAA-03 `PackedIx`+CoW, AAA-04 jobs+Partition+`us_sim`, AAA-05 interest+SimLod, AAA-08.1 ISA/Verb/Rel. Rev 4 amends landed K58 (phys-body flood, `NO_ISLAND`, fail-closed size/count caps). **Next:** AAA-06 ∥ AAA-08.
+**Landed on `main` (do not re-implement; verified 2026-09-04 @ `69feeb1`):** AAA-01 Trace tape, AAA-02 6DOF+budgets, AAA-03 `PackedIx`+CoW, AAA-04 jobs+Partition+`us_sim`, AAA-05 interest+SimLod, AAA-08.1 ISA/Verb/Rel, AAA-06 Residency, AAA-08 scalar phys, AAA-07 stream+shards, AAA-09 Ember, AAA-10 Drift, AAA-11 Manifest extract, AAA-11b VFX decals, AAA-12 PBR, AAA-13 ClipSet/MotionDb, AAA-14 glTF cook, AAA-15 editor viewport, AAA-16 spatial audio, AAA-17 Chorus, AAA-18 PoseDelta+overlay, AAA-19 rewind ring, AAA-20 save epochs. Rev 4 amends landed K58 (phys-body flood, `NO_ISLAND`, fail-closed size/count caps). **Next:** AAA-21 ∥ AAA-21b ∥ AAA-22 → AAA-23, AAA-24.
 
 ```mermaid
 flowchart TB
@@ -1360,31 +1363,31 @@ flowchart TB
 - **Depends on:** AAA-02
 - **Changes:** Atoms `RayHits`, `SimLodIs`, `InPlace`. Ops `SPAWN`, `PHYS_REQ`. **Append-only:** `Rel`/`RelTag` `PilotedBy=11`, `AttachedTo=12` (golden old traces decode 0–10). `SourceKind::Phys` (and optional `Residency`). `ProposalKind::{Phys=6,Residency=7}`. `RiteEnd::Evicted = 3`. Keep `PoseReason::Land`. `TraceBody` new variants + encode tags. Verb `Steer=11`, `Reload=12`. 6DOF `PoseCommitted` + `IslandSnap` vels. CFG unchanged. **Ember and phys depend on this.**
 
-#### AAA-06 — Place residency with payload
+#### AAA-06 — Place residency with payload — **landed**
 
 - **Files:** `proposal.rs`, kernel, `klotho-trace`, `klotho-world` per-Place index
 - **Depends on:** AAA-05, AAA-08.1 (`PlaceLoaded` tags)
 - **Changes:** `Proposal::Residency { snap: Arc<PlaceSnap>, … }`. Atomic all-rows-or-none; conflict set = all slots. **Do not chunk a visible apply** (K21). Era 1 Places **author ≤ 10k rows** until the microbench passes; process cap 100k stays as a bomb. `RiteEnd::Evicted`. Runtime builds the proposal. **10k-row apply microbench (≤ 2 ms).** Fail closed on hash mismatch.
 
-#### AAA-07 — `klotho-stream` + sharded warp
+#### AAA-07 — `klotho-stream` + sharded warp — **landed**
 
 - **Files:** new `crates/klotho-stream/**`, compile catalog, prove caps, runtime loader
 - **Depends on:** AAA-06
 - **Changes:** `KWRP` + `KCAS`. Stream mmap → `Arc<PlaceSnap>` to runtime. Must not enable `mutate`. Hearth 512 MB warps still load.
 
-#### AAA-08 — `klotho-phys` scalar XPBD v1
+#### AAA-08 — `klotho-phys` scalar XPBD v1 — **landed**
 
 - **Files:** new `crates/klotho-phys/**`, runtime register, `PhysDelta`, attach apply in kernel
 - **Depends on:** AAA-02, AAA-04, AAA-05, AAA-08.1
 - **Changes:** Scalar XPBD, **no FFI**, SIMD optional same-ISA. **No fast-math, fp-contract off, no OS-varying FMA.** Quantized out. Residual gate p99 ≤ 1 mm / max ≤ 4 mm. Admit-time K55. Kernel yaw-only attach (K56). `support` column. Lambdas zeroed. Partition sleeper flood-fill through **phys bodies only**; floor is not a body. **Pinned-Linux stacking golden: bump bottom crate, sleeping neighbors wake and stay stacked** (K58). `never_clip_closed` still rejects. No ragdoll on commit. `phys` flag off → v1 Space only.
 
-#### AAA-09 — Ember headless goldens (no lag-comp)
+#### AAA-09 — Ember headless goldens (no lag-comp) — **landed**
 
 - **Files:** `examples/ember-slice/**`
 - **Depends on:** AAA-08, AAA-08.1, AAA-01
 - **Changes:** Melee `WAIT` windows, hit hulls, Cap 512 projectiles, 64-fragment collapse, 32 dummies, **ClipSet** clip-swap does not move WAIT (Q15). **Does not depend on AAA-13.** **Same `klotho-commit` binary.** Extend `forbidden-imports.sh`. No GPU. **No rewind.**
 
-#### AAA-10 — Drift headless goldens
+#### AAA-10 — Drift headless goldens — **landed**
 
 - **Files:** `examples/drift-slice/**`
 - **Depends on:** AAA-07, AAA-08
@@ -1392,49 +1395,49 @@ flowchart TB
 
 ### Era 2 — Presentation-scale
 
-#### AAA-11 — Manifest extract v2
+#### AAA-11 — Manifest extract v2 — **landed**
 
 - **Files:** `crates/klotho-manifest/**`, extract in render/audio
 - **Depends on:** AAA-03
 - **Changes:** Instance lists, skinned palette slots, lights, probes, post flags. `tables` still crate-private. No gameplay import.
 
-#### AAA-11b — VFX decals (`klotho-vfx`)
+#### AAA-11b — VFX decals (`klotho-vfx`) — **landed**
 
 - **Files:** new `crates/klotho-vfx/**`
 - **Depends on:** AAA-11
 - **Changes:** Trace-driven decals / one-shot meshes. GPU particles **deferred to Era 3**. Joins tables allowlist.
 
-#### AAA-12 — PBR clustered presenter
+#### AAA-12 — PBR clustered presenter — **landed**
 
 - **Files:** `crates/klotho-render/**`, shaders
 - **Depends on:** AAA-11
 - **Changes:** Clustered deferred **or** forward+ (pick in PR description after a spike). IBL + directional + punctual. Cascaded shadows. **GI = cook-baked irradiance probes + SSGI (Q8 closed).** RFC in this PR is **pixel budget** (probe density, SSGI vs 11 ms), not SDFGI vs probes. No SDF volume. Unlit path remains for Hearth pixel goldens. Competitive permutation may disable GI. 1080p budget gate on a reference desktop.
 
-#### AAA-13 — Skinned ClipSet extract; MotionDb optional
+#### AAA-13 — Skinned ClipSet extract; MotionDb optional — **landed**
 
 - **Files:** `crates/klotho-motion/**`, optional split `klotho-anim`, Manifest skinned
 - **Depends on:** AAA-11, AAA-02. **Not a dependency of AAA-09 Ember.**
 - **Changes:** GPU skinning from admitted root pose + **ClipSet** (Q15). `MotionDb` matching may land here if ready; if it slips, ClipSet is enough. IK/look-at presentation-only. Hit frames still Rites. Hearth T-pose path remains as fallback.
 
-#### AAA-14 — `klotho-dcc` glTF cook
+#### AAA-14 — `klotho-dcc` glTF cook — **landed**
 
 - **Files:** new `crates/klotho-dcc/**`, `klotho-compile` hooks, `data/` fixtures
 - **Depends on:** AAA-07
 - **Changes:** glTF 2.0 → quantized mesh/hull/clip. Missing affordance tag still cook error. Kitbash path unchanged. LicenseSpan on imported blobs. Deterministic LE verts three-OS hash.
 
-#### AAA-15 — Distaff viewport (`klotho-editor`)
+#### AAA-15 — Distaff viewport (`klotho-editor`) — **landed**
 
 - **Files:** new `crates/klotho-editor/**`, `klotho-author` reuse
 - **Depends on:** AAA-12, AAA-14
 - **Changes:** Viewport of Manifest, outliner of loci, Pin UI, cook dashboard. Play-in-editor hosts runtime, pause = stop `step`. Joins `forbidden-imports.sh`. **Test:** gizmo move without Pin is gone on recook. Saving = Pin. This is a full editor program; split follow-up PRs rather than smuggling retarget+lighting+sequencer into one merge. `tables` stay `pub(crate)` with feature gates.
 
-#### AAA-16 — Spatial audio device
+#### AAA-16 — Spatial audio device — **landed**
 
 - **Files:** `crates/klotho-audio/**`, platform device
 - **Depends on:** AAA-11
 - **Changes:** Device output, stereo panning/occlusion stub from `OpaqueClosed`, voice cap 256. Trace still the cue list. Optional FMOD later as a `Mixer` impl, not this PR.
 
-#### AAA-17 — Chorus slice
+#### AAA-17 — Chorus slice — **landed**
 
 - **Files:** `examples/chorus-slice/**`
 - **Depends on:** AAA-05 (**not** AAA-13)
@@ -1442,19 +1445,19 @@ flowchart TB
 
 ### Era 3 — Production-scale
 
-#### AAA-18 — Dedicated server + PoseDelta + overlay
+#### AAA-18 — Dedicated server + PoseDelta + overlay — **landed**
 
 - **Files:** `crates/klotho-net/**`, runtime server bin, Overlay 6DOF
 - **Depends on:** AAA-05, AAA-03
 - **Changes:** `Role::{Host,Server,Client}`. Hello `{canon_hash, epoch, build, key, slot, intent_hz}`. `Packet::PoseDelta` **codebook**: Interest.gen dictionary; hot payload `(local_ix: u16, dpose)` 12 B, no Sigil; full pose after Resync. Overlay fed by PoseDelta. Snap-hard vs blend. Keep `no_predicted_in_packets`. Golden: 6DOF round-trip without Sigils in the hot payload. `net-listen` Hearth unchanged. Plumbs `epoch` on Hello.
 
-#### AAA-19 — Lag-comp rewind ring (Netlock, not Ember)
+#### AAA-19 — Lag-comp rewind ring (Netlock, not Ember) — **landed**
 
 - **Files:** runtime server rewind ring; world view-from-snapshot; Netlock goldens
 - **Depends on:** AAA-18
 - **Changes:** Ring of last `rewind_ticks` snapshots. Fire older than bound → `StaleEpoch`. Hitscan against ring view; result is Trace. Golden: delayed Fire hits strafing dummy; too-old Fire nacks. Anti-cheat sidecar reads only.
 
-#### AAA-20 — `klotho-save` epochs
+#### AAA-20 — `klotho-save` epochs — **landed**
 
 - **Files:** new `crates/klotho-save/**`, `klotho-ui` pause save
 - **Depends on:** AAA-07, AAA-01

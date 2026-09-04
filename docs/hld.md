@@ -178,7 +178,7 @@ There is no engine in this workspace to extend, and there should not be. Graftin
 | K18 | **Commit order `Player → Space → Motion → Mind → Infer`.** Heap priority matches. Space **must** see this tick's admitted Carry. Whole-tick mega-transactions are rejected. | Per-proposal atomicity + ordered commit. |
 | K19 | **`step` never `Err`s on legal rejects.** Save = `(canon_hash, trace_prefix_hash, snapshot_blob, trace_from_tick)`. Suffix ancestry is mathematical. | Replay cannot splice snapshot A with Trace B. |
 | K20 | **Committed space: mm `i32`; vel 16.16; yaw millidegrees.** Presenters may float. | Cross-OS hashes need one number type. |
-| K21 | **Commit algebra (B+C).** Each proposal is speculative. Same-tick Rite burst is one transaction. `WAIT` commits and yields. Continuous Laws evaluate the would-be post-state; failure rolls the proposal back. Atomic Trace append + projection apply, or nothing. | "Only the kernel mutates" without this is a slogan. |
+| K21 | **Commit algebra (B+C).** Each proposal is speculative. Same-tick Rite burst is one transaction. `WAIT` commits and yields. Continuous Laws evaluate the would-be post-state; failure rolls the proposal back. Atomic Trace append + projection apply, or nothing. **Budget split, signed off:** pred-op exhaustion rejects the whole proposal; rite-step exhaustion admits the burst-so-far with `RiteEnded{FailBudget}` as the atomic outcome (see §Rite ISA). Both are deterministic; neither exposes a write outside a transaction. | "Only the kernel mutates" without this is a slogan. |
 | K22 | **Authoritative state equation + proposer purity.** `State(t+1) = Commit(State(t), Canon, Intents, DeterministicProposals)`. `Proposal_t = F(Canon, Projection_t, Intent_t, Tick)`. Hidden proposer state is a design violation. Caches must be rebuildable from the view. | Space already obeys this; Mind/Motion must. |
 | K23 | **Kernel spatial index** is a Projection column: derived from Pose + canonical Hull + Opaque/LockedBy, maintained by the kernel, never a source, rebuildable from snapshot. Manifest BVH is presentation-only. | Collision must not scan 4,096 loci. |
 | K24 | **`HullWitness.swept` is kernel-derived**, not trusted: `prev_pose ⊕ proposed_pose ⊕ hull(mover, epoch)`. `BlobId` must be the mover's canonical hull at this Canon/epoch. Mismatch → `WitnessMismatch` / `WrongHull`. | A proposer must not describe the region it claims to prove. |
@@ -991,6 +991,8 @@ Authoring form is a **CFG with explicit `pc` labels**, not an unlabeled list (re
 
 **K21 + rites.** Ops in one tick up to (but not including) `WAIT` or `HALT` run in a speculative delta. `WAIT` **commits** the delta (`RiteAdvanced`) and yields. Next resume is a new transaction. No other proposer observes a half-burst. `SPEND` then Law-fail ⇒ neither write lands.
 
+**K21 budget split (signed off, not a violation).** Pred-op exhaustion fails the admission decision, so the whole proposal is rejected. Rite-step exhaustion instead ends the burst: the delta admits together with `RiteEnded{FailBudget}`, which is the atomic outcome of that transaction — progress-then-truncation with its marker, never an unmarked half-burst. Rationale: rites are progress (WAIT commits, debt is visible by design); pred-ops bound a single yes/no gate. Deterministic under both.
+
 **Cook CFG checks (PR 04a, fail cook):** every node reachable from `entry`; every `fail_pc` / `BRANCH` target exists; `COMPLETE`/`HALT` has no fall-through; no unreachable ops; graph is a DAG except `WAIT` edges that resume on a later tick.
 
 | Op | Encoding | Effect |
@@ -1008,7 +1010,7 @@ Authoring form is a **CFG with explicit `pc` labels**, not an unlabeled list (re
 | `AWAKE` | `slot` | unsleep island |
 | `COMPLETE` | `status` | alias of HALT with Success/Fail |
 
-Caps: 64 steps / rite / tick, 2,000 rite-steps / tick, 180 ticks wall for Hearth lockpick. Exceed → `RiteEnded { FailBudget }`, no stall.
+Caps: 64 steps / rite / tick, 2,000 rite-steps / tick, 180 ticks wall for Hearth lockpick. Exceed → admit burst-so-far with `RiteEnded { FailBudget }` (atomic K21 outcome per the signed-off split above), no stall.
 
 In-progress state is **in Trace** (`RiteBegan` / `RiteAdvanced`) **and** `RiteMachineTable`. Replay and net see it. There is no hidden VM fifth space.
 

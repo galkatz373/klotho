@@ -13,7 +13,7 @@ pub fn listen_pair(canon_hash: Hash) -> Result<(Host, Client), NetError> {
     memory_session(canon_hash)
 }
 
-/// Enqueue consumed intents. Analog is already clamped at [`Server::ingest_signed`].
+/// Enqueue consumed dedicated-server intents. Analog is clamped at ingress.
 pub fn ingest_server_intents(sim: &mut Sim, server: &mut Server) {
     for pi in server.consume() {
         sim.ingest(Proposal::Player(pi));

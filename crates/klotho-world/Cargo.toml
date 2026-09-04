@@ -11,7 +11,8 @@ publish = false
 
 [features]
 default = []
-# Write path. Enable only from klotho-commit.
+# Write path. Enable in [dependencies] only from klotho-commit;
+# [dev-dependencies] use for tests is allowed and CI-enforced.
 mutate = []
 
 [dependencies]

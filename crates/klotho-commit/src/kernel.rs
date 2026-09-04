@@ -2,7 +2,6 @@
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::time::Instant;
 
 use klotho_canon::Canon;
 use klotho_core::{
@@ -170,14 +169,29 @@ impl CommitKernel {
         let mut written: BTreeMap<(u128, u8), ()> = BTreeMap::new();
         let mut pred_ops = budget.pred_ops;
         let mut rite_steps = budget.rite_steps;
-        let t_admit = Instant::now();
-
-        for (p, _) in batch {
-            let kind = p.kind();
-            if t_admit.elapsed().as_micros() >= u128::from(budget.us_sim) {
-                delta.rejects.push((kind, RejectReason::Budget));
+        // Single left-to-right pass over the key-sorted batch. Consecutive
+        // equal keys form one producer-equivalence class (the sort above
+        // groups them). No arrival-order fallback is permitted on the commit
+        // path. A class of distinct grains is ambiguous: every member loses
+        // with Conflict, deterministically. A class of identical grains is
+        // an idempotent retry, not ambiguity: the first admits and the rest
+        // drop silently, so a retried ingest has exactly-once effect.
+        let mut rest = batch.into_iter().peekable();
+        while let Some((first, first_ix)) = rest.next() {
+            let key = first.admit_key(first_ix);
+            let mut class = vec![(first, first_ix)];
+            while rest.peek().is_some_and(|(q, qix)| q.admit_key(*qix) == key) {
+                class.push(rest.next().expect("peeked class member"));
+            }
+            if class[1..].iter().any(|(q, _)| *q != class[0].0) {
+                for (p, _) in &class {
+                    delta.rejects.push((p.kind(), RejectReason::Conflict));
+                }
                 continue;
             }
+            // Identical retries collapse beyond the first element.
+            let (p, _) = class.into_iter().next().expect("nonempty class");
+            let kind = p.kind();
             match self.admit_one(
                 p,
                 tick,
@@ -368,7 +382,7 @@ impl CommitKernel {
                     if age > rewind {
                         return Err(RejectReason::StaleEpoch);
                     }
-                } else if age > self.slo() {
+                } else if age > u64::from(budget.eval_slo_ticks) {
                     return Err(RejectReason::StaleEpoch);
                 }
                 if pi.verb == Verb::Time && pi.agency.claimed.is_empty() {
@@ -511,11 +525,6 @@ impl CommitKernel {
                 ))
             }
         }
-    }
-
-    fn slo(&self) -> u64 {
-        // Bound from last snapshot budget is per-step; default 12.
-        u64::from(Budget::HEARTH.eval_slo_ticks)
     }
 
     fn rewind_hitscan(

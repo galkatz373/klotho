@@ -36,6 +36,7 @@ members = [
     "examples/ash-slice",
     "examples/ember-slice",
     "examples/drift-slice",
+    "examples/chorus-slice",
 ]
 
 [workspace.package]

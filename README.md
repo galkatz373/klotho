@@ -89,6 +89,7 @@ klotho/
   crates/klotho-net/      # listen-server packets, ed25519, TraceDelta
   examples/hearth-slice/  # Appendix A goldens (PR 07b)
   examples/ash-slice/     # Appendix B goldens (PR 07c)
+  examples/chorus-slice/  # AAA-17: 2000 Far + 200 Full SimLod headless
   data/kitbash/           # hashed, licensed, affordance-tagged library
   docs/hld.md             # High-level design (rev 5)
   docs/pred-lang.md       # Predicate / Rite RFC (PR 04a)

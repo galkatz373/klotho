@@ -253,4 +253,255 @@ mod tests {
         let e = import_gltf_bytes(json, None).unwrap_err();
         assert!(matches!(e, DccError::QuantizeOverflow), "{e}");
     }
+
+    const TRI_EXTRAS: &str = r#""extras": {"klotho": {"affordance": "prop.tri", "license": {"spdx": "CC0-1.0", "copyright": "t"}}}"#;
+
+    #[test]
+    fn accessor_overrun_is_cook_error() {
+        let json = format!(
+            r#"{{
+  "asset": {{"version": "2.0"}},
+  "scenes": [{{"nodes": [0]}}],
+  "nodes": [{{"mesh": 0, {TRI_EXTRAS}}}],
+  "meshes": [{{"primitives": [{{"attributes": {{"POSITION": 0}}, "indices": 1}}]}}],
+  "accessors": [
+    {{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"}},
+    {{"bufferView": 1, "componentType": 5123, "count": 3, "type": "SCALAR"}}
+  ],
+  "bufferViews": [
+    {{"buffer": 0, "byteOffset": 0, "byteLength": 24}},
+    {{"buffer": 0, "byteOffset": 36, "byteLength": 6}}
+  ],
+  "buffers": [{{"uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAzczMPQAAAAAAAAAAAAAAAM3MzD0AAAAAAAABAAIA", "byteLength": 42}}]
+}}"#
+        );
+        let e = import_gltf_bytes(json.as_bytes(), None).unwrap_err();
+        assert!(
+            matches!(e, DccError::Gltf(ref s) if s.contains("overrun")),
+            "{e}"
+        );
+    }
+
+    #[test]
+    fn multi_primitive_oob_index_is_cook_error() {
+        let json = format!(
+            r#"{{
+  "asset": {{"version": "2.0"}},
+  "scenes": [{{"nodes": [0]}}],
+  "nodes": [{{"mesh": 0, {TRI_EXTRAS}}}],
+  "meshes": [{{"primitives": [
+    {{"attributes": {{"POSITION": 0}}, "indices": 1}},
+    {{"attributes": {{"POSITION": 2}}, "indices": 3}}
+  ]}}],
+  "accessors": [
+    {{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"}},
+    {{"bufferView": 1, "componentType": 5123, "count": 3, "type": "SCALAR"}},
+    {{"bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC3"}},
+    {{"bufferView": 3, "componentType": 5123, "count": 3, "type": "SCALAR"}}
+  ],
+  "bufferViews": [
+    {{"buffer": 0, "byteOffset": 0, "byteLength": 36}},
+    {{"buffer": 0, "byteOffset": 72, "byteLength": 6}},
+    {{"buffer": 0, "byteOffset": 36, "byteLength": 36}},
+    {{"buffer": 0, "byteOffset": 78, "byteLength": 6}}
+  ],
+  "buffers": [{{"uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAzczMPQAAAAAAAAAAAAAAAM3MzD0AAAAAzcxMPgAAAAAAAAAAmpmZPgAAAAAAAAAAzcxMPs3MzD0AAAAAAAABAAMAAAABAAIA", "byteLength": 84}}]
+}}"#
+        );
+        let e = import_gltf_bytes(json.as_bytes(), None).unwrap_err();
+        assert!(
+            matches!(e, DccError::Gltf(ref s) if s.contains("index out of range")),
+            "{e}"
+        );
+    }
+
+    #[test]
+    fn clip_oversize_is_cook_error() {
+        let json = format!(
+            r#"{{
+  "asset": {{"version": "2.0"}},
+  "scenes": [{{"nodes": [0]}}],
+  "nodes": [{{"mesh": 0, {TRI_EXTRAS}}}],
+  "meshes": [{{"primitives": [{{"attributes": {{"POSITION": 0}}, "indices": 1}}]}}],
+  "animations": [{{
+    "extras": {{"klotho": {{"verb": "Move"}}}},
+    "channels": [{{"sampler": 0, "target": {{"node": 0, "path": "translation"}}}}],
+    "samplers": [{{"input": 2, "interpolation": "LINEAR", "output": 3}}]
+  }}],
+  "accessors": [
+    {{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"}},
+    {{"bufferView": 1, "componentType": 5123, "count": 3, "type": "SCALAR"}},
+    {{"bufferView": 2, "componentType": 5126, "count": 2, "type": "SCALAR"}},
+    {{"bufferView": 3, "componentType": 5126, "count": 2, "type": "VEC3"}}
+  ],
+  "bufferViews": [
+    {{"buffer": 0, "byteOffset": 0, "byteLength": 36}},
+    {{"buffer": 0, "byteOffset": 36, "byteLength": 6}},
+    {{"buffer": 0, "byteOffset": 42, "byteLength": 8}},
+    {{"buffer": 0, "byteOffset": 50, "byteLength": 24}}
+  ],
+  "buffers": [{{"uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAzczMPQAAAAAAAAAAAAAAAM3MzD0AAAAAAAABAAIAAAAAAAAAUEEAAAAAAAAAAAAAAAAAAAAAAAAAAArXozw=", "byteLength": 74}}]
+}}"#
+        );
+        let e = import_gltf_bytes(json.as_bytes(), None).unwrap_err();
+        assert!(
+            matches!(e, DccError::Gltf(ref s) if s.contains("clip samples")),
+            "{e}"
+        );
+    }
+
+    #[test]
+    fn absolute_buffer_uri_is_cook_error() {
+        let json = format!(
+            r#"{{
+  "asset": {{"version": "2.0"}},
+  "scenes": [{{"nodes": [0]}}],
+  "nodes": [{{"mesh": 0, {TRI_EXTRAS}}}],
+  "meshes": [{{"primitives": [{{"attributes": {{"POSITION": 0}}, "indices": 1}}]}}],
+  "accessors": [
+    {{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"}},
+    {{"bufferView": 1, "componentType": 5123, "count": 3, "type": "SCALAR"}}
+  ],
+  "bufferViews": [
+    {{"buffer": 0, "byteOffset": 0, "byteLength": 36}},
+    {{"buffer": 0, "byteOffset": 36, "byteLength": 6}}
+  ],
+  "buffers": [{{"uri": "/etc/passwd", "byteLength": 42}}]
+}}"#
+        );
+        let e = import_gltf_bytes(json.as_bytes(), None).unwrap_err();
+        assert!(
+            matches!(e, DccError::Gltf(ref s) if s.contains("rejected buffer uri")),
+            "{e}"
+        );
+    }
+
+    #[test]
+    fn step_exact_keyframe_uses_that_sample() {
+        let json = format!(
+            r#"{{
+  "asset": {{"version": "2.0"}},
+  "scenes": [{{"nodes": [0]}}],
+  "nodes": [{{"mesh": 0, {TRI_EXTRAS}}}],
+  "meshes": [{{"primitives": [{{"attributes": {{"POSITION": 0}}, "indices": 1}}]}}],
+  "animations": [{{
+    "extras": {{"klotho": {{"verb": "Move"}}}},
+    "channels": [{{"sampler": 0, "target": {{"node": 0, "path": "translation"}}}}],
+    "samplers": [{{"input": 2, "interpolation": "STEP", "output": 3}}]
+  }}],
+  "accessors": [
+    {{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"}},
+    {{"bufferView": 1, "componentType": 5123, "count": 3, "type": "SCALAR"}},
+    {{"bufferView": 2, "componentType": 5126, "count": 3, "type": "SCALAR"}},
+    {{"bufferView": 3, "componentType": 5126, "count": 3, "type": "VEC3"}}
+  ],
+  "bufferViews": [
+    {{"buffer": 0, "byteOffset": 0, "byteLength": 36}},
+    {{"buffer": 0, "byteOffset": 36, "byteLength": 6}},
+    {{"buffer": 0, "byteOffset": 42, "byteLength": 12}},
+    {{"buffer": 0, "byteOffset": 54, "byteLength": 36}}
+  ],
+  "buffers": [{{"uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAzczMPQAAAAAAAAAAAAAAAM3MzD0AAAAAAAABAAIAAAAAAM3MTD3NzMw9AAAAAAAAAAAAAAAAAAAAAAAAAAAK16M8AAAAAAAAAAAK1yM9", "byteLength": 90}}]
+}}"#
+        );
+        let v = import_gltf_bytes(json.as_bytes(), None).unwrap();
+        let clips = decode_clipset(v[0].clips.as_ref().unwrap()).unwrap();
+        assert_eq!(
+            clips[0].samples,
+            vec![IVec3 { x: 0, y: 0, z: 20 }, IVec3 { x: 0, y: 0, z: 20 }]
+        );
+    }
+
+    #[test]
+    fn joint_index_out_of_range_is_cook_error() {
+        let json = format!(
+            r#"{{
+  "asset": {{"version": "2.0"}},
+  "scenes": [{{"nodes": [0]}}],
+  "nodes": [{{"mesh": 0, "skin": 0, {TRI_EXTRAS}}}],
+  "meshes": [{{"primitives": [{{"attributes": {{"POSITION": 0, "JOINTS_0": 2, "WEIGHTS_0": 3}}, "indices": 1}}]}}],
+  "skins": [{{"joints": [0]}}],
+  "accessors": [
+    {{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"}},
+    {{"bufferView": 1, "componentType": 5123, "count": 3, "type": "SCALAR"}},
+    {{"bufferView": 2, "componentType": 5121, "count": 3, "type": "VEC4"}},
+    {{"bufferView": 3, "componentType": 5126, "count": 3, "type": "VEC4"}}
+  ],
+  "bufferViews": [
+    {{"buffer": 0, "byteOffset": 0, "byteLength": 36}},
+    {{"buffer": 0, "byteOffset": 96, "byteLength": 6}},
+    {{"buffer": 0, "byteOffset": 36, "byteLength": 12}},
+    {{"buffer": 0, "byteOffset": 48, "byteLength": 48}}
+  ],
+  "buffers": [{{"uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAzczMPQAAAAAAAAAAAAAAAM3MzD0AAAAAAQAAAAEAAAABAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAAABAAIA", "byteLength": 102}}]
+}}"#
+        );
+        let e = import_gltf_bytes(json.as_bytes(), None).unwrap_err();
+        assert!(
+            matches!(e, DccError::Gltf(ref s) if s.contains("bone index")),
+            "{e}"
+        );
+    }
+
+    #[test]
+    fn primitive_extras_tag_and_license_export() {
+        let json = br#"{
+  "asset": {"version": "2.0"},
+  "scenes": [{"nodes": [0]}],
+  "nodes": [{"mesh": 0}],
+  "meshes": [{"primitives": [{
+    "attributes": {"POSITION": 0},
+    "indices": 1,
+    "extras": {"klotho": {
+      "affordance": "prop.prim.only",
+      "license": {"spdx": "CC0-1.0", "copyright": "t"}
+    }}
+  }]}],
+  "accessors": [
+    {"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"},
+    {"bufferView": 1, "componentType": 5123, "count": 3, "type": "SCALAR"}
+  ],
+  "bufferViews": [
+    {"buffer": 0, "byteOffset": 0, "byteLength": 36},
+    {"buffer": 0, "byteOffset": 36, "byteLength": 6}
+  ],
+  "buffers": [{"uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAzczMPQAAAAAAAAAAAAAAAM3MzD0AAAAAAAABAAIA", "byteLength": 42}]
+}"#;
+        let v = import_gltf_bytes(json, None).unwrap();
+        assert_eq!(v[0].tag, "prop.prim.only");
+        assert!(v[0].license.is_exportable());
+        validate_mesh(&v[0].mesh).unwrap();
+    }
+
+    #[test]
+    fn clip_delta_overflow_is_quantize_error() {
+        let json = format!(
+            r#"{{
+  "asset": {{"version": "2.0"}},
+  "scenes": [{{"nodes": [0]}}],
+  "nodes": [{{"mesh": 0, {TRI_EXTRAS}}}],
+  "meshes": [{{"primitives": [{{"attributes": {{"POSITION": 0}}, "indices": 1}}]}}],
+  "animations": [{{
+    "extras": {{"klotho": {{"verb": "Move"}}}},
+    "channels": [{{"sampler": 0, "target": {{"node": 0, "path": "translation"}}}}],
+    "samplers": [{{"input": 2, "interpolation": "LINEAR", "output": 3}}]
+  }}],
+  "accessors": [
+    {{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"}},
+    {{"bufferView": 1, "componentType": 5123, "count": 3, "type": "SCALAR"}},
+    {{"bufferView": 2, "componentType": 5126, "count": 2, "type": "SCALAR"}},
+    {{"bufferView": 3, "componentType": 5126, "count": 2, "type": "VEC3"}}
+  ],
+  "bufferViews": [
+    {{"buffer": 0, "byteOffset": 0, "byteLength": 36}},
+    {{"buffer": 0, "byteOffset": 36, "byteLength": 6}},
+    {{"buffer": 0, "byteOffset": 42, "byteLength": 8}},
+    {{"buffer": 0, "byteOffset": 50, "byteLength": 24}}
+  ],
+  "buffers": [{{"uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAzczMPQAAAAAAAAAAAAAAAM3MzD0AAAAAAAABAAIAAAAAAM3MTD0AJPRJAAAAAAAAAAAAJPTJAAAAAAAAAAA=", "byteLength": 74}}]
+}}"#
+        );
+        let e = import_gltf_bytes(json.as_bytes(), None).unwrap_err();
+        assert!(matches!(e, DccError::QuantizeOverflow), "{e}");
+    }
 }

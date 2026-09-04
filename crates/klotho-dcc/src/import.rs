@@ -2,11 +2,11 @@
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use klotho_compile::{
     DecodedClip, MAX_CLIP_SAMPLES, SKIN_WEIGHT_SUM, encode_clipset, encode_hull, encode_mesh_i16,
-    encode_skinned_mesh,
+    encode_skinned_mesh, validate_skinned_mesh,
 };
 use klotho_core::{AabbMm, Hash, IVec3};
 use klotho_ir::Verb;
@@ -316,17 +316,31 @@ impl Ctx {
         let mut joints: Vec<[u8; 4]> = Vec::new();
         let mut weights: Vec<[u16; 4]> = Vec::new();
         let mut want_skin = false;
+        let mut exported_tag: Option<String> = None;
+        let mut exported_license: Option<LicenseSpan> = None;
 
         for prim in &mesh.primitives {
             let prim_only = parse_klotho(prim.extras.as_ref())?;
-            if let (Some(a), Some(b)) = (&prim_only.affordance, &meta.affordance) {
-                if a != b {
+            let resolved = overlay(meta.clone(), prim_only);
+            let tag = resolved
+                .affordance
+                .clone()
+                .ok_or_else(|| DccError::MissingTag(label.clone()))?;
+            if let Some(prev) = &exported_tag {
+                if prev != &tag {
                     return Err(DccError::Gltf(format!("conflicting affordance on {label}")));
                 }
+            } else {
+                exported_tag = Some(tag);
             }
-            let resolved = overlay(meta.clone(), prim_only);
-            if resolved.affordance.is_none() {
-                return Err(DccError::MissingTag(label.clone()));
+            if let Some(lic) = resolved.license.clone() {
+                if let Some(prev) = &exported_license {
+                    if prev != &lic {
+                        return Err(DccError::Gltf(format!("conflicting license on {label}")));
+                    }
+                } else {
+                    exported_license = Some(lic);
+                }
             }
             let mode = prim.mode.unwrap_or(MODE_TRIANGLES);
             if mode != MODE_TRIANGLES {
@@ -387,6 +401,9 @@ impl Ctx {
                 (0..pos.len() as u32).collect()
             };
             for i in ix {
+                if (i as usize) >= pos.len() {
+                    return Err(DccError::Gltf(format!("{label}: index out of range")));
+                }
                 indices.push(
                     i.checked_add(base)
                         .ok_or_else(|| DccError::Gltf(format!("{label}: index overflow")))?,
@@ -394,13 +411,8 @@ impl Ctx {
             }
         }
 
-        let tag = meta
-            .affordance
-            .clone()
-            .ok_or_else(|| DccError::MissingTag(label.clone()))?;
-        let license = meta
-            .license
-            .clone()
+        let tag = exported_tag.ok_or_else(|| DccError::MissingTag(label.clone()))?;
+        let license = exported_license
             .or_else(|| self.sidecar.clone())
             .ok_or_else(|| {
                 DccError::License(format!("{label}: missing SPDX extras and sidecar"))
@@ -429,9 +441,16 @@ impl Ctx {
                     "{label}: JOINTS_0 without node.skin"
                 )));
             };
-            Some(encode_skinned_mesh(
-                &verts, &joints, &weights, &indices, bones,
-            )?)
+            for j in &joints {
+                for &b in j {
+                    if u32::from(b) >= bones && !(bones == 0 && b == 0) {
+                        return Err(DccError::Gltf(format!("{label}: bone index out of range")));
+                    }
+                }
+            }
+            let bytes = encode_skinned_mesh(&verts, &joints, &weights, &indices, bones)?;
+            validate_skinned_mesh(&bytes)?;
+            Some(bytes)
         } else {
             None
         };
@@ -548,6 +567,9 @@ impl Ctx {
         let end = start
             .checked_add(packed)
             .ok_or_else(|| DccError::Gltf("accessor size overflow".into()))?;
+        if end > view_end {
+            return Err(DccError::Gltf("accessor overrun".into()));
+        }
         let slice = buf
             .get(start..end)
             .ok_or_else(|| DccError::Gltf("accessor truncated".into()))?;
@@ -667,13 +689,11 @@ fn load_buffers(
                 .to_vec(),
             Some(uri) if uri.starts_with("data:") => decode_data_uri(uri)?,
             Some(uri) => {
-                if uri.contains("..") || uri.contains(':') {
-                    return Err(DccError::Gltf(format!("rejected buffer uri {uri}")));
-                }
+                reject_buffer_uri(uri)?;
                 let dir = base.ok_or_else(|| {
                     DccError::Gltf(format!("relative buffer uri {uri} without path"))
                 })?;
-                let p = dir.join(uri);
+                let p = resolve_buffer_path(dir, uri)?;
                 let bytes =
                     fs::read(&p).map_err(|e| DccError::Io(format!("{}: {e}", p.display())))?;
                 external.extend_from_slice(&bytes);
@@ -683,6 +703,8 @@ fn load_buffers(
         if data.len() < b.byte_length as usize {
             return Err(DccError::Gltf(format!("buffer {i} truncated")));
         }
+        let mut data = data;
+        data.truncate(b.byte_length as usize);
         buffers.push(data);
     }
     let source_hash = if external.is_empty() {
@@ -694,6 +716,28 @@ fn load_buffers(
         hash_bytes(&v)
     };
     Ok((buffers, source_hash))
+}
+
+fn reject_buffer_uri(uri: &str) -> Result<(), DccError> {
+    let p = Path::new(uri);
+    if uri.contains("..")
+        || uri.contains(':')
+        || uri.starts_with('/')
+        || uri.starts_with('\\')
+        || p.is_absolute()
+    {
+        return Err(DccError::Gltf(format!("rejected buffer uri {uri}")));
+    }
+    Ok(())
+}
+
+fn resolve_buffer_path(dir: &Path, uri: &str) -> Result<PathBuf, DccError> {
+    reject_buffer_uri(uri)?;
+    let p = dir.join(uri);
+    if !p.starts_with(dir) {
+        return Err(DccError::Gltf(format!("rejected buffer uri {uri}")));
+    }
+    Ok(p)
 }
 
 fn read_sidecar(path: &Path) -> Result<Option<LicenseSpan>, DccError> {
@@ -825,11 +869,20 @@ fn sample_root_deltas(
     if !duration_ms.is_finite() {
         return Err(DccError::Gltf("non-finite animation time".into()));
     }
+    if duration_ms < f64::from(i32::MIN) || duration_ms > f64::from(i32::MAX) {
+        return Err(DccError::Gltf("animation duration".into()));
+    }
     let duration_ms = duration_ms as i32;
     if duration_ms <= 0 || times.len() == 1 {
         return Ok(vec![IVec3::ZERO]);
     }
-    let n = (duration_ms / TICK_MS).clamp(1, i32::from(MAX_CLIP_SAMPLES)) as usize;
+    let ticks = duration_ms / TICK_MS;
+    if ticks > i32::from(MAX_CLIP_SAMPLES) {
+        return Err(DccError::Gltf(format!(
+            "clip samples {ticks} > {MAX_CLIP_SAMPLES}"
+        )));
+    }
+    let n = ticks.max(1) as usize;
     let mut prev = quantize_mm(sample_at(times, values, 0.0, interp)?)?;
     let mut deltas = Vec::with_capacity(n);
     for i in 1..=n {
@@ -837,11 +890,19 @@ fn sample_root_deltas(
         let t = ((t_ms as f64) / 1000.0) as f32;
         let t = t.min(duration);
         let cur = quantize_mm(sample_at(times, values, t, interp)?)?;
-        deltas.push(IVec3 {
-            x: cur.x.wrapping_sub(prev.x),
-            y: cur.y.wrapping_sub(prev.y),
-            z: cur.z.wrapping_sub(prev.z),
-        });
+        let x = cur
+            .x
+            .checked_sub(prev.x)
+            .ok_or(DccError::QuantizeOverflow)?;
+        let y = cur
+            .y
+            .checked_sub(prev.y)
+            .ok_or(DccError::QuantizeOverflow)?;
+        let z = cur
+            .z
+            .checked_sub(prev.z)
+            .ok_or(DccError::QuantizeOverflow)?;
+        deltas.push(IVec3 { x, y, z });
         prev = cur;
     }
     Ok(deltas)
@@ -869,7 +930,7 @@ fn sample_at(
         return Ok(values[last]);
     }
     let mut i = 0;
-    while i + 1 < times.len() && times[i + 1] < t {
+    while i + 1 < times.len() && times[i + 1] <= t {
         i += 1;
     }
     if interp == "STEP" {

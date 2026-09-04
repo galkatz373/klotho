@@ -63,6 +63,9 @@ pub struct Cooked {
 }
 
 /// Quantized glTF blobs for [`cook_with_dcc`]. Compile does not parse glTF.
+///
+/// Bindings use [`MaterialTag::Organic`]: glTF extras do not carry a material
+/// tag in v1 (closed default).
 #[derive(Clone, Debug)]
 pub struct DccArtifact {
     /// `extras.klotho.affordance`.
@@ -256,6 +259,10 @@ pub fn cook_with(doc: &IntentDoc, kit: &Kitbash) -> Result<Cooked, CompileError>
 }
 
 /// Cook `doc` against already-quantized DCC artifacts. Does not load kitbash.
+///
+/// Every `style.kitbash_tags` entry must exist in `imports`. Bindings are
+/// seed loci whose names match a tag, then unmatched style tags (locus =
+/// tag). Material is [`MaterialTag::Organic`].
 pub fn cook_with_dcc(doc: &IntentDoc, imports: &[DccArtifact]) -> Result<Cooked, CompileError> {
     let mut by_tag = BTreeMap::new();
     for a in imports {
@@ -422,6 +429,7 @@ pub fn cook_with_dcc(doc: &IntentDoc, imports: &[DccArtifact]) -> Result<Cooked,
     dag.blobs_present(&cas).map_err(CompileError::prove)?;
 
     let mut bindings = Vec::new();
+    let mut bound = BTreeMap::new();
     for fact in &doc.seed {
         let SeedFact::Locus { name, .. } = fact else {
             continue;
@@ -436,6 +444,21 @@ pub fn cook_with_dcc(doc: &IntentDoc, imports: &[DccArtifact]) -> Result<Cooked,
             mesh: *mesh_ids.get(&art.tag).expect("encoded"),
             material: MaterialTag::Organic,
         });
+        bound.insert(name.as_str().to_string(), ());
+    }
+    for t in &doc.style.kitbash_tags {
+        if bound.contains_key(t.as_str()) {
+            continue;
+        }
+        let art = by_tag.get(t.as_str()).expect("style tag checked");
+        bindings.push(Binding {
+            locus: t.clone(),
+            tag: Name::from(art.tag.as_str()),
+            hull: *hull_ids.get(&art.tag).expect("encoded"),
+            mesh: *mesh_ids.get(&art.tag).expect("encoded"),
+            material: MaterialTag::Organic,
+        });
+        bound.insert(t.as_str().to_string(), ());
     }
 
     let cook_hash = cook_digest(doc, &dcc_blobs);
@@ -629,6 +652,19 @@ mod tests {
         assert!(cooked.dag.exportable().is_ok());
         assert_eq!(cooked.bindings.len(), 1);
         assert_eq!(cooked.bindings[0].tag.as_str(), "prop.cube.portable");
+        assert_eq!(cooked.bindings[0].material, MaterialTag::Organic);
         assert!(cooked.grains.is_empty());
+    }
+
+    #[test]
+    fn dcc_style_tags_bind_when_seed_name_differs() {
+        let lic = LicenseSpan::spdx("CC0-1.0", "Klotho fixtures").unwrap();
+        let art = dcc_tri("prop.cube.portable", lic);
+        // empty_doc seeds oak_door, which is not the DCC tag.
+        let cooked = cook_with_dcc(&empty_doc(&["prop.cube.portable"]), &[art]).unwrap();
+        assert_eq!(cooked.bindings.len(), 1);
+        assert_eq!(cooked.bindings[0].locus.as_str(), "prop.cube.portable");
+        assert_eq!(cooked.bindings[0].tag.as_str(), "prop.cube.portable");
+        assert_eq!(cooked.bindings[0].material, MaterialTag::Organic);
     }
 }

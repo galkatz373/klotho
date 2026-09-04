@@ -89,10 +89,7 @@ pub fn apply_lod(k: &mut CommitKernel) {
     }
 }
 
-/// Plant 200 Full + 2000 Far crowd relics.
-///
-/// Crowd members are Relics: `classify` treats every posed Actor as an observer,
-/// so a crowd of Actors would all be Full.
+/// Plant 200 Full + 2000 Far crowd relics (Relic: Actors are observers).
 pub fn plant_crowd(k: &mut CommitKernel) {
     let plaza = pin(k, "plaza");
     let mut w = k.world_mut();
@@ -103,7 +100,7 @@ pub fn plant_crowd(k: &mut CommitKernel) {
         w.set_pose(s, PoseMm::new(Mm(FULL_X_MM), Mm(0), Mm(0), YawMd::ZERO))
             .expect("pose");
         w.set_hull(s, actor_hull(), BlobId::ZERO).expect("hull");
-        // Default island 0 is a live id; classify would island-wake Far into Full.
+        // id 0 island-wakes; plant at NO_ISLAND.
         w.set_island(s, NO_ISLAND, 0).expect("island");
     }
     for i in 0..FAR_COUNT {

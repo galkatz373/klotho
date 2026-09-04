@@ -1353,6 +1353,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "klotho-save"
+version = "0.1.0"
+dependencies = [
+ "klotho-canon",
+ "klotho-core",
+ "klotho-ir",
+ "klotho-trace",
+ "klotho-world",
+]
+
+[[package]]
 name = "klotho-sim"
 version = "0.1.0"
 dependencies = [
@@ -1404,6 +1415,7 @@ dependencies = [
  "klotho-core",
  "klotho-ir",
  "klotho-manifest",
+ "klotho-save",
  "klotho-sim",
  "klotho-trace",
  "klotho-world",

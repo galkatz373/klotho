@@ -3,7 +3,7 @@
 //! Extract is a pure function of [`WorldSnapshot::view()`], the observer
 //! [`Sigil`], and cooked [`Canon`]. Fact names reach a widget only through
 //! `Knows`. Pause stops `step` locally and does not enqueue [`PlayerIntent`].
-//! Pause-menu save copies the K19 quadruple from the last snapshot.
+//! Pause-menu save copies the published snapshot with an empty suffix.
 //!
 //! `#![forbid(unsafe_code)]`.
 

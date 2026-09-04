@@ -3,11 +3,13 @@
 use std::sync::Arc;
 
 use klotho_canon::{Canon, OPAQUE};
-use klotho_core::{Epoch, Hash, Tick};
+use klotho_core::{AffordanceId, Epoch, Hash, Tick};
 use klotho_trace::TraceLog;
 
+use crate::error::SnapError;
 use crate::heap::IntentHeap;
 use crate::proj::Projection;
+use crate::snap_blob::SnapRow;
 use crate::view::WorldView;
 use crate::{MAX_LOCI, SNAPSHOT_CAP};
 
@@ -176,6 +178,45 @@ impl WorldSnapshot {
     #[must_use]
     pub fn under_cap(&self) -> bool {
         self.approx_bytes() < SNAPSHOT_CAP
+    }
+
+    /// Packed snapshot rows in packed-index order.
+    #[must_use]
+    pub fn snap_rows(&self) -> Vec<SnapRow> {
+        self.blob.capture_snap_rows()
+    }
+
+    /// Rebuild a snapshot from rows. Rebuilds `space_ix`. Does not require `mutate`.
+    pub fn from_snap_rows(
+        epoch: Epoch,
+        tick: Tick,
+        canon_hash: Hash,
+        trace_prefix_hash: Hash,
+        opaque: Option<AffordanceId>,
+        rows: Vec<SnapRow>,
+    ) -> Result<Self, SnapError> {
+        let blob = Projection::from_snap_rows(opaque, &rows)?;
+        Ok(Self {
+            epoch,
+            tick,
+            canon_hash,
+            trace_prefix_hash,
+            blob: Arc::new(blob),
+        })
+    }
+
+    /// Canonical little-endian projection blob.
+    pub fn encode(&self) -> Result<Vec<u8>, SnapError> {
+        crate::snap_blob::encode_snapshot(self)
+    }
+
+    /// Decode a blob produced by [`Self::encode`].
+    pub fn decode(bytes: &[u8]) -> Result<Self, SnapError> {
+        crate::snap_blob::decode_snapshot(bytes)
+    }
+
+    pub(crate) fn projection(&self) -> &Projection {
+        &self.blob
     }
 
     #[cfg(test)]

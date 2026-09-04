@@ -22,6 +22,7 @@ members = [
     "crates/klotho-compile",
     "crates/klotho-dcc",
     "crates/klotho-stream",
+    "crates/klotho-save",
     "crates/klotho-platform",
     "crates/klotho-render",
     "crates/klotho-audio",
@@ -70,6 +71,7 @@ klotho-manifest = { path = "crates/klotho-manifest" }
 klotho-compile = { path = "crates/klotho-compile" }
 klotho-dcc = { path = "crates/klotho-dcc" }
 klotho-stream = { path = "crates/klotho-stream" }
+klotho-save = { path = "crates/klotho-save" }
 klotho-platform = { path = "crates/klotho-platform" }
 memmap2 = "0.9"
 klotho-render = { path = "crates/klotho-render" }

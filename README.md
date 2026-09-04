@@ -78,6 +78,7 @@ klotho/
   crates/klotho-compile/  # kitbash retrieval cook → CAS → .warp / sharded catalog
   crates/klotho-dcc/      # glTF 2.0 cook → quantized KLTH mesh/hull/clip
   crates/klotho-stream/   # Place shard pager, KCAS volumes (mmap after header validate)
+  crates/klotho-save/     # epoch compaction, K19/K48 I/O
   crates/klotho-platform/ # window, OS events, Look accum, audio device (no world mutation)
   crates/klotho-render/   # wgpu clustered meshes, Presenter, render thread
   crates/klotho-audio/    # grains from Trace, one bed, integer mix, device output

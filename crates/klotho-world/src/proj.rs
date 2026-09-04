@@ -12,9 +12,10 @@ use klotho_ir::{Channel, Rel};
 use klotho_trace::{RelTag, TraceBody, TraceEvent};
 
 use crate::cow::CowCol;
-use crate::error::WorldError;
+use crate::error::{SnapError, WorldError};
 use crate::grid::{PlaceIndex, world_aabb};
 use crate::snap::{MAX_PLACE_ROWS, PlaceRow, PlaceSnap};
+use crate::snap_blob::{MAX_SNAP_ROWS, SnapRow, check_row_caps};
 
 /// Derived SoA. Not a source.
 #[derive(Clone, Debug)]
@@ -176,6 +177,12 @@ impl Projection {
     #[must_use]
     pub fn locus_cap(&self) -> usize {
         self.locus_cap
+    }
+
+    /// Cooked `Opaque` id captured with this projection, if any.
+    #[must_use]
+    pub fn opaque_id(&self) -> Option<AffordanceId> {
+        self.opaque_id
     }
 
     /// Locus count.
@@ -559,6 +566,140 @@ impl Projection {
             rows.push(self.capture_row(s)?);
         }
         Some(PlaceSnap::new(place, canon_hash, prefix, rows))
+    }
+
+    pub(crate) fn capture_snap_rows(&self) -> Vec<SnapRow> {
+        (0..self.len() as PackedIx)
+            .filter_map(|i| {
+                let s = self.sigil(i)?;
+                self.capture_snap_row(s)
+            })
+            .collect()
+    }
+
+    fn capture_snap_row(&self, s: Sigil) -> Option<SnapRow> {
+        let i = self.packed(s)?;
+        let ix = i as usize;
+        let kind = self.kinds.get(ix).copied()?;
+        let qty = self
+            .qty
+            .iter()
+            .filter(|((p, _), _)| *p == i)
+            .map(|((_, r), v)| (*r, *v))
+            .collect();
+        let mut rels: Vec<(Rel, Sigil)> = self
+            .rels
+            .iter()
+            .filter(|((p, _), _)| *p == i)
+            .flat_map(|((_, k), n)| {
+                Rel::from_u8(*k)
+                    .into_iter()
+                    .flat_map(move |r| n.iter().map(move |b| (r, b)))
+            })
+            .collect();
+        if let Some(p) = self.in_place.get(i as usize).copied().flatten() {
+            rels.push((Rel::In, p));
+        }
+        let knows = self
+            .knows
+            .iter()
+            .filter(|(p, _)| *p == i)
+            .map(|(_, f)| *f)
+            .collect();
+        Some(SnapRow {
+            sigil: s,
+            kind,
+            pose: self.pose.get(ix).copied().flatten(),
+            vel: self.vel.get(ix).copied().unwrap_or(Vel3::ZERO),
+            yaw_rate: self.yaw_rate.get(ix).copied().unwrap_or(0),
+            pitch_rate: self.pitch_rate.get(ix).copied().unwrap_or(0),
+            roll_rate: self.roll_rate.get(ix).copied().unwrap_or(0),
+            sleep_ticks: self.sleep_ticks.get(ix).copied().unwrap_or(0),
+            island: self.island_id.get(ix).copied().unwrap_or(0),
+            support: self.support.get(ix).copied().flatten(),
+            phys_req: self.phys_req.get(&i).copied(),
+            attach_local: self.attach_local.get(ix).copied().flatten(),
+            rels,
+            qty,
+            rites: self.rites_of(s),
+            knows,
+            hull: self.hull_local.get(ix).copied().flatten(),
+            hull_id: self.hull_id.get(ix).copied().unwrap_or(BlobId::ZERO),
+            afford: self.afford.get(ix).copied().unwrap_or(0),
+            sim_lod: self.sim_lod.get(ix).copied().unwrap_or(SimLod::Full),
+        })
+    }
+
+    pub(crate) fn from_snap_rows(
+        opaque: Option<AffordanceId>,
+        rows: &[SnapRow],
+    ) -> Result<Projection, SnapError> {
+        if rows.len() > MAX_SNAP_ROWS {
+            return Err(SnapError::Oversize {
+                size: rows.len(),
+                cap: MAX_SNAP_ROWS,
+            });
+        }
+        let mut ids: Vec<Sigil> = rows.iter().map(|r| r.sigil).collect();
+        ids.sort_unstable();
+        if ids.windows(2).any(|w| w[0] == w[1]) {
+            return Err(SnapError::Duplicate);
+        }
+        for row in rows {
+            check_row_caps(row)?;
+            snap_row_in_place(&row.rels)?;
+        }
+        let mut p = Projection::with_cap(opaque, klotho_core::MAX_LOCI_PROCESS);
+        for row in rows {
+            p.push_snap_row(row);
+        }
+        for row in rows {
+            for &(r, b) in &row.rels {
+                if r == Rel::In {
+                    continue;
+                }
+                p.add_rel_raw(row.sigil, r, b)
+                    .map_err(|_| SnapError::Kind)?;
+            }
+        }
+        for row in rows {
+            for &(rite, m) in &row.rites {
+                p.put_rite(row.sigil, RiteId(rite), m);
+            }
+        }
+        p.rebuild_space_ix();
+        Ok(p)
+    }
+
+    fn push_snap_row(&mut self, row: &SnapRow) {
+        let i = self.sigils.len() as PackedIx;
+        Arc::make_mut(&mut self.by_sigil).insert(row.sigil, i);
+        self.sigils.push(row.sigil);
+        self.kinds.push(row.kind);
+        self.afford.push(row.afford);
+        self.hull_local.push(row.hull);
+        self.hull_id.push(row.hull_id);
+        self.pose.push(row.pose);
+        self.vel.push(row.vel);
+        self.yaw_rate.push(row.yaw_rate);
+        self.pitch_rate.push(row.pitch_rate);
+        self.roll_rate.push(row.roll_rate);
+        self.island_id.push(row.island);
+        self.sleep_ticks.push(row.sleep_ticks);
+        self.sim_lod.push(row.sim_lod);
+        self.in_place
+            .push(snap_row_in_place(&row.rels).expect("validated"));
+        self.support.push(row.support);
+        self.attach_local.push(row.attach_local);
+        for &(res, v) in &row.qty {
+            Arc::make_mut(&mut self.qty).insert((i, res), v);
+        }
+        if let Some(req) = row.phys_req {
+            Arc::make_mut(&mut self.phys_req).insert(i, req);
+        }
+        for &fact in &row.knows {
+            Arc::make_mut(&mut self.knows).insert((i, fact));
+        }
     }
 
     fn capture_row(&self, s: Sigil) -> Option<PlaceRow> {
@@ -1212,6 +1353,20 @@ fn row_in_place(rels: &[(Rel, Sigil)]) -> Result<Option<Sigil>, WorldError> {
         }
         if found.is_some() {
             return Err(WorldError::PlaceSnap);
+        }
+        found = Some(b);
+    }
+    Ok(found)
+}
+
+fn snap_row_in_place(rels: &[(Rel, Sigil)]) -> Result<Option<Sigil>, SnapError> {
+    let mut found = None;
+    for &(r, b) in rels {
+        if r != Rel::In {
+            continue;
+        }
+        if found.is_some() {
+            return Err(SnapError::Duplicate);
         }
         found = Some(b);
     }

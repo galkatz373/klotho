@@ -2,8 +2,10 @@
 
 use std::sync::Arc;
 
-use klotho_core::{Hash, Tick};
+use klotho_core::{Epoch, Hash, Tick};
 use klotho_ir::PlayerIntent;
+use klotho_save::{SaveBlob, pause_save};
+use klotho_trace::TraceEvent;
 use klotho_world::WorldSnapshot;
 
 /// Local pause. Stops `step` and drops PlayerIntent when the host honors it.
@@ -91,61 +93,68 @@ impl Session {
         self.last.as_ref()
     }
 
-    /// K19 quadruple from the last published snapshot.
+    /// Checkpoint from the last published snapshot (empty suffix).
     #[must_use]
     pub fn save(&self) -> Option<SaveQuad> {
         self.last.as_ref().map(save_from_snapshot)
     }
 }
 
-/// K19 checkpoint: hashes + snapshot blob + tick.
+/// Checkpoint: hashes + epoch + snapshot blob + suffix + tick.
 #[derive(Clone, Debug)]
 pub struct SaveQuad {
     /// Frozen Canon hash from the snapshot.
     pub canon_hash: Hash,
+    /// Cook / hull epoch.
+    pub epoch: Epoch,
     /// Trace prefix ancestry of this checkpoint.
     pub trace_prefix_hash: Hash,
     /// Projection blob.
     pub snapshot: Arc<WorldSnapshot>,
+    /// Trace suffix after [`Self::trace_from_tick`]. Empty on pause save.
+    pub suffix: Vec<TraceEvent>,
     /// Snapshot tick (`trace_from_tick`).
     pub trace_from_tick: Tick,
 }
 
-/// Copy hashes and the snapshot Arc. Does not step the kernel.
-#[must_use]
-pub fn save_from_snapshot(snap: &Arc<WorldSnapshot>) -> SaveQuad {
-    SaveQuad {
-        canon_hash: snap.canon_hash,
-        trace_prefix_hash: snap.trace_prefix_hash,
-        snapshot: Arc::clone(snap),
-        trace_from_tick: snap.tick,
-    }
-}
-
-/// Hard refuse when a save quadruple cannot be loaded. Not a [`klotho_core::RejectReason`].
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
-pub enum LoadError {
-    /// `trace_prefix_hash` does not match the expected prefix.
-    PrefixMismatch,
-}
-
-impl core::fmt::Display for LoadError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::PrefixMismatch => write!(f, "PrefixMismatch"),
+impl From<SaveBlob> for SaveQuad {
+    fn from(blob: SaveBlob) -> Self {
+        Self {
+            canon_hash: blob.canon_hash,
+            epoch: blob.epoch,
+            trace_prefix_hash: blob.prefix,
+            snapshot: blob.snap,
+            suffix: blob.suffix,
+            trace_from_tick: blob.trace_from_tick,
         }
     }
 }
 
-impl core::error::Error for LoadError {}
+impl SaveQuad {
+    fn as_blob(&self) -> SaveBlob {
+        SaveBlob {
+            canon_hash: self.canon_hash,
+            epoch: self.epoch,
+            prefix: self.trace_prefix_hash,
+            snap: Arc::clone(&self.snapshot),
+            suffix: self.suffix.clone(),
+            trace_from_tick: self.trace_from_tick,
+        }
+    }
+}
+
+/// Copy the published snapshot through pause save. Does not step the kernel.
+#[must_use]
+pub fn save_from_snapshot(snap: &Arc<WorldSnapshot>) -> SaveQuad {
+    SaveQuad::from(pause_save(snap).expect("published snapshot is a valid pause save"))
+}
+
+/// Hard refuse when a save quadruple cannot be loaded. Not a [`klotho_core::RejectReason`].
+pub type LoadError = klotho_save::SaveError;
 
 /// Refuse if `quad.trace_prefix_hash` is not `expected_prefix`.
 pub fn check_load(quad: &SaveQuad, expected_prefix: Hash) -> Result<(), LoadError> {
-    if quad.trace_prefix_hash != expected_prefix {
-        Err(LoadError::PrefixMismatch)
-    } else {
-        Ok(())
-    }
+    klotho_save::check_load(&quad.as_blob(), expected_prefix, None)
 }
 
 /// Restore the snapshot blob if the prefix matches.
@@ -248,8 +257,10 @@ mod tests {
 
         let quad = session.save().expect("published snap");
         assert_eq!(quad.canon_hash, snap.canon_hash);
+        assert_eq!(quad.epoch, snap.epoch);
         assert_eq!(quad.trace_prefix_hash, snap.trace_prefix_hash);
         assert_eq!(quad.trace_from_tick, snap.tick);
+        assert!(quad.suffix.is_empty());
         assert!(Arc::ptr_eq(&quad.snapshot, &snap));
         assert_eq!(k.world().tick(), tick0);
         assert_eq!(k.world().trace().len(), n0);
@@ -264,6 +275,8 @@ mod tests {
         let from_fn = save_from_snapshot(&snap);
         assert_eq!(from_fn.trace_prefix_hash, quad.trace_prefix_hash);
         assert_eq!(from_fn.trace_from_tick, quad.trace_from_tick);
+        assert_eq!(from_fn.epoch, quad.epoch);
+        assert!(from_fn.suffix.is_empty());
     }
 
     #[test]

@@ -1,26 +1,22 @@
 [package]
-name = "klotho-ui"
+name = "klotho-save"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Klotho attention UI: extract from snapshot, denied facts, pause save"
+description = "Klotho save: epoch compaction, K19/K48 I/O"
 readme = false
 publish = false
 
 [dependencies]
-klotho-canon.workspace = true
 klotho-core.workspace = true
-klotho-ir.workspace = true
-klotho-manifest.workspace = true
-klotho-save.workspace = true
 klotho-trace.workspace = true
 klotho-world.workspace = true
 
 [dev-dependencies]
-klotho-commit.workspace = true
-klotho-sim.workspace = true
+klotho-canon.workspace = true
+klotho-ir.workspace = true
 
 [lints]
 workspace = true

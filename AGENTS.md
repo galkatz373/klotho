@@ -17,7 +17,8 @@ Greenfield Rust engine. The programming model is **Canon + Intent + Trace + Proj
 - `klotho-sim` does **not** depend on infer, render, mind, space, motion, jobs, or stream.
 - `klotho-commit` does **not** depend on space/motion/mind types. `HullWitness` lives in `klotho-core`. Commit does **not** depend on stream.
 - `klotho-infer` does **not** depend on `klotho-commit`. It returns `InferIntent`.
-- `klotho-world` feature `mutate` is enabled **only** by `klotho-commit`. `klotho-stream` does not enable `mutate`.
+- `klotho-world` feature `mutate` is enabled **only** by `klotho-commit`. `klotho-stream` and `klotho-save` do not enable `mutate`.
+- `klotho-save` depends on world + trace + core only. It does **not** depend on commit or stream.
 - Runtime (not stream) builds `Proposal::Residency`. Stream returns `Arc<PlaceSnap>` after header-validate + mmap.
 - `InferHost::{new,submit,poll}` may appear only in `crates/klotho-runtime/**` and `crates/klotho-infer/**` (CI allowlist).
 - Gameplay (`examples/hearth-slice`, `examples/ash-slice`, ember, drift, `klotho-author`, `klotho-editor`) may not import `klotho-manifest::tables` or `klotho-stream`.

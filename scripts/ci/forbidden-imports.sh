@@ -178,6 +178,24 @@ if [[ -d crates/klotho-stream ]]; then
   fi
 fi
 
+if [[ -d crates/klotho-save ]]; then
+  if command -v rg >/dev/null 2>&1; then
+    if rg -n --glob '!target/**' 'klotho_commit::|klotho-commit|klotho_stream::|klotho-stream' crates/klotho-save; then
+      echo "klotho-save must not import klotho-commit or klotho-stream" >&2
+      fail=1
+    fi
+  else
+    if grep -RIn -E 'klotho_commit::|klotho-commit|klotho_stream::|klotho-stream' crates/klotho-save >/dev/null 2>&1; then
+      echo "klotho-save must not import klotho-commit or klotho-stream" >&2
+      fail=1
+    fi
+  fi
+  if grep -E 'mutate' crates/klotho-save/Cargo.toml >/dev/null 2>&1; then
+    echo "klotho-save must not enable klotho-world/mutate" >&2
+    fail=1
+  fi
+fi
+
 # InferHost::{new,submit,poll} may appear only in klotho-runtime and klotho-infer.
 if [[ -d crates ]]; then
   hits=""

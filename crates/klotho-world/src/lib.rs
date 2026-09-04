@@ -18,11 +18,12 @@ mod mutate;
 mod proj;
 mod rewind;
 mod snap;
+mod snap_blob;
 mod spec;
 mod view;
 mod world;
 
-pub use error::WorldError;
+pub use error::{SnapError, WorldError};
 pub use grid::{CELL_MM, GridIndex, PlaceIndex, world_aabb};
 pub use heap::IntentHeap;
 pub use klotho_core::{MAX_LOCI_HEARTH, MAX_LOCI_PROCESS, PackedIx};
@@ -31,6 +32,10 @@ pub use mutate::WorldMut;
 pub use proj::{Projection, RiteMachine};
 pub use rewind::RewindRing;
 pub use snap::{MAX_PLACE_ROWS, PlaceRow, PlaceSnap};
+pub use snap_blob::{
+    MAX_ROW_KNOWS, MAX_ROW_QTY, MAX_ROW_RELS, MAX_ROW_RITES, MAX_SNAP_ROWS, SNAP_BLOB_CAP,
+    SNAP_MAGIC, SNAP_VERSION, SnapRow, check_snap_size,
+};
 #[cfg(any(test, feature = "mutate"))]
 pub use spec::SpecDelta;
 pub use view::{HITSCAN_RANGE_MM, WorldView};
@@ -45,10 +50,10 @@ pub const SNAPSHOT_CAP: usize = 16 * 1024 * 1024;
 mod tests {
     use std::sync::Arc;
 
-    use klotho_canon::cook_diffs;
+    use klotho_canon::{PredStore, cook_diffs};
     use klotho_core::{
-        AabbMm, AffordanceId, BlobId, Hash, IVec3, LocusKind, Mm, PackedIx, PoseMm, ResourceId,
-        Sigil, Tick, YawMd,
+        AabbMm, AffordanceId, BlobId, Hash, IVec3, LocusKind, Mm, PackedIx, PhysRequest, PoseMm,
+        ResourceId, Sigil, SimLod, Tick, Vel3, VelFx, YawMd,
     };
     use klotho_ir::{CanonDiff, Rel, from_ron};
     use klotho_trace::{PoseReason, TraceBody, TraceEvent};
@@ -878,5 +883,169 @@ mod tests {
                 "10k-row apply took {dt:?}, gate is 2 ms"
             );
         }
+    }
+
+    #[test]
+    fn snapshot_blob_round_trips_columns_via_world_view() {
+        let mut w = opaque_world();
+        let door = relic(1);
+        let mind = actor(2);
+        let opaque = w.canon().affordance_id("Opaque").unwrap();
+        let mut pose = PoseMm::new(Mm(10), Mm(50), Mm(20), YawMd(30));
+        pose.pitch = YawMd(1_000);
+        pose.roll = YawMd(2_000);
+        let vel = Vel3::new(VelFx(100), VelFx(200), VelFx(300));
+        {
+            let mut m = w.mutate();
+            m.insert_locus(door, LocusKind::Relic).unwrap();
+            m.insert_locus(mind, LocusKind::Actor).unwrap();
+            m.set_hull(door, box_mm(400), BlobId::ZERO).unwrap();
+            m.set_pose(door, pose).unwrap();
+            m.set_vel(door, vel, 11).unwrap();
+            m.set_rates(door, 11, 22, 33).unwrap();
+            m.set_support(door, Some((0, 1, 0, 5))).unwrap();
+            m.set_phys_req(
+                door,
+                PhysRequest {
+                    lin: IVec3 { x: 3, y: 0, z: 0 },
+                    ang: IVec3::ZERO,
+                },
+            )
+            .unwrap();
+            m.set_attach_local(door, Some(IVec3 { x: 8, y: 9, z: 10 }))
+                .unwrap();
+            m.set_island(door, 3, 7).unwrap();
+            m.set_sim_lod(door, SimLod::Far).unwrap();
+            m.set_qty(door, ResourceId(1), 7).unwrap();
+            m.add_rel(door, Rel::LockedBy, door).unwrap();
+            m.set_affordance(door, opaque, true).unwrap();
+            m.append(TraceEvent::new(
+                Tick(1),
+                TraceBody::Learned { mind, fact: 3 },
+            ));
+            m.append(TraceEvent::new(
+                Tick(1),
+                TraceBody::RiteBegan {
+                    actor: mind,
+                    rite: 1,
+                    target: Some(door),
+                },
+            ));
+            m.append(TraceEvent::new(
+                Tick(1),
+                TraceBody::RiteAdvanced {
+                    actor: mind,
+                    rite: 1,
+                    pc: 2,
+                    wait_left: 4,
+                },
+            ));
+        }
+        let snap = w.snapshot();
+        assert!(snap.view().opaque_closed(door));
+        let bytes = snap.encode().unwrap();
+        let back = WorldSnapshot::decode(&bytes).unwrap();
+        assert_eq!(back.epoch, snap.epoch);
+        assert_eq!(back.tick, snap.tick);
+        assert_eq!(back.canon_hash, snap.canon_hash);
+        assert_eq!(back.trace_prefix_hash, snap.trace_prefix_hash);
+        let v = back.view();
+        assert_eq!(v.pose(door), Some(pose));
+        assert_eq!(v.vel(door), Some((vel, 11)));
+        assert_eq!(v.rates(door), Some((11, 22, 33)));
+        assert_eq!(v.support(door), Some((0, 1, 0, 5)));
+        assert_eq!(
+            v.phys_req(door),
+            Some(PhysRequest {
+                lin: IVec3 { x: 3, y: 0, z: 0 },
+                ang: IVec3::ZERO,
+            })
+        );
+        assert_eq!(v.attach_local(door), Some(IVec3 { x: 8, y: 9, z: 10 }));
+        assert_eq!(v.island(door), Some((3, 7)));
+        assert_eq!(v.sim_lod(door), SimLod::Far);
+        assert_eq!(v.qty(door, ResourceId(1)), 7);
+        assert!(v.has_rel(door, Rel::LockedBy, door));
+        assert!(v.knows(mind, 3));
+        let (rite, machine) = v.first_rite(mind).expect("rite");
+        assert_eq!(rite.0, 1);
+        assert_eq!(machine.pc, 2);
+        assert_eq!(machine.wait_left, 4);
+        assert_eq!(machine.target, Some(door));
+        assert!(v.opaque_closed(door));
+    }
+
+    #[test]
+    fn snapshot_blob_round_trip_does_not_use_island_snap() {
+        let mut w = opaque_world();
+        let s = relic(1);
+        let pose = PoseMm::new(Mm(42), Mm(1), Mm(7), YawMd(9));
+        {
+            let mut m = w.mutate();
+            m.insert_locus(s, LocusKind::Relic).unwrap();
+            m.set_pose(s, pose).unwrap();
+        }
+        assert!(
+            w.trace()
+                .events()
+                .iter()
+                .all(|e| !matches!(e.body, TraceBody::IslandSnap(_)))
+        );
+        let snap = w.snapshot();
+        let back = WorldSnapshot::decode(&snap.encode().unwrap()).unwrap();
+        assert_eq!(back.view().pose(s), Some(pose));
+        assert_eq!(snap.view().pose(s), Some(pose));
+    }
+
+    #[test]
+    fn oversize_knows_and_rite_lists_refused() {
+        let s = relic(1);
+        let mut row = SnapRow::new(s, LocusKind::Relic);
+        row.knows = vec![0; MAX_ROW_KNOWS + 1];
+        let err = WorldSnapshot::from_snap_rows(
+            klotho_core::Epoch::ZERO,
+            Tick::ZERO,
+            Hash::ZERO,
+            Hash::ZERO,
+            None,
+            vec![row],
+        )
+        .unwrap_err();
+        assert_eq!(
+            err,
+            SnapError::Oversize {
+                size: MAX_ROW_KNOWS + 1,
+                cap: MAX_ROW_KNOWS,
+            }
+        );
+        let mut row = SnapRow::new(s, LocusKind::Relic);
+        row.rites = vec![
+            (
+                1,
+                RiteMachine {
+                    pc: 0,
+                    wait_left: 0,
+                    target: None,
+                    wait_ch: None,
+                },
+            );
+            MAX_ROW_RITES + 1
+        ];
+        let err = WorldSnapshot::from_snap_rows(
+            klotho_core::Epoch::ZERO,
+            Tick::ZERO,
+            Hash::ZERO,
+            Hash::ZERO,
+            None,
+            vec![row],
+        )
+        .unwrap_err();
+        assert_eq!(
+            err,
+            SnapError::Oversize {
+                size: MAX_ROW_RITES + 1,
+                cap: MAX_ROW_RITES,
+            }
+        );
     }
 }

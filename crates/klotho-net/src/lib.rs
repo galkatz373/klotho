@@ -5,9 +5,9 @@
 //! Role::Server is dedicated (many clients, kernel on this process).
 //! Role::Client is overlay-only and does not run CommitKernel.
 //!
-//! Overlay, PoseDelta, and rewind state are never hashed and never written to
-//! Trace. Signatures authenticate which client sent [`PlayerIntent`], not
-//! whether a human produced it. Mind and Infer run on Host and Server only.
+//! Overlay and PoseDelta are never hashed and never written to Trace.
+//! Signatures authenticate which client sent [`PlayerIntent`], not whether a
+//! human produced it. Mind and Infer run on Host and Server only.
 //!
 //! `#![forbid(unsafe_code)]`.
 

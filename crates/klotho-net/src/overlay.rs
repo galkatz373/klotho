@@ -124,6 +124,13 @@ impl Overlay {
         self.current.is_empty()
     }
 
+    /// Drop poses whose sigils are not in the new Interest codebook.
+    pub fn retain(&mut self, keep: &[Sigil]) {
+        self.current.retain(|s, _| keep.contains(s));
+        self.previous.retain(|s, _| keep.contains(s));
+        self.applied.retain(|s, _| keep.contains(s));
+    }
+
     fn commit_server_pose(&mut self, s: Sigil, server: PoseMm) {
         self.applied.insert(s, server);
         if self.local == Some(s) && self.current.contains_key(&s) {

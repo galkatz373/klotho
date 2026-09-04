@@ -471,6 +471,7 @@ pub struct Client {
     interest_gen: u16,
     interest_sigils: Vec<Sigil>,
     needs_resync: bool,
+    awaiting_interest: bool,
 }
 
 impl Client {
@@ -498,6 +499,7 @@ impl Client {
             interest_gen: 0,
             interest_sigils: Vec::new(),
             needs_resync: false,
+            awaiting_interest: false,
         })
     }
 
@@ -677,11 +679,14 @@ impl Client {
                 places: _,
                 sigils,
             } => {
-                if !gen_ok(self.interest_gen, interest_gen) {
+                let accept = self.awaiting_interest || gen_ok(self.interest_gen, interest_gen);
+                if !accept {
                     self.needs_resync = true;
                     return Ok(());
                 }
+                self.awaiting_interest = false;
                 self.interest_gen = interest_gen;
+                self.overlay.retain(&sigils);
                 self.interest_sigils = sigils;
                 Ok(())
             }
@@ -690,8 +695,10 @@ impl Client {
                 interest_gen,
                 block,
             } => {
-                if !gen_ok(self.interest_gen, interest_gen) {
-                    self.needs_resync = true;
+                if interest_gen != self.interest_gen {
+                    if !self.awaiting_interest && !gen_ok(self.interest_gen, interest_gen) {
+                        self.needs_resync = true;
+                    }
                     return Ok(());
                 }
                 self.overlay.apply_pose_delta(&self.interest_sigils, &block);
@@ -709,6 +716,7 @@ impl Client {
                 self.last_tick = tick;
                 self.expected_prefix = prefix;
                 self.needs_resync = false;
+                self.awaiting_interest = true;
                 Ok(())
             }
             Packet::Nack { .. } | Packet::Intent { .. } => Ok(()),
@@ -761,7 +769,7 @@ mod tests {
     use klotho_trace::{PoseReason, TraceBody, fold_prefix, genesis_hash};
 
     use super::*;
-    use crate::packet::CompilerStamp;
+    use crate::packet::{CompilerStamp, PoseBlock, PoseFull};
     use crate::replay::load_replay_intents;
     use crate::sign::{Keypair, sign_intent};
 
@@ -1102,6 +1110,55 @@ mod tests {
             })
             .unwrap();
         assert!(!client.needs_resync());
+        let s = Sigil::pack(LocusKind::Actor, 0, 1).unwrap();
+        client
+            .handle(Packet::Interest {
+                interest_gen: 2,
+                places: vec![],
+                sigils: vec![s],
+            })
+            .unwrap();
+        assert_eq!(client.interest_gen(), 2);
+        assert!(!client.needs_resync());
+    }
+
+    #[test]
+    fn pose_delta_next_gen_does_not_apply_until_interest() {
+        let (_host, mut client) = memory_session(Hash::from_bytes([17; 32])).unwrap();
+        let s = Sigil::pack(LocusKind::Actor, 0, 1).unwrap();
+        let pose = PoseMm::new(Mm(5), Mm(0), Mm(6), YawMd(0));
+        client
+            .handle(Packet::PoseDelta {
+                tick: Tick(1),
+                interest_gen: 1,
+                block: PoseBlock::Full(vec![PoseFull {
+                    local_ix: 0,
+                    pose,
+                    vel: Vel3::ZERO,
+                }]),
+            })
+            .unwrap();
+        assert!(!client.needs_resync());
+        assert!(client.overlay().is_empty());
+        client
+            .handle(Packet::Interest {
+                interest_gen: 1,
+                places: vec![],
+                sigils: vec![s],
+            })
+            .unwrap();
+        client
+            .handle(Packet::PoseDelta {
+                tick: Tick(1),
+                interest_gen: 1,
+                block: PoseBlock::Full(vec![PoseFull {
+                    local_ix: 0,
+                    pose,
+                    vel: Vel3::ZERO,
+                }]),
+            })
+            .unwrap();
+        assert_eq!(client.overlay().pose(s).unwrap().x, Mm(5));
     }
 
     #[test]

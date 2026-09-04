@@ -1,4 +1,4 @@
-//! Dedicated server session. Separate type from [`crate::Host`]; one Role per process.
+//! Dedicated server: many clients, kernel on this process.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -23,6 +23,7 @@ struct Joined {
     vk: VerifyingKey,
     intent: Option<PlayerIntent>,
     interest: InterestDict,
+    /// Last pose/vel flushed. Loss recovery is Resync/Full, not a PoseDelta ack.
     last_sent: BTreeMap<u16, (PoseMm, Vel3)>,
     send_full: bool,
 }
@@ -75,7 +76,7 @@ impl Server {
         self.wire = Some(wire);
     }
 
-    /// Dedicated role. Never compiled into the same session as [`crate::Host`].
+    /// Dedicated role.
     #[must_use]
     pub fn role(&self) -> Role {
         Role::Server
@@ -269,6 +270,7 @@ impl Server {
     }
 
     /// PoseDelta for `player`: Full on dictionary change / first tick, else Delta vs last sent.
+    /// Loss recovery is Resync/Full, not a PoseDelta ack.
     pub fn flush_pose(
         &mut self,
         player: PlayerId,
@@ -288,18 +290,30 @@ impl Server {
         Ok(pkt)
     }
 
-    /// Resync for `player`. Next pose flush is Full.
-    pub fn resync(&mut self, player: PlayerId) -> Result<Packet, NetError> {
-        let slot = self.joined.get_mut(&player).ok_or(NetError::NotJoined)?;
-        slot.send_full = true;
-        slot.last_sent.clear();
-        let pkt = Packet::Resync {
-            tick: self.tick,
-            epoch: self.epoch,
-            prefix: self.prefix,
+    /// Resync for `player`: `Resync` then the current Interest codebook. Next pose flush is Full.
+    pub fn resync(&mut self, player: PlayerId) -> Result<Vec<Packet>, NetError> {
+        let interest = {
+            let slot = self.joined.get_mut(&player).ok_or(NetError::NotJoined)?;
+            slot.send_full = true;
+            slot.last_sent.clear();
+            Packet::Interest {
+                interest_gen: slot.interest.interest_gen,
+                places: slot.interest.places.clone(),
+                sigils: slot.interest.sigils.clone(),
+            }
         };
-        self.send_if_wire(player, &pkt)?;
-        Ok(pkt)
+        let pkts = vec![
+            Packet::Resync {
+                tick: self.tick,
+                epoch: self.epoch,
+                prefix: self.prefix,
+            },
+            interest,
+        ];
+        for p in &pkts {
+            self.send_if_wire(player, p)?;
+        }
+        Ok(pkts)
     }
 
     /// Join/resync snapshot.
@@ -343,7 +357,6 @@ impl Server {
                 intent_hz: _,
             } => {
                 if canon_hash != self.canon_hash || epoch != self.epoch || build != self.stamp {
-                    self.disconnect(DisconnectReason::HelloMismatch);
                     return Err(NetError::HelloMismatch);
                 }
                 let id = self.accept_join(&verifying_key)?;
@@ -520,13 +533,29 @@ pub fn dedicated_session_at(
 mod tests {
     use klotho_core::{LocusKind, Mm, PoseMm, Sigil, Vel3, YawMd};
 
+    use klotho_ir::{Agency, Analog, IntentTarget, Verb};
+
     use super::*;
     use crate::packet::{PoseBlock, encode_packet};
     use crate::session::{Host, LISTEN_INTENT_HZ};
-    use crate::sign::Keypair;
+    use crate::sign::{Keypair, sign_intent};
 
     fn actor() -> Sigil {
         Sigil::pack(LocusKind::Actor, 0, 3).unwrap()
+    }
+
+    fn look(player: u8, stick: i16) -> PlayerIntent {
+        PlayerIntent {
+            player: PlayerId(player),
+            at: Tick(0),
+            verb: Verb::Look,
+            target: IntentTarget::None,
+            analog: Analog {
+                stick_x: stick,
+                ..Analog::default()
+            },
+            agency: Agency::none(),
+        }
     }
 
     fn pose(x: i32) -> PoseMm {
@@ -574,16 +603,42 @@ mod tests {
     }
 
     #[test]
-    fn dedicated_epoch_mismatch_disconnects() {
+    fn dedicated_epoch_mismatch_refuses_join_not_server() {
         let canon = Hash::from_bytes([22; 32]);
         let mut server = Server::new(canon, Epoch(1), 30).unwrap();
         let client = Client::new(canon).unwrap();
         let err = server.handle(client.hello_packet()).unwrap_err();
         assert_eq!(err, NetError::HelloMismatch);
+        assert_eq!(server.disconnect_reason(), None);
+        assert_eq!(server.player_count(), 0);
+    }
+
+    #[test]
+    fn hello_mismatch_leaves_other_slots() {
+        let canon = Hash::from_bytes([25; 32]);
+        let mut server = Server::new(canon, Epoch::ZERO, 30).unwrap();
+        let a = Keypair::generate().unwrap();
+        let b = Keypair::generate().unwrap();
+        let pa = server.accept_join(&a.verifying_bytes()).unwrap();
+        let pb = server.accept_join(&b.verifying_bytes()).unwrap();
+        let bad = Client::with_join(canon, Epoch(1), 30).unwrap();
         assert_eq!(
-            server.disconnect_reason(),
-            Some(DisconnectReason::HelloMismatch)
+            server.handle(bad.hello_packet()).unwrap_err(),
+            NetError::HelloMismatch
         );
+        assert_eq!(server.player_count(), 2);
+        assert_eq!(server.disconnect_reason(), None);
+        assert!(
+            server
+                .ingest_signed(pa, &sign_intent(&a, &look(0, 1)).unwrap())
+                .unwrap()
+        );
+        assert!(
+            server
+                .ingest_signed(pb, &sign_intent(&b, &look(1, 2)).unwrap())
+                .unwrap()
+        );
+        assert_eq!(server.consume().len(), 2);
     }
 
     #[test]
@@ -675,6 +730,7 @@ mod tests {
         let canon = Hash::from_bytes([24; 32]);
         let (mut server, mut client) = dedicated_session(canon).unwrap();
         let player = client.player().unwrap();
+        let s = actor();
         client
             .handle(Packet::TraceDelta {
                 from: Tick(0),
@@ -683,8 +739,23 @@ mod tests {
             })
             .unwrap();
         assert!(client.needs_resync());
-        let pkt = server.resync(player).unwrap();
-        client.handle(pkt).unwrap();
+        server
+            .set_interest(
+                player,
+                InterestDict {
+                    interest_gen: 2,
+                    places: vec![],
+                    sigils: vec![s],
+                },
+            )
+            .unwrap();
+        server.resync(player).unwrap();
+        server
+            .flush_pose(player, Tick(1), &[(s, pose(10), Vel3::ZERO)])
+            .unwrap();
+        client.pump().unwrap();
         assert!(!client.needs_resync());
+        assert_eq!(client.interest_gen(), 2);
+        assert_eq!(client.overlay().pose(s).unwrap().x, Mm(10));
     }
 }

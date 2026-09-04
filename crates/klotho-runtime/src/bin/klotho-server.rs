@@ -1,7 +1,7 @@
 //! Dedicated server process: Role::Server, in-process PoseDelta encode.
 //!
 //! Boots the Hearth kernel (or a `.warp` if given), constructs
-//! [`klotho_net::Server`], ticks Sim, and encodes PoseDelta from world poses.
+//! [`klotho_net::Server`], ticks Sim, and flushes PoseDelta from world poses.
 //! PoseDelta is never written to Trace. No TCP/UDP listener.
 
 #![forbid(unsafe_code)]
@@ -13,7 +13,7 @@ use std::process::ExitCode;
 use hearth_slice::boot;
 use klotho_core::{Epoch, Tick, Vel3};
 use klotho_motion::Motion;
-use klotho_net::{LISTEN_INTENT_HZ, Packet, PoseBlock, PoseFull, Role, Server, encode_packet};
+use klotho_net::{InterestDict, Keypair, LISTEN_INTENT_HZ, Role, Server};
 use klotho_runtime::{kernel_from_cooked, load_cooked_warp};
 use klotho_sim::Sim;
 use klotho_space::Space;
@@ -40,39 +40,49 @@ fn run() -> Result<(), String> {
     let canon_hash = kernel.world().canon_hash();
     let epoch = Epoch::ZERO;
     let intent_hz = LISTEN_INTENT_HZ;
-    let server = Server::new(canon_hash, epoch, intent_hz).map_err(|e| e.to_string())?;
+    let mut server = Server::new(canon_hash, epoch, intent_hz).map_err(|e| e.to_string())?;
     assert_eq!(server.role(), Role::Server);
+    let dummy = Keypair::generate().map_err(|e| e.to_string())?;
+    let player = server
+        .accept_join(&dummy.verifying_bytes())
+        .map_err(|e| e.to_string())?;
 
     let mut sim = Sim::new(kernel);
     let mut space = Space;
     let mut motion = Motion::hearth();
+    let mut dict_set = false;
     for _ in 0..3 {
         let report = sim
             .tick(Tick(1), &mut [&mut space, &mut motion])
             .map_err(|e| format!("sim tick: {e:?}"))?;
         let view = sim.kernel().world().view();
         let loci: Vec<_> = view.loci().collect();
-        let mut entries = Vec::new();
-        for (i, s) in loci.into_iter().enumerate() {
-            if i > u16::MAX as usize {
-                break;
-            }
+        let mut poses = Vec::new();
+        let mut sigils = Vec::new();
+        for s in loci {
             let Some(pose) = view.pose(s) else {
                 continue;
             };
             let vel = view.vel(s).map(|(v, _)| v).unwrap_or(Vel3::ZERO);
-            entries.push(PoseFull {
-                local_ix: i as u16,
-                pose,
-                vel,
-            });
+            sigils.push(s);
+            poses.push((s, pose, vel));
         }
-        let pkt = Packet::PoseDelta {
-            tick: view.tick(),
-            interest_gen: 0,
-            block: PoseBlock::Full(entries),
-        };
-        let _encoded = encode_packet(&pkt).map_err(|e| e.to_string())?;
+        if !dict_set {
+            server
+                .set_interest(
+                    player,
+                    InterestDict {
+                        interest_gen: 0,
+                        places: vec![],
+                        sigils,
+                    },
+                )
+                .map_err(|e| e.to_string())?;
+            dict_set = true;
+        }
+        let _ = server
+            .flush_pose(player, view.tick(), &poses)
+            .map_err(|e| e.to_string())?;
         let _ = report;
     }
 

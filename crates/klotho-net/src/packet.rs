@@ -1060,6 +1060,17 @@ mod tests {
     fn pose_delta_6dof_round_trip_no_sigil_in_hot_payload() {
         let actor = Sigil::pack(LocusKind::Actor, 7, 99).unwrap();
         let sigil_bytes = actor.raw().to_le_bytes();
+        let interest = Packet::Interest {
+            interest_gen: 2,
+            places: vec![],
+            sigils: vec![actor],
+        };
+        let enc_interest = encode_packet(&interest).unwrap();
+        assert!(
+            enc_interest.windows(16).any(|w| w == sigil_bytes),
+            "Interest codebook carries the actor Sigil"
+        );
+
         let delta = Packet::PoseDelta {
             tick: Tick(11),
             interest_gen: 2,
@@ -1085,18 +1096,24 @@ mod tests {
             }]),
         };
         let enc_full = encode_packet(&full).unwrap();
-        match decode_packet(&enc_full).unwrap() {
-            Packet::PoseDelta {
-                block: PoseBlock::Full(entries),
-                ..
-            } => {
-                assert_eq!(entries[0].pose, six_dof());
-                assert_ne!(entries[0].pose.y, Mm(0));
-                assert_ne!(entries[0].pose.pitch, YawMd(0));
-                assert_ne!(entries[0].pose.roll, YawMd(0));
-            }
-            other => panic!("expected Full PoseDelta, got {other:?}"),
+        assert_eq!(enc_full[0], TAG_POSE_DELTA);
+        assert_eq!(&enc_full[1..9], &12u64.to_le_bytes());
+        assert_eq!(&enc_full[9..11], &2u16.to_le_bytes());
+        assert_eq!(enc_full[11], KIND_FULL);
+        assert_eq!(&enc_full[12..14], &1u16.to_le_bytes());
+        assert_eq!(&enc_full[14..16], &0u16.to_le_bytes());
+        fn i32_at(b: &[u8], off: usize) -> i32 {
+            i32::from_le_bytes(b[off..off + 4].try_into().unwrap())
         }
+        assert_eq!(i32_at(&enc_full, 16), 10);
+        assert_eq!(i32_at(&enc_full, 20), 20);
+        assert_eq!(i32_at(&enc_full, 24), 30);
+        assert_eq!(i32_at(&enc_full, 28), 40);
+        assert_eq!(i32_at(&enc_full, 32), 50);
+        assert_eq!(i32_at(&enc_full, 36), 60);
+        assert_eq!(i32_at(&enc_full, 40), 4);
+        assert_eq!(i32_at(&enc_full, 44), 5);
+        assert_eq!(i32_at(&enc_full, 48), 6);
         assert_eq!(decode_packet(&enc_full).unwrap(), full);
     }
 

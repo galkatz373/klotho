@@ -186,7 +186,7 @@ impl WorldSnapshot {
         self.blob.capture_snap_rows()
     }
 
-    /// Rebuild a snapshot from rows. Rebuilds `space_ix`. Does not require `mutate`.
+    /// Rebuild a snapshot from rows and `space_ix`.
     pub fn from_snap_rows(
         epoch: Epoch,
         tick: Tick,

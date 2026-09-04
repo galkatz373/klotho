@@ -30,7 +30,7 @@ mod tests {
         Epoch, Hash, LocusKind, Mm, PoseMm, ResourceId, Sigil, Tick, Vel3, VelFx, YawMd,
     };
     use klotho_ir::{CanonDiff, Rel, from_ron};
-    use klotho_trace::{TraceBody, TraceEvent, TraceLog};
+    use klotho_trace::{TraceBody, TraceEvent, TraceLog, encode_event};
     use klotho_world::{SnapRow, World, WorldSnapshot};
 
     use super::*;
@@ -123,7 +123,7 @@ mod tests {
     }
 
     #[test]
-    fn encode_decode_round_trip_pose_not_from_island_snap() {
+    fn encode_decode_round_trips_pose_columns() {
         let mut pose = PoseMm::new(Mm(10), Mm(50), Mm(20), YawMd(30));
         pose.pitch = YawMd(1_000);
         pose.roll = YawMd(2_000);
@@ -234,6 +234,45 @@ mod tests {
         let mut bytes = encode(&pause_save(&snap).unwrap()).unwrap();
         bytes[4] = 9;
         assert_eq!(decode(&bytes).unwrap_err(), SaveError::Version(9));
+    }
+
+    #[test]
+    fn wrong_pad_refused() {
+        let snap = empty_snap();
+        let mut bytes = encode(&pause_save(&snap).unwrap()).unwrap();
+        bytes[5] = 1;
+        assert_eq!(decode(&bytes).unwrap_err(), SaveError::Pad);
+    }
+
+    fn encode_suffix_tick(event_tick: Tick) -> SaveError {
+        let snap = snap_at(Tick(10), Hash::ZERO);
+        let mut blob = pause_save(&snap).unwrap();
+        blob.suffix.push(qty_event(event_tick));
+        encode(&blob).unwrap_err()
+    }
+
+    fn decode_suffix_tick(event_tick: Tick) -> SaveError {
+        let snap = snap_at(Tick(10), Hash::ZERO);
+        let mut bytes = encode(&pause_save(&snap).unwrap()).unwrap();
+        let snap_len = u32::from_le_bytes(bytes[88..92].try_into().unwrap()) as usize;
+        let suffix_at = 92 + snap_len;
+        bytes[suffix_at..suffix_at + 4].copy_from_slice(&1u32.to_le_bytes());
+        let ev = encode_event(&qty_event(event_tick));
+        bytes.extend_from_slice(&(u32::try_from(ev.len()).unwrap()).to_le_bytes());
+        bytes.extend_from_slice(&ev);
+        decode(&bytes).unwrap_err()
+    }
+
+    #[test]
+    fn suffix_event_before_snap_tick_is_tick_window() {
+        assert_eq!(encode_suffix_tick(Tick(9)), SaveError::TickWindow);
+        assert_eq!(decode_suffix_tick(Tick(9)), SaveError::TickWindow);
+    }
+
+    #[test]
+    fn suffix_event_at_snap_tick_is_tick_window() {
+        assert_eq!(encode_suffix_tick(Tick(10)), SaveError::TickWindow);
+        assert_eq!(decode_suffix_tick(Tick(10)), SaveError::TickWindow);
     }
 
     #[test]

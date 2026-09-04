@@ -30,8 +30,10 @@ impl core::error::Error for WorldError {}
 pub enum SnapError {
     /// Magic bytes were not `KSNP`.
     Magic,
-    /// Version byte is not the one this crate decodes, or the pad was not zeros.
+    /// Version byte is not the one this crate decodes.
     Version(u8),
+    /// Header pad bytes were not zeros.
+    Pad,
     /// Buffer ended before a field.
     Truncated,
     /// Declared or assembled size exceeded a cap. Not truncated: do not allocate `size`.
@@ -54,6 +56,7 @@ impl fmt::Display for SnapError {
         match self {
             Self::Magic => write!(f, "Magic"),
             Self::Version(v) => write!(f, "Version({v})"),
+            Self::Pad => write!(f, "Pad"),
             Self::Truncated => write!(f, "Truncated"),
             Self::Oversize { size, cap } => write!(f, "Oversize({size} > {cap})"),
             Self::Trailing => write!(f, "Trailing"),

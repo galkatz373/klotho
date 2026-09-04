@@ -9,8 +9,10 @@ use klotho_world::SnapError;
 pub enum SaveError {
     /// Magic bytes were not `KSAV`.
     Magic,
-    /// Version byte is not the one this crate decodes, or the pad was not zeros.
+    /// Version byte is not the one this crate decodes.
     Version(u8),
+    /// Header pad bytes were not zeros.
+    Pad,
     /// Buffer ended before a field.
     Truncated,
     /// Declared or assembled size exceeded a cap. Not truncated: do not allocate `size`.
@@ -41,6 +43,7 @@ impl fmt::Display for SaveError {
         match self {
             Self::Magic => write!(f, "Magic"),
             Self::Version(v) => write!(f, "Version({v})"),
+            Self::Pad => write!(f, "Pad"),
             Self::Truncated => write!(f, "Truncated"),
             Self::Oversize { size, cap } => write!(f, "Oversize({size} > {cap})"),
             Self::PrefixMismatch => write!(f, "PrefixMismatch"),
@@ -61,6 +64,7 @@ impl From<SnapError> for SaveError {
         match e {
             SnapError::Magic => Self::Magic,
             SnapError::Version(v) => Self::Version(v),
+            SnapError::Pad => Self::Pad,
             SnapError::Truncated => Self::Truncated,
             SnapError::Oversize { size, cap } => Self::Oversize { size, cap },
             SnapError::Trailing => Self::Trailing,

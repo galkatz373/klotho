@@ -1,4 +1,4 @@
-//! Canonical LE encoding of a [`WorldSnapshot`] projection. Not a Place shard.
+//! Canonical LE encoding of a [`WorldSnapshot`] projection.
 
 use klotho_core::{
     AabbMm, AffordanceId, BlobId, Epoch, Hash, IVec3, LocusKind, MAX_LOCI_PROCESS, Mm, PhysRequest,
@@ -101,7 +101,7 @@ impl SnapRow {
     }
 }
 
-/// Refuse before allocating a blob larger than [`SNAP_BLOB_CAP`]. Called by encode.
+/// Refuse before allocating a blob larger than [`SNAP_BLOB_CAP`].
 pub fn check_snap_size(size: usize) -> Result<(), SnapError> {
     if size > SNAP_BLOB_CAP {
         Err(SnapError::Oversize {
@@ -206,7 +206,7 @@ fn decode_parts(bytes: &[u8]) -> Result<SnapParts, SnapError> {
     }
     let pad = take(&mut rest, 3)?;
     if pad != [0, 0, 0] {
-        return Err(SnapError::Version(version));
+        return Err(SnapError::Pad);
     }
     let epoch = Epoch(take_u64(&mut rest)?);
     let tick = Tick(take_u64(&mut rest)?);
@@ -568,12 +568,8 @@ fn take_u128(rest: &mut &[u8]) -> Result<u128, SnapError> {
     Ok(u128::from_le_bytes(take_arr::<16>(rest)?))
 }
 
-fn take_u64_hash_bytes(rest: &mut &[u8]) -> Result<[u8; 32], SnapError> {
-    take_arr::<32>(rest)
-}
-
 fn take_hash(rest: &mut &[u8]) -> Result<Hash, SnapError> {
-    Ok(Hash::from_bytes(take_u64_hash_bytes(rest)?))
+    Ok(Hash::from_bytes(take_arr::<32>(rest)?))
 }
 
 fn take_blob(rest: &mut &[u8]) -> Result<BlobId, SnapError> {
@@ -652,7 +648,7 @@ mod tests {
     fn wrong_pad_refused() {
         let mut b = header(Epoch::ZERO, Tick::ZERO, Hash::ZERO, Hash::ZERO, 0);
         b[5] = 1;
-        assert_eq!(decode_parts(&b), Err(SnapError::Version(1)));
+        assert_eq!(decode_parts(&b), Err(SnapError::Pad));
     }
 
     #[test]

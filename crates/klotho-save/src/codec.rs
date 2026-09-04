@@ -13,7 +13,7 @@ pub const SAVE_MAGIC: [u8; 4] = *b"KSAV";
 pub const SAVE_VERSION: u8 = 1;
 /// Total encoded size cap.
 pub const SAVE_CAP: usize = 64 * 1024 * 1024;
-/// Per-event payload cap (length prefix is refused before alloc).
+/// Per-event payload cap.
 pub const MAX_EVENT_BYTES: usize = 1024 * 1024;
 /// Suffix event-count cap.
 pub const MAX_SUFFIX_EVENTS: usize = 1_048_576;
@@ -29,7 +29,7 @@ pub fn assembled_size(snap_len: usize, suffix_bytes: usize) -> usize {
         .saturating_add(suffix_bytes)
 }
 
-/// Refuse before allocating a blob larger than [`SAVE_CAP`]. Called by [`encode`].
+/// Refuse before allocating a blob larger than [`SAVE_CAP`].
 pub fn check_assembled_size(size: usize) -> Result<(), SaveError> {
     if size > SAVE_CAP {
         Err(SaveError::Oversize {
@@ -58,7 +58,7 @@ pub fn encode(blob: &SaveBlob) -> Result<Vec<u8>, SaveError> {
     }
     let mut suffix_bytes = Vec::new();
     for e in &blob.suffix {
-        if e.tick.0 < blob.trace_from_tick.0 {
+        if e.tick <= blob.trace_from_tick {
             return Err(SaveError::TickWindow);
         }
         let ev = encode_event(e);
@@ -126,7 +126,7 @@ pub fn decode(bytes: &[u8]) -> Result<SaveBlob, SaveError> {
     }
     let pad = take(&mut rest, 3)?;
     if pad != [0, 0, 0] {
-        return Err(SaveError::Version(version));
+        return Err(SaveError::Pad);
     }
     let canon_hash = take_hash(&mut rest)?;
     let epoch = Epoch(take_u64(&mut rest)?);
@@ -169,7 +169,7 @@ pub fn decode(bytes: &[u8]) -> Result<SaveBlob, SaveError> {
         }
         let ev_bytes = take(&mut rest, n)?;
         let ev = decode_event(ev_bytes).map_err(|_| SaveError::BadEvent)?;
-        if ev.tick.0 < tick.0 {
+        if ev.tick <= tick {
             return Err(SaveError::TickWindow);
         }
         suffix.push(ev);

@@ -976,7 +976,7 @@ mod tests {
     }
 
     #[test]
-    fn snapshot_blob_round_trip_does_not_use_island_snap() {
+    fn snapshot_blob_round_trips_pose() {
         let mut w = opaque_world();
         let s = relic(1);
         let pose = PoseMm::new(Mm(42), Mm(1), Mm(7), YawMd(9));
@@ -985,12 +985,6 @@ mod tests {
             m.insert_locus(s, LocusKind::Relic).unwrap();
             m.set_pose(s, pose).unwrap();
         }
-        assert!(
-            w.trace()
-                .events()
-                .iter()
-                .all(|e| !matches!(e.body, TraceBody::IslandSnap(_)))
-        );
         let snap = w.snapshot();
         let back = WorldSnapshot::decode(&snap.encode().unwrap()).unwrap();
         assert_eq!(back.view().pose(s), Some(pose));

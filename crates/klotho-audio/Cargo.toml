@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Klotho audio presenter: grains from Trace, one bed, header caps"
+description = "Klotho audio presenter: grains from Trace, one bed, integer mix, device output"
 readme = false
 publish = false
 
@@ -13,6 +13,7 @@ publish = false
 klotho-compile.workspace = true
 klotho-core.workspace = true
 klotho-manifest.workspace = true
+klotho-platform.workspace = true
 klotho-trace.workspace = true
 
 [lints.rust]

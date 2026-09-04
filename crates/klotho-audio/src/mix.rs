@@ -4,7 +4,8 @@ use std::collections::BTreeMap;
 
 use klotho_compile::{DecodedGrain, GRAIN_HZ, decode_grain};
 use klotho_core::{BlobId, IVec3, Tick};
-use klotho_manifest::{Observer, SonicManifest};
+use klotho_manifest::{GrainVoice, Observer, SonicManifest};
+use klotho_platform::AudioSink;
 
 /// v1 host tick rate. Mix quantum is [`GRAIN_HZ`] / this.
 pub const TICK_HZ: u32 = 60;
@@ -16,6 +17,8 @@ const _: () = assert!(SAMPLES_PER_TICK == 800);
 
 /// Millimetres of observer-relative X that maps to a full left/right pan.
 const PAN_FULL_MM: i32 = 4_000;
+/// Occluded one-shots mix at this fraction of authored gain (milli).
+pub const OCCLUDED_GAIN_MILLI: u16 = 250;
 
 /// Per-quantum mix caps (HLD: render-thread audio ≤ 0.7 ms). Gates, not proofs.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
@@ -33,6 +36,13 @@ impl MixBudget {
     pub const HEARTH: Self = Self {
         us_mix: 700,
         max_voices: 32,
+        max_grain_frames: GRAIN_HZ,
+    };
+
+    /// AAA presentation cap: 256 one-shot voices.
+    pub const AAA: Self = Self {
+        us_mix: 700,
+        max_voices: 256,
         max_grain_frames: GRAIN_HZ,
     };
 }
@@ -147,6 +157,48 @@ impl NullMixer {
     }
 }
 
+/// Integer mix, then push interleaved PCM to an [`AudioSink`].
+pub struct DeviceMixer<S: AudioSink> {
+    inner: IntegerMixer,
+    sink: S,
+}
+
+impl<S: AudioSink> DeviceMixer<S> {
+    /// Bind `sink` as the mix destination.
+    #[must_use]
+    pub fn new(sink: S) -> Self {
+        Self {
+            inner: IntegerMixer::new(),
+            sink,
+        }
+    }
+
+    /// Bind grain bytes. Forwarded to the inner integer mixer.
+    pub fn insert(&mut self, id: BlobId, bytes: &[u8]) {
+        self.inner.insert(id, bytes);
+    }
+
+    /// The sink that receives mixed PCM.
+    #[must_use]
+    pub fn sink(&self) -> &S {
+        &self.sink
+    }
+}
+
+impl<S: AudioSink> Mixer for DeviceMixer<S> {
+    fn mix(
+        &mut self,
+        sonic: &SonicManifest,
+        observer: Observer,
+        now: Tick,
+        budget: MixBudget,
+    ) -> MixFrame {
+        let frame = self.inner.mix(sonic, observer, now, budget);
+        self.sink.push(&frame.pcm);
+        frame
+    }
+}
+
 impl Mixer for NullMixer {
     fn mix(
         &mut self,
@@ -237,7 +289,7 @@ pub fn mix_n(
             &grain.pcm,
             dest as usize,
             playhead as usize,
-            g.gain_milli,
+            voice_gain_milli(g),
             left,
             right,
         );
@@ -280,6 +332,13 @@ fn decode_into(
             decoded.insert(id, g);
         }
     }
+}
+
+fn voice_gain_milli(g: &GrainVoice) -> u16 {
+    if !g.occluded {
+        return g.gain_milli;
+    }
+    ((u32::from(g.gain_milli) * u32::from(OCCLUDED_GAIN_MILLI)) / 1000) as u16
 }
 
 fn pan_milli(pos: Option<IVec3>, observer: Observer) -> (i32, i32) {
@@ -410,6 +469,7 @@ mod tests {
     fn hearth_budget_matches_hld() {
         assert_eq!(MixBudget::HEARTH.us_mix, 700);
         assert_eq!(MixBudget::HEARTH.max_voices, 32);
+        assert_eq!(MixBudget::HEARTH.max_grain_frames, GRAIN_HZ);
         assert_eq!(SAMPLES_PER_TICK, 800);
         assert_eq!(
             mix_n(
@@ -664,5 +724,155 @@ mod tests {
         // grain at 0, observer at +PAN_FULL → grain is full left
         assert_eq!(frame.pcm[0], 4_000);
         assert_eq!(frame.pcm[1], 0);
+    }
+
+    #[test]
+    fn aaa_budget_is_256_voices() {
+        assert_eq!(MixBudget::AAA.max_voices, 256);
+        assert_eq!(MixBudget::AAA.us_mix, 700);
+        assert_eq!(MixBudget::HEARTH.max_voices, 32);
+        assert_eq!(OCCLUDED_GAIN_MILLI, 250);
+    }
+
+    #[test]
+    fn aaa_drops_257th_grain_in_trace_order() {
+        let first = blob(1);
+        let last = blob(2);
+        let mut grains = Vec::with_capacity(257);
+        for _ in 0..256 {
+            grains.push(voice(first, Tick(0), None));
+        }
+        grains.push(voice(last, Tick(0), None));
+        let sonic = SonicManifest::from_voices(Epoch::ZERO, grains, None);
+        let mut bytes = BTreeMap::new();
+        bytes.insert(first, valid_pcm(&[1; 4]));
+        bytes.insert(last, valid_pcm(&[9_000; 4]));
+        let frame = mix_map(&sonic, Tick(0), MixBudget::AAA, &bytes);
+        assert_eq!(frame.voices, 256);
+        assert_eq!(frame.pcm[0], 256);
+        assert_eq!(frame.pcm[1], 256);
+    }
+
+    #[test]
+    fn occluded_grain_mixes_at_reduced_gain() {
+        let id = blob(1);
+        let sonic = SonicManifest::from_voices(
+            Epoch::ZERO,
+            [GrainVoice {
+                blob: id,
+                at: Tick(0),
+                gain_milli: 1000,
+                pos: None,
+                occluded: true,
+            }],
+            None,
+        );
+        let bytes = bytes_map(id, valid_pcm(&[4_000; 4]));
+        let frame = mix_map(&sonic, Tick(0), MixBudget::HEARTH, &bytes);
+        assert_eq!(frame.voices, 1);
+        let want = 4_000 * i32::from(OCCLUDED_GAIN_MILLI) / 1000;
+        assert_eq!(frame.pcm[0], want as i16);
+        assert_eq!(frame.pcm[1], want as i16);
+        assert!(!frame.is_silence());
+    }
+
+    #[test]
+    fn unoccluded_grain_keeps_full_gain() {
+        let id = blob(1);
+        let sonic = SonicManifest::from_voices(Epoch::ZERO, [voice(id, Tick(0), None)], None);
+        let bytes = bytes_map(id, valid_pcm(&[4_000; 4]));
+        let frame = mix_map(&sonic, Tick(0), MixBudget::HEARTH, &bytes);
+        assert_eq!(frame.pcm[0], 4_000);
+        assert_eq!(frame.pcm[1], 4_000);
+    }
+
+    fn observer_at(x: i32, y: i32, z: i32) -> Observer {
+        Observer {
+            eye: PoseMm::new(Mm(x), Mm(y), Mm(z), YawMd::ZERO),
+            pitch_md: 0,
+        }
+    }
+
+    fn hinge_knock(z: i32) -> klotho_trace::TraceEvent {
+        use klotho_core::{LocusKind, Sigil};
+        use klotho_trace::{PoseReason, TraceBody, TraceEvent};
+        let s = Sigil::pack(LocusKind::Relic, 0, 1).unwrap();
+        TraceEvent::new(
+            Tick(0),
+            TraceBody::PoseCommitted {
+                s,
+                pose: PoseMm::new(Mm(0), Mm(0), Mm(z), YawMd::ZERO),
+                reason: PoseReason::Hinge,
+            },
+        )
+    }
+
+    fn wall(z0: i32, z1: i32) -> klotho_core::AabbMm {
+        klotho_core::AabbMm::new(
+            IVec3 {
+                x: -10,
+                y: -10,
+                z: z0,
+            },
+            IVec3 {
+                x: 10,
+                y: 10,
+                z: z1,
+            },
+        )
+    }
+
+    fn extract_knock(opaque: &[klotho_core::AabbMm], observer: Observer, z: i32) -> SonicManifest {
+        let mut tags = BTreeMap::new();
+        tags.insert("grain.wood.knock".into(), blob(1));
+        crate::extract_sonic(
+            &[hinge_knock(z)],
+            Epoch::ZERO,
+            &tags,
+            None,
+            |_| None,
+            opaque,
+            observer,
+        )
+    }
+
+    #[test]
+    fn hull_between_reduces_mixed_pcm() {
+        let id = blob(1);
+        let observer = observer_at(0, 0, 0);
+        let sonic = extract_knock(&[wall(400, 600)], observer, 1000);
+        assert!(sonic.grains[0].occluded);
+        let bytes = bytes_map(id, valid_pcm(&[4_000; 4]));
+        let frame = mix(&sonic, observer, Tick(0), MixBudget::HEARTH, &bytes);
+        assert_eq!(frame.voices, 1);
+        let want = 4_000 * i32::from(OCCLUDED_GAIN_MILLI) / 1000;
+        assert_eq!(frame.pcm[0], want as i16);
+        assert_eq!(frame.pcm[1], want as i16);
+    }
+
+    #[test]
+    fn door_knock_inside_hull_is_full_gain() {
+        let id = blob(1);
+        let observer = observer_at(0, 0, 0);
+        let sonic = extract_knock(&[wall(400, 600)], observer, 500);
+        assert!(!sonic.grains[0].occluded);
+        let bytes = bytes_map(id, valid_pcm(&[4_000; 4]));
+        let frame = mix(&sonic, observer, Tick(0), MixBudget::HEARTH, &bytes);
+        assert_eq!(frame.voices, 1);
+        assert_eq!(frame.pcm[0], 4_000);
+        assert_eq!(frame.pcm[1], 4_000);
+    }
+
+    #[test]
+    fn device_mixer_pushes_exact_pcm() {
+        use klotho_platform::MemorySink;
+        let id = blob(1);
+        let mut m = DeviceMixer::new(MemorySink::new());
+        m.insert(id, &valid_pcm(&[2_000; 4]));
+        let sonic = SonicManifest::from_voices(Epoch::ZERO, [voice(id, Tick(0), None)], None);
+        let frame = m.mix(&sonic, Observer::origin(), Tick(0), MixBudget::HEARTH);
+        assert_eq!(frame.pcm[0], 2_000);
+        assert_eq!(frame.pcm[1], 2_000);
+        assert_eq!(m.sink().samples(), frame.pcm);
     }
 }

@@ -1,9 +1,10 @@
 //! Trace events → [`SonicManifest`]. Trace is the cue list.
 
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
-use klotho_core::{BlobId, Epoch, IVec3, Sigil};
-use klotho_manifest::{BedRef, GrainVoice, SonicManifest};
+use klotho_core::{AabbMm, BlobId, Epoch, IVec3, Sigil};
+use klotho_manifest::{BedRef, GrainVoice, Observer, SonicManifest};
 use klotho_trace::{PoseReason, RelTag, TraceBody, TraceEvent};
 
 const KNOCK: &str = "grain.wood.knock";
@@ -24,7 +25,10 @@ pub fn extract_sonic(
     tags: &BTreeMap<String, BlobId>,
     bed: Option<BedRef>,
     pose_of: impl Fn(Sigil) -> Option<IVec3>,
+    opaque: &[AabbMm],
+    observer: Observer,
 ) -> SonicManifest {
+    let eye = observer.eye.translation();
     let mut grains = Vec::new();
     for ev in events {
         let Some((tag, pos)) = cue(&ev.body) else {
@@ -42,7 +46,7 @@ pub fn extract_sonic(
             at: ev.tick,
             gain_milli: GAIN_FULL,
             pos,
-            occluded: false,
+            occluded: grain_occluded(pos, eye, opaque),
         });
     }
     SonicManifest::from_voices(epoch, grains, bed)
@@ -64,6 +68,97 @@ fn cue(body: &TraceBody) -> Option<(&'static str, CuePos)> {
         TraceBody::Emitted { a, .. } => Some((KNOCK, CuePos::Locus(*a))),
         _ => None,
     }
+}
+
+fn grain_occluded(pos: Option<IVec3>, eye: IVec3, hulls: &[AabbMm]) -> bool {
+    let Some(pos) = pos else {
+        return false;
+    };
+    if hulls.is_empty() {
+        return false;
+    }
+    for h in hulls {
+        if h.is_empty() || h.contains_point(pos) {
+            continue;
+        }
+        if open_segment_hits_aabb(eye, pos, *h) {
+            return true;
+        }
+    }
+    false
+}
+
+fn open_segment_hits_aabb(a: IVec3, b: IVec3, hull: AabbMm) -> bool {
+    if hull.is_empty() {
+        return false;
+    }
+    if a.x == b.x && a.y == b.y && a.z == b.z {
+        return false;
+    }
+    let mut t = TInterval {
+        min_n: 0,
+        min_d: 1,
+        max_n: 1,
+        max_d: 1,
+    };
+    if !slab_axis(a.x, b.x, hull.min.x, hull.max.x, &mut t) {
+        return false;
+    }
+    if !slab_axis(a.y, b.y, hull.min.y, hull.max.y, &mut t) {
+        return false;
+    }
+    if !slab_axis(a.z, b.z, hull.min.z, hull.max.z, &mut t) {
+        return false;
+    }
+    cmp_frac(t.max_n, t.max_d, 0, 1) == Ordering::Greater
+        && cmp_frac(t.min_n, t.min_d, 1, 1) == Ordering::Less
+}
+
+struct TInterval {
+    min_n: i64,
+    min_d: i64,
+    max_n: i64,
+    max_d: i64,
+}
+
+fn slab_axis(ao: i32, bo: i32, min: i32, max: i32, t: &mut TInterval) -> bool {
+    let orig = i64::from(ao);
+    let dest = i64::from(bo);
+    let min = i64::from(min);
+    let max = i64::from(max);
+    let dir = dest - orig;
+    if dir == 0 {
+        return orig >= min && orig <= max;
+    }
+    let mut enter_n = min - orig;
+    let mut enter_d = dir;
+    let mut exit_n = max - orig;
+    let mut exit_d = dir;
+    if cmp_frac(enter_n, enter_d, exit_n, exit_d) == Ordering::Greater {
+        core::mem::swap(&mut enter_n, &mut exit_n);
+        core::mem::swap(&mut enter_d, &mut exit_d);
+    }
+    if cmp_frac(enter_n, enter_d, t.min_n, t.min_d) == Ordering::Greater {
+        t.min_n = enter_n;
+        t.min_d = enter_d;
+    }
+    if cmp_frac(exit_n, exit_d, t.max_n, t.max_d) == Ordering::Less {
+        t.max_n = exit_n;
+        t.max_d = exit_d;
+    }
+    cmp_frac(t.min_n, t.min_d, t.max_n, t.max_d) != Ordering::Greater
+}
+
+fn cmp_frac(mut an: i64, mut ad: i64, mut bn: i64, mut bd: i64) -> Ordering {
+    if ad < 0 {
+        an = -an;
+        ad = -ad;
+    }
+    if bd < 0 {
+        bn = -bn;
+        bd = -bd;
+    }
+    (i128::from(an) * i128::from(bd)).cmp(&(i128::from(bn) * i128::from(ad)))
 }
 
 #[cfg(test)]
@@ -105,9 +200,61 @@ mod tests {
 
     fn extract(events: &[TraceEvent], bed: Option<BedRef>) -> SonicManifest {
         let poses = poses();
-        extract_sonic(events, Epoch::ZERO, &tags(), bed, |s| {
-            poses.get(&s).copied()
-        })
+        extract_sonic(
+            events,
+            Epoch::ZERO,
+            &tags(),
+            bed,
+            |s| poses.get(&s).copied(),
+            &[],
+            Observer::origin(),
+        )
+    }
+
+    fn observer_at(x: i32, y: i32, z: i32) -> Observer {
+        Observer {
+            eye: PoseMm::new(Mm(x), Mm(y), Mm(z), YawMd::ZERO),
+            pitch_md: 0,
+        }
+    }
+
+    fn hinge_at(x: i32, y: i32, z: i32) -> TraceEvent {
+        TraceEvent::new(
+            Tick(1),
+            TraceBody::PoseCommitted {
+                s: relic(1),
+                pose: PoseMm::new(Mm(x), Mm(y), Mm(z), YawMd::ZERO),
+                reason: PoseReason::Hinge,
+            },
+        )
+    }
+
+    fn extract_opaque(opaque: &[AabbMm], observer: Observer, pos: IVec3) -> GrainVoice {
+        let s = extract_sonic(
+            &[hinge_at(pos.x, pos.y, pos.z)],
+            Epoch::ZERO,
+            &tags(),
+            None,
+            |_| None,
+            opaque,
+            observer,
+        );
+        s.grains[0]
+    }
+
+    fn wall(z0: i32, z1: i32) -> AabbMm {
+        AabbMm::new(
+            IVec3 {
+                x: -10,
+                y: -10,
+                z: z0,
+            },
+            IVec3 {
+                x: 10,
+                y: 10,
+                z: z1,
+            },
+        )
     }
 
     #[test]
@@ -176,6 +323,7 @@ mod tests {
         assert_eq!(s.grains[3].blob, blob(2));
         assert_eq!(s.grains[4].blob, blob(1));
         assert_eq!(s.grains[4].gain_milli, 1000);
+        assert!(s.grains.iter().all(|g| !g.occluded));
     }
 
     #[test]
@@ -290,7 +438,15 @@ mod tests {
                 quantum: 1,
             },
         )];
-        let s = extract_sonic(&events, Epoch::ZERO, &BTreeMap::new(), None, |_| None);
+        let s = extract_sonic(
+            &events,
+            Epoch::ZERO,
+            &BTreeMap::new(),
+            None,
+            |_| None,
+            &[],
+            Observer::origin(),
+        );
         assert!(s.grains.is_empty());
     }
 
@@ -308,5 +464,137 @@ mod tests {
         let s = extract(&events, None);
         assert_eq!(s.grains.len(), 1);
         assert_eq!(s.grains[0].pos, None);
+        assert!(!s.grains[0].occluded);
+    }
+
+    #[test]
+    fn empty_hulls_never_occlude() {
+        let g = extract_opaque(
+            &[],
+            observer_at(0, 0, 0),
+            IVec3 {
+                x: 0,
+                y: 0,
+                z: 1000,
+            },
+        );
+        assert!(!g.occluded);
+    }
+
+    #[test]
+    fn missing_pos_never_occludes_even_with_hulls() {
+        let a = relic(9);
+        let events = [TraceEvent::new(
+            Tick(1),
+            TraceBody::RelAdd {
+                a,
+                rel: RelTag::LOCKED_BY,
+                b: a,
+            },
+        )];
+        let hull = wall(400, 600);
+        let s = extract_sonic(
+            &events,
+            Epoch::ZERO,
+            &tags(),
+            None,
+            |_| None,
+            &[hull],
+            observer_at(0, 0, 0),
+        );
+        assert_eq!(s.grains[0].pos, None);
+        assert!(!s.grains[0].occluded);
+    }
+
+    #[test]
+    fn hull_between_observer_and_grain_occludes() {
+        let g = extract_opaque(
+            &[wall(400, 600)],
+            observer_at(0, 0, 0),
+            IVec3 {
+                x: 0,
+                y: 0,
+                z: 1000,
+            },
+        );
+        assert!(g.occluded);
+    }
+
+    #[test]
+    fn grain_inside_hull_is_door_knock_not_occluded() {
+        let g = extract_opaque(
+            &[wall(400, 600)],
+            observer_at(0, 0, 0),
+            IVec3 { x: 0, y: 0, z: 500 },
+        );
+        assert!(!g.occluded);
+    }
+
+    #[test]
+    fn empty_aabb_never_occludes() {
+        let empty = AabbMm::new(IVec3 { x: 1, y: 0, z: 400 }, IVec3 { x: 0, y: 0, z: 600 });
+        assert!(empty.is_empty());
+        let g = extract_opaque(
+            &[empty],
+            observer_at(0, 0, 0),
+            IVec3 {
+                x: 0,
+                y: 0,
+                z: 1000,
+            },
+        );
+        assert!(!g.occluded);
+    }
+
+    #[test]
+    fn face_touching_closed_aabb_still_occludes() {
+        let face = AabbMm::new(
+            IVec3 {
+                x: -10,
+                y: -10,
+                z: 500,
+            },
+            IVec3 {
+                x: 10,
+                y: 10,
+                z: 500,
+            },
+        );
+        let g = extract_opaque(
+            &[face],
+            observer_at(0, 0, 0),
+            IVec3 {
+                x: 0,
+                y: 0,
+                z: 1000,
+            },
+        );
+        assert!(g.occluded);
+    }
+
+    #[test]
+    fn observer_inside_blocking_hull_still_occludes() {
+        let hull = AabbMm::new(
+            IVec3 {
+                x: -100,
+                y: -100,
+                z: -100,
+            },
+            IVec3 {
+                x: 100,
+                y: 100,
+                z: 100,
+            },
+        );
+        let g = extract_opaque(
+            &[hull],
+            observer_at(0, 0, 0),
+            IVec3 {
+                x: 0,
+                y: 0,
+                z: 1000,
+            },
+        );
+        assert!(g.occluded);
     }
 }

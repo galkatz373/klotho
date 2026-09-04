@@ -3,6 +3,8 @@
 //! v1 Weaver is **retrieval**. Missing tags are cook errors, not synthesis
 //! (K6 / Q4). Every blob carries a [`LicenseSpan`]. Quantized little-endian
 //! verts; cook hash is stable across OS (no host floats in hashed bytes).
+//! DCC ingest is [`cook_with_dcc`] plus [`encode_mesh_i16`] / [`encode_hull`] /
+//! [`encode_clipset`]; this crate does not parse glTF.
 //!
 //! Depends on ir, prove, canon, manifest, stream. Packs a cooked `.warp`
 //! (not `KLTH` CAS blobs) as little-endian sections, or a version-2 catalog
@@ -22,7 +24,11 @@ mod kit;
 mod warp;
 
 pub use catalog::{CATALOG_FILE, CatalogManifest, PlaceCatalogEntry, write_catalog};
-pub use cook::{Binding, COMPILER_VERSION, Cooked, blob_of, cook_doc, cook_with, digest_of};
+pub use cook::{
+    Binding, COMPILER_VERSION, Cooked, DccArtifact, blob_of, cook_doc, cook_with, cook_with_dcc,
+    digest_of,
+};
+pub use encode::{encode_clipset, encode_hull, encode_mesh_i16};
 pub use error::CompileError;
 pub use header::{
     ClipSetInfo, DecodedClip, DecodedGrain, DecodedMesh, DecodedSkinnedMesh, GRAIN_HZ, GrainInfo,

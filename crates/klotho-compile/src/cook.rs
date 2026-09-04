@@ -7,7 +7,8 @@ use klotho_core::Hash;
 use klotho_ir::{IntentDoc, Name, SeedFact, to_ron};
 use klotho_manifest::MaterialTag;
 use klotho_prove::{
-    Activity, Agent, ArtifactKind, Cas, ProvenanceDag, ProvenanceKind, blob_id_of, hash_bytes,
+    Activity, Agent, ArtifactKind, Cas, LicenseSpan, ProveError, ProvenanceDag, ProvenanceKind,
+    blob_id_of, hash_bytes,
 };
 
 use crate::encode::{
@@ -16,6 +17,7 @@ use crate::encode::{
 use crate::error::CompileError;
 use crate::header::{
     validate_clipset, validate_grain, validate_hull, validate_mesh, validate_rite,
+    validate_skinned_mesh,
 };
 use crate::kit::Kitbash;
 
@@ -58,6 +60,25 @@ pub struct Cooked {
     pub grains: BTreeMap<String, klotho_core::BlobId>,
     /// ClipSet tag → blob (`biped` is the v1 Hearth table).
     pub clips: BTreeMap<String, klotho_core::BlobId>,
+}
+
+/// Quantized glTF blobs for [`cook_with_dcc`]. Compile does not parse glTF.
+#[derive(Clone, Debug)]
+pub struct DccArtifact {
+    /// `extras.klotho.affordance`.
+    pub tag: String,
+    /// SPDX / commissioned span. [`LicenseSpan::Unknown`] fails export.
+    pub license: LicenseSpan,
+    /// KLTH ClusteredMesh bytes.
+    pub mesh: Vec<u8>,
+    /// KLTH Hull bytes.
+    pub hull: Vec<u8>,
+    /// KLTH SkinnedMesh bytes when the source had `JOINTS_0`.
+    pub skinned: Option<Vec<u8>>,
+    /// KLTH ClipSet bytes when animations were present.
+    pub clips: Option<Vec<u8>>,
+    /// blake3 of the glTF bytes (and BIN if any).
+    pub source_hash: Hash,
 }
 
 /// Cook `doc` against the workspace kitbash.
@@ -234,6 +255,203 @@ pub fn cook_with(doc: &IntentDoc, kit: &Kitbash) -> Result<Cooked, CompileError>
     })
 }
 
+/// Cook `doc` against already-quantized DCC artifacts. Does not load kitbash.
+pub fn cook_with_dcc(doc: &IntentDoc, imports: &[DccArtifact]) -> Result<Cooked, CompileError> {
+    let mut by_tag = BTreeMap::new();
+    for a in imports {
+        if a.tag.is_empty() {
+            return Err(CompileError::MissingTag(String::new()));
+        }
+        if !a.license.is_exportable() {
+            return Err(CompileError::prove(ProveError::UnknownLicense));
+        }
+        if by_tag.insert(a.tag.clone(), a).is_some() {
+            return Err(CompileError::Gltf(format!("duplicate tag {}", a.tag)));
+        }
+    }
+    for t in &doc.style.kitbash_tags {
+        if !by_tag.contains_key(t.as_str()) {
+            return Err(CompileError::MissingTag(t.as_str().to_string()));
+        }
+    }
+
+    let canon = cook_canon(doc).map_err(CompileError::canon)?;
+    if !canon.rites.is_empty() && imports.is_empty() {
+        return Err(CompileError::Prove("rite cook needs a DCC license".into()));
+    }
+
+    let mut cas = Cas::new();
+    let mut dag = ProvenanceDag::new();
+
+    let Some(first) = imports.first() else {
+        let cook_hash = cook_digest(doc, &[]);
+        return Ok(Cooked {
+            doc: doc.clone(),
+            canon,
+            cook_hash,
+            canon_hash: cook_hash,
+            cas,
+            dag,
+            bindings: Vec::new(),
+            grains: BTreeMap::new(),
+            clips: BTreeMap::new(),
+        });
+    };
+    let license = first.license.clone();
+
+    let comp_agent = dag
+        .insert(
+            ProvenanceKind::Agent {
+                agent: Agent::Compiler {
+                    version: COMPILER_VERSION,
+                },
+            },
+            license.clone(),
+            &[],
+        )
+        .map_err(CompileError::prove)?;
+    let intent_node = dag
+        .insert(
+            ProvenanceKind::Intent {
+                doc_hash: doc.provenance.0,
+            },
+            license.clone(),
+            &[],
+        )
+        .map_err(CompileError::prove)?;
+
+    let mut src_nodes = Vec::new();
+    for a in imports {
+        let src = dag
+            .insert(
+                ProvenanceKind::Intent {
+                    doc_hash: a.source_hash,
+                },
+                a.license.clone(),
+                &[],
+            )
+            .map_err(CompileError::prove)?;
+        src_nodes.push(src);
+    }
+
+    let mut cook_parents = vec![comp_agent, intent_node];
+    cook_parents.extend_from_slice(&src_nodes);
+    let cook_act = dag
+        .insert(
+            ProvenanceKind::Activity {
+                activity: Activity::Cook,
+            },
+            license.clone(),
+            &cook_parents,
+        )
+        .map_err(CompileError::prove)?;
+
+    let mut mesh_ids = BTreeMap::new();
+    let mut hull_ids = BTreeMap::new();
+    let mut clip_ids = BTreeMap::new();
+    let mut dcc_blobs = Vec::new();
+
+    for (i, a) in imports.iter().enumerate() {
+        let src = src_nodes[i];
+        let parents = [cook_act, comp_agent, src];
+
+        validate_mesh(&a.mesh)?;
+        validate_hull(&a.hull)?;
+        let mid = cas.put(&a.mesh).map_err(CompileError::prove)?;
+        let hid = cas.put(&a.hull).map_err(CompileError::prove)?;
+        put_artifact(
+            &mut dag,
+            mid,
+            ArtifactKind::ClusteredMesh,
+            a.license.clone(),
+            &parents,
+        )?;
+        put_artifact(
+            &mut dag,
+            hid,
+            ArtifactKind::Hull,
+            a.license.clone(),
+            &parents,
+        )?;
+        mesh_ids.insert(a.tag.clone(), mid);
+        hull_ids.insert(a.tag.clone(), hid);
+        dcc_blobs.push(mid);
+        dcc_blobs.push(hid);
+
+        if let Some(sk) = &a.skinned {
+            validate_skinned_mesh(sk)?;
+            let id = cas.put(sk).map_err(CompileError::prove)?;
+            put_artifact(
+                &mut dag,
+                id,
+                ArtifactKind::SkinnedMesh,
+                a.license.clone(),
+                &parents,
+            )?;
+            dcc_blobs.push(id);
+        }
+        if let Some(cl) = &a.clips {
+            validate_clipset(cl)?;
+            let id = cas.put(cl).map_err(CompileError::prove)?;
+            put_artifact(
+                &mut dag,
+                id,
+                ArtifactKind::ClipSet,
+                a.license.clone(),
+                &parents,
+            )?;
+            clip_ids.insert(a.tag.clone(), id);
+            dcc_blobs.push(id);
+        }
+    }
+
+    for rite in &canon.rites {
+        let bytes = encode_rite(&rite.chunk)?;
+        validate_rite(&bytes)?;
+        let id = cas.put(&bytes).map_err(CompileError::prove)?;
+        put_artifact(
+            &mut dag,
+            id,
+            ArtifactKind::RiteChunk,
+            license.clone(),
+            &[cook_act, comp_agent],
+        )?;
+    }
+
+    dag.exportable().map_err(CompileError::prove)?;
+    dag.blobs_present(&cas).map_err(CompileError::prove)?;
+
+    let mut bindings = Vec::new();
+    for fact in &doc.seed {
+        let SeedFact::Locus { name, .. } = fact else {
+            continue;
+        };
+        let Some(art) = by_tag.get(name.as_str()) else {
+            continue;
+        };
+        bindings.push(Binding {
+            locus: name.clone(),
+            tag: Name::from(art.tag.as_str()),
+            hull: *hull_ids.get(&art.tag).expect("encoded"),
+            mesh: *mesh_ids.get(&art.tag).expect("encoded"),
+            material: MaterialTag::Organic,
+        });
+    }
+
+    let cook_hash = cook_digest(doc, &dcc_blobs);
+    Ok(Cooked {
+        doc: doc.clone(),
+        canon,
+        cook_hash,
+        canon_hash: cook_hash,
+        cas,
+        dag,
+        bindings,
+        grains: BTreeMap::new(),
+        clips: clip_ids,
+    })
+}
+
 fn put_artifact(
     dag: &mut ProvenanceDag,
     blob: klotho_core::BlobId,
@@ -352,5 +570,65 @@ mod tests {
                 .any(|b| b.locus.as_str() == "fathers_hammer")
         );
         assert_eq!(cooked.cook_hash, cook_doc(&doc).unwrap().cook_hash);
+    }
+
+    #[test]
+    fn cook_doc_does_not_need_dcc() {
+        let cooked = cook_doc(&empty_doc(&Kitbash::HEARTH_TAGS)).unwrap();
+        assert!(cooked.dag.exportable().is_ok());
+        assert!(cooked.cas.len() >= 28);
+    }
+
+    fn dcc_tri(tag: &str, license: LicenseSpan) -> DccArtifact {
+        let mesh =
+            crate::encode_mesh_i16(&[[0, 0, 0], [100, 0, 0], [0, 100, 0]], &[0, 1, 2]).unwrap();
+        let hull = crate::encode_hull(klotho_core::AabbMm::new(
+            klotho_core::IVec3 { x: 0, y: 0, z: 0 },
+            klotho_core::IVec3 {
+                x: 100,
+                y: 100,
+                z: 0,
+            },
+        ));
+        DccArtifact {
+            tag: tag.into(),
+            license,
+            mesh,
+            hull,
+            skinned: None,
+            clips: None,
+            source_hash: Hash::ZERO,
+        }
+    }
+
+    #[test]
+    fn dcc_style_tag_missing_is_cook_error() {
+        let lic = LicenseSpan::spdx("CC0-1.0", "test").unwrap();
+        let art = dcc_tri("prop.cube.portable", lic);
+        let e = cook_with_dcc(&empty_doc(&["no.such.tag"]), &[art]).unwrap_err();
+        assert!(matches!(e, CompileError::MissingTag(t) if t == "no.such.tag"));
+    }
+
+    #[test]
+    fn dcc_unknown_license_fails_export() {
+        let art = dcc_tri("prop.cube.portable", LicenseSpan::Unknown);
+        let e = cook_with_dcc(&empty_doc(&["prop.cube.portable"]), &[art]).unwrap_err();
+        assert!(matches!(e, CompileError::Prove(s) if s.contains("UnknownLicense")));
+    }
+
+    #[test]
+    fn dcc_tagged_ingest_is_exportable() {
+        let lic = LicenseSpan::spdx("CC0-1.0", "Klotho fixtures").unwrap();
+        let art = dcc_tri("prop.cube.portable", lic);
+        let mut doc = empty_doc(&["prop.cube.portable"]);
+        doc.seed = vec![SeedFact::Locus {
+            name: Name::from("prop.cube.portable"),
+            kind: LocusKind::Relic,
+        }];
+        let cooked = cook_with_dcc(&doc, &[art]).unwrap();
+        assert!(cooked.dag.exportable().is_ok());
+        assert_eq!(cooked.bindings.len(), 1);
+        assert_eq!(cooked.bindings[0].tag.as_str(), "prop.cube.portable");
+        assert!(cooked.grains.is_empty());
     }
 }

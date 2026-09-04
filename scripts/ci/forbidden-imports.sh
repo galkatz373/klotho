@@ -33,6 +33,7 @@ check_gameplay_tables examples/chorus-slice
 check_gameplay_tables examples/netlock-slice
 check_gameplay_tables crates/klotho-author
 check_gameplay_tables crates/klotho-editor
+check_gameplay_tables crates/klotho-dcc
 
 # klotho-interest may not import commit (K49).
 if command -v rg >/dev/null 2>&1; then
@@ -70,6 +71,32 @@ check_gameplay_jobs examples/ash-slice
 check_gameplay_jobs examples/ember-slice
 check_gameplay_jobs examples/drift-slice
 check_gameplay_jobs crates/klotho-author
+
+# Gameplay and authoring must not import cook-time DCC.
+check_no_dcc() {
+  local dir="$1"
+  if [[ ! -d "$dir" ]]; then
+    return 0
+  fi
+  if command -v rg >/dev/null 2>&1; then
+    if rg -n --glob '!target/**' 'klotho_dcc::|klotho-dcc' "$dir"; then
+      echo "forbidden_imports: $dir must not import klotho-dcc" >&2
+      fail=1
+    fi
+  else
+    if grep -RIn -E 'klotho_dcc::|klotho-dcc' "$dir" >/dev/null 2>&1; then
+      echo "forbidden_imports: $dir must not import klotho-dcc" >&2
+      fail=1
+    fi
+  fi
+}
+check_no_dcc examples/hearth-slice
+check_no_dcc examples/ash-slice
+check_no_dcc examples/ember-slice
+check_no_dcc examples/drift-slice
+check_no_dcc crates/klotho-author
+check_no_dcc crates/klotho-sim
+check_no_dcc crates/klotho-commit
 
 # Gameplay, motion, and sim must not import phys internals.
 check_no_phys() {

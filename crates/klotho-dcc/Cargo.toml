@@ -1,0 +1,21 @@
+[package]
+name = "klotho-dcc"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Klotho DCC cook: glTF 2.0 to quantized KLTH mesh/hull/clip"
+readme = false
+publish = false
+
+[dependencies]
+klotho-compile.workspace = true
+klotho-core.workspace = true
+klotho-ir.workspace = true
+klotho-prove.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

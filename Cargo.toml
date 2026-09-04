@@ -20,6 +20,7 @@ members = [
     "crates/klotho-infer",
     "crates/klotho-manifest",
     "crates/klotho-compile",
+    "crates/klotho-dcc",
     "crates/klotho-stream",
     "crates/klotho-platform",
     "crates/klotho-render",
@@ -65,6 +66,7 @@ klotho-mind = { path = "crates/klotho-mind" }
 klotho-infer = { path = "crates/klotho-infer" }
 klotho-manifest = { path = "crates/klotho-manifest" }
 klotho-compile = { path = "crates/klotho-compile" }
+klotho-dcc = { path = "crates/klotho-dcc" }
 klotho-stream = { path = "crates/klotho-stream" }
 klotho-platform = { path = "crates/klotho-platform" }
 memmap2 = "0.9"
@@ -77,6 +79,7 @@ klotho-debug = { path = "crates/klotho-debug" }
 klotho-net = { path = "crates/klotho-net" }
 ron = "0.11.0"
 serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.151"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

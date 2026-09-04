@@ -76,6 +76,7 @@ klotho/
   crates/klotho-infer/    # InferHost stub; returns InferIntent (no &mut World)
   crates/klotho-manifest/ # Visual/Sonic/Ui manifests; tables pub(crate)
   crates/klotho-compile/  # kitbash retrieval cook → CAS → .warp / sharded catalog
+  crates/klotho-dcc/      # glTF 2.0 cook → quantized KLTH mesh/hull/clip
   crates/klotho-stream/   # Place shard pager, KCAS volumes (mmap after header validate)
   crates/klotho-platform/ # window, OS events, Look accum (no world mutation)
   crates/klotho-render/   # wgpu clustered meshes, Presenter, render thread

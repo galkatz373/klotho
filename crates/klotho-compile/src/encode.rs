@@ -6,7 +6,9 @@ use klotho_ir::to_ron;
 use klotho_prove::ArtifactKind;
 
 use crate::error::CompileError;
-use crate::header::{DecodedClip, GRAIN_HZ, MAX_CLIP_SAMPLES, MAX_CLIPS, write_prefix};
+use crate::header::{
+    DecodedClip, GRAIN_HZ, MAX_CLIP_SAMPLES, MAX_CLIPS, MAX_SKIN_VERTS, MAX_TRIS, write_prefix,
+};
 use crate::kit::{GrainKind, MeshRecipe};
 
 /// Quantize a millimetre extent to `i16`. Overflow is a cook error, not wrap.
@@ -15,7 +17,7 @@ fn q(v: i32) -> Result<i16, CompileError> {
 }
 
 /// Hull blob: prefix + six `i32` LE millimetres.
-pub(crate) fn encode_hull(aabb: AabbMm) -> Vec<u8> {
+pub fn encode_hull(aabb: AabbMm) -> Vec<u8> {
     let mut b = Vec::with_capacity(8 + 24);
     write_prefix(&mut b, ArtifactKind::Hull);
     for v in [
@@ -42,6 +44,50 @@ pub(crate) fn hull_for(hx: i32, hy: i32, hz: i32) -> AabbMm {
     )
 }
 
+/// Clustered mesh from already-quantized `i16` millimetre verts.
+///
+/// Hashed bytes are little-endian integers only. Callers (kitbash recipes or
+/// DCC import) must quantize before this; `f32` does not enter the blob.
+pub fn encode_mesh_i16(verts: &[[i16; 3]], indices: &[u32]) -> Result<Vec<u8>, CompileError> {
+    if verts.is_empty() {
+        return Err(CompileError::Header("empty mesh".into()));
+    }
+    if verts.len() > MAX_SKIN_VERTS as usize {
+        return Err(CompileError::Header(format!(
+            "verts {} > {MAX_SKIN_VERTS}",
+            verts.len()
+        )));
+    }
+    if indices.len() % 3 != 0 {
+        return Err(CompileError::Header("index count not multiple of 3".into()));
+    }
+    let tris = (indices.len() / 3) as u32;
+    if tris > MAX_TRIS {
+        return Err(CompileError::Header(format!("tris {tris} > {MAX_TRIS}")));
+    }
+    if tris == 0 {
+        return Err(CompileError::Header("empty mesh".into()));
+    }
+    for &i in indices {
+        if (i as usize) >= verts.len() {
+            return Err(CompileError::Header("index out of range".into()));
+        }
+    }
+    let mut b = Vec::new();
+    write_prefix(&mut b, ArtifactKind::ClusteredMesh);
+    b.extend_from_slice(&(verts.len() as u32).to_le_bytes());
+    b.extend_from_slice(&(indices.len() as u32).to_le_bytes());
+    for v in verts {
+        b.extend_from_slice(&v[0].to_le_bytes());
+        b.extend_from_slice(&v[1].to_le_bytes());
+        b.extend_from_slice(&v[2].to_le_bytes());
+    }
+    for i in indices {
+        b.extend_from_slice(&i.to_le_bytes());
+    }
+    Ok(b)
+}
+
 /// Clustered mesh: `i16` millimetre verts, `u32` indices, LE.
 pub(crate) fn encode_mesh(recipe: &MeshRecipe) -> Result<Vec<u8>, CompileError> {
     let (verts, indices) = match *recipe {
@@ -52,19 +98,7 @@ pub(crate) fn encode_mesh(recipe: &MeshRecipe) -> Result<Vec<u8>, CompileError> 
             segs: _,
         } => cylinder_mesh(radius, hy)?,
     };
-    let mut b = Vec::new();
-    write_prefix(&mut b, ArtifactKind::ClusteredMesh);
-    b.extend_from_slice(&(verts.len() as u32).to_le_bytes());
-    b.extend_from_slice(&(indices.len() as u32).to_le_bytes());
-    for v in &verts {
-        b.extend_from_slice(&v[0].to_le_bytes());
-        b.extend_from_slice(&v[1].to_le_bytes());
-        b.extend_from_slice(&v[2].to_le_bytes());
-    }
-    for i in indices {
-        b.extend_from_slice(&i.to_le_bytes());
-    }
-    Ok(b)
+    encode_mesh_i16(&verts, &indices)
 }
 
 fn box_mesh(hx: i32, hy: i32, hz: i32) -> Result<(Vec<[i16; 3]>, Vec<u32>), CompileError> {
@@ -189,7 +223,7 @@ pub(crate) fn encode_rite(chunk: &RiteChunk) -> Result<Vec<u8>, CompileError> {
 }
 
 /// ClipSet blob: prefix + `u16` count + packed clips. Integer millimetre samples.
-pub(crate) fn encode_clipset(clips: &[DecodedClip]) -> Result<Vec<u8>, CompileError> {
+pub fn encode_clipset(clips: &[DecodedClip]) -> Result<Vec<u8>, CompileError> {
     if clips.len() > MAX_CLIPS as usize {
         return Err(CompileError::Header(format!(
             "clips {} > {MAX_CLIPS}",
@@ -258,6 +292,21 @@ mod tests {
         decode_clipset, decode_grain, decode_mesh, validate_clipset, validate_grain, validate_hull,
         validate_mesh,
     };
+
+    #[test]
+    fn encode_mesh_i16_matches_recipe_and_rejects_oob() {
+        let via_recipe = encode_mesh(&MeshRecipe::Box {
+            hx: 100,
+            hy: 200,
+            hz: 50,
+        })
+        .unwrap();
+        let decoded = decode_mesh(&via_recipe).unwrap();
+        let via_pub = encode_mesh_i16(&decoded.verts, &decoded.indices).unwrap();
+        assert_eq!(via_recipe, via_pub);
+        let e = encode_mesh_i16(&[[0, 0, 0]], &[0, 1, 2]).unwrap_err();
+        assert!(matches!(e, CompileError::Header(s) if s.contains("index out of range")));
+    }
 
     #[test]
     fn box_mesh_is_i16_le_and_validates() {

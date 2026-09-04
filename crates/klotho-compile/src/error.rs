@@ -35,6 +35,8 @@ pub enum CompileError {
     Io(String),
     /// `.warp` container is truncated, oversize, or has a bad magic/version.
     Warp(String),
+    /// DCC ingest failed (duplicate tag, malformed cooked blob from import).
+    Gltf(String),
 }
 
 impl CompileError {
@@ -64,6 +66,7 @@ impl fmt::Display for CompileError {
             Self::QuantizeOverflow => write!(f, "QuantizeOverflow"),
             Self::Io(s) => write!(f, "Io({s})"),
             Self::Warp(s) => write!(f, "Warp({s})"),
+            Self::Gltf(s) => write!(f, "Gltf({s})"),
         }
     }
 }

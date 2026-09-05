@@ -1,4 +1,4 @@
-//! Attention IR from snapshot + observer mind + Canon.
+//! Attention IR and production HUD skin from snapshot + observer mind + Canon.
 //!
 //! Extract is a pure function of [`WorldSnapshot::view()`], the observer
 //! [`Sigil`], and cooked [`Canon`]. Fact names reach a widget only through
@@ -12,9 +12,14 @@
 
 mod extract;
 mod pause;
+mod skin;
 
 pub use extract::extract_ui;
 pub use pause::{LoadError, Pause, SaveQuad, Session, check_load, load, save_from_snapshot};
+pub use skin::{
+    Color, HudElement, HudFrame, HudPalette, HudSkin, HudSlot, HudViewport, Rect, SafeArea,
+    skin_hud,
+};
 
 pub use klotho_canon::Canon;
 pub use klotho_core::Sigil;

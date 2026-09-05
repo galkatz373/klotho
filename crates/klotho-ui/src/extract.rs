@@ -95,6 +95,7 @@ mod tests {
     use klotho_world::World;
 
     use super::extract_ui;
+    use crate::{HudSkin, HudViewport, skin_hud};
 
     const DENIED: &str = "mira_heard_noise";
     const KNOWN: &str = "player_knows_secret";
@@ -222,6 +223,20 @@ mod tests {
                 .widgets
                 .iter()
                 .all(|w| w.body != DENIED && w.body != SILENT)
+        );
+
+        let styled = skin_hud(
+            &observer_ui,
+            HudViewport::new(1_920, 1_080),
+            HudSkin::default(),
+        );
+        assert!(styled.elements.iter().any(|e| e.body == KNOWN));
+        assert!(
+            styled
+                .elements
+                .iter()
+                .all(|e| e.body != DENIED && e.body != SILENT),
+            "skin invented a denied fact: {styled:?}"
         );
     }
 

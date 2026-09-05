@@ -40,6 +40,7 @@ PR 17 — Minds + infer isolator (`klotho-mind` GOAP, `klotho-infer` stub).
 PR 18 — Debug + determinism CI (`klotho-debug` Trace player, replay.yml).
 PR 19 — `.warp` packaging (`klotho-compile` pack, `klotho-runtime` load, caps + license gate).
 PR 20 — `klotho-net` listen-server (ed25519, TraceDelta, 2-player local). Optional; Hearth local play is unchanged.
+AAA-21b — `klotho-ui` production HUD skin (Knows-gated attention, safe areas, accessibility palette).
 
 ## Build
 
@@ -82,7 +83,7 @@ klotho/
   crates/klotho-platform/ # window, OS events, Look accum, audio device (no world mutation)
   crates/klotho-render/   # wgpu clustered meshes, Presenter, render thread
   crates/klotho-audio/    # grains from Trace, one bed, integer mix, device output
-  crates/klotho-ui/       # attention IR from snapshot, pause save (K17/K19)
+  crates/klotho-ui/       # Knows-gated attention, production HUD skin, pause save
   crates/klotho-cinematic/ # Beat-driven Observer tracks (presentation only)
   crates/klotho-author/   # Distaff: RON/kdown, cook-time Pin, CLI cook/preview
   crates/klotho-editor/   # Distaff viewport: Manifest, outliner, Pin, cook, play-in-editor

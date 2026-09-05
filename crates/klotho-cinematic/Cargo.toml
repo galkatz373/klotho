@@ -1,0 +1,17 @@
+[package]
+name = "klotho-cinematic"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Klotho cinematics: Beat-driven Observer tracks"
+readme = false
+publish = false
+
+[dependencies]
+klotho-ir.workspace = true
+klotho-manifest.workspace = true
+
+[lints]
+workspace = true

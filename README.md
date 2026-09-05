@@ -83,6 +83,7 @@ klotho/
   crates/klotho-render/   # wgpu clustered meshes, Presenter, render thread
   crates/klotho-audio/    # grains from Trace, one bed, integer mix, device output
   crates/klotho-ui/       # attention IR from snapshot, pause save (K17/K19)
+  crates/klotho-cinematic/ # Beat-driven Observer tracks (presentation only)
   crates/klotho-author/   # Distaff: RON/kdown, cook-time Pin, CLI cook/preview
   crates/klotho-editor/   # Distaff viewport: Manifest, outliner, Pin, cook, play-in-editor
   crates/klotho-debug/    # Trace player, reject inspector, 4 ms budget gate

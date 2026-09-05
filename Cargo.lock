@@ -1134,6 +1134,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "klotho-cinematic"
+version = "0.1.0"
+dependencies = [
+ "klotho-ir",
+ "klotho-manifest",
+]
+
+[[package]]
 name = "klotho-commit"
 version = "0.1.0"
 dependencies = [

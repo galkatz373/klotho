@@ -54,7 +54,7 @@ jobs:
         run: cargo test -p klotho-phys
 
   jobs-unsafe:
-    name: jobs Miri · Loom
+    name: jobs Miri · Klotho
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -62,7 +62,9 @@ jobs:
         with:
           components: miri
       - name: Miri steal deque
-        run: cargo miri test -p klotho-jobs --lib
+        # The repository-level rust-toolchain.toml pins stable, so select the
+        # nightly toolchain explicitly; Miri is not distributed for stable.
+        run: cargo +nightly miri test -p klotho-jobs --lib
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.98.0

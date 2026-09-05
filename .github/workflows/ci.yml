@@ -52,3 +52,32 @@ jobs:
         run: test "$(uname -m)" = x86_64
       - name: Phys residual and long-run goldens
         run: cargo test -p klotho-phys
+
+  jobs-unsafe:
+    name: jobs Miri · Loom
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: miri
+      - name: Miri steal deque
+        run: cargo miri test -p klotho-jobs --lib
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.98.0
+      - name: Loom owner/thief model
+        run: cargo test -p klotho-jobs --test loom_deque
+
+  runtime-profiles:
+    name: AAA runtime profiles
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.98.0
+      - name: Adventure profile
+        run: cargo test -p klotho-runtime --features aaa-adventure
+      - name: Shooter profile
+        run: cargo test -p klotho-runtime --features aaa-shooter

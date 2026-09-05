@@ -84,7 +84,9 @@ fn main() -> ExitCode {
     samples.sort();
     let median = samples[samples.len() / 2];
     eprintln!("place-snap apply 10k x{ITERS}: samples={samples:?} median={median:?}");
-    if median.as_secs_f64() * 1_000.0 > 2.0 {
+    // `cargo test --all-targets` executes bench binaries without optimization;
+    // the wall-time gate is meaningful only under `cargo bench`'s release profile.
+    if cfg!(not(debug_assertions)) && median.as_secs_f64() * 1_000.0 > 2.0 {
         eprintln!("FAIL: 10k-row apply median {median:?} exceeds 2 ms");
         ExitCode::FAILURE
     } else {

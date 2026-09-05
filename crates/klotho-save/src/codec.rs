@@ -57,10 +57,12 @@ pub fn encode(blob: &SaveBlob) -> Result<Vec<u8>, SaveError> {
         });
     }
     let mut suffix_bytes = Vec::new();
+    let mut last_tick = blob.trace_from_tick;
     for e in &blob.suffix {
-        if e.tick <= blob.trace_from_tick {
+        if e.tick <= blob.trace_from_tick || e.tick < last_tick {
             return Err(SaveError::TickWindow);
         }
+        last_tick = e.tick;
         let ev = encode_event(e);
         if ev.len() > MAX_EVENT_BYTES {
             return Err(SaveError::Oversize {
@@ -156,6 +158,7 @@ pub fn decode(bytes: &[u8]) -> Result<SaveBlob, SaveError> {
         });
     }
     let mut suffix = Vec::new();
+    let mut last_tick = tick;
     for _ in 0..suffix_len {
         let n = take_u32(&mut rest)? as usize;
         if n > MAX_EVENT_BYTES {
@@ -169,9 +172,10 @@ pub fn decode(bytes: &[u8]) -> Result<SaveBlob, SaveError> {
         }
         let ev_bytes = take(&mut rest, n)?;
         let ev = decode_event(ev_bytes).map_err(|_| SaveError::BadEvent)?;
-        if ev.tick <= tick {
+        if ev.tick <= tick || ev.tick < last_tick {
             return Err(SaveError::TickWindow);
         }
+        last_tick = ev.tick;
         suffix.push(ev);
     }
     if !rest.is_empty() {

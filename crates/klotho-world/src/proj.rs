@@ -258,16 +258,19 @@ impl Projection {
             return Err(WorldError::PlaceSnap);
         }
         let mut new_rows = 0usize;
+        let mut packed = Vec::with_capacity(snap.len());
         for row in snap.rows() {
             row_in_place(&row.rels)?;
-            if self.packed(row.sigil).is_none() {
+            let existing = self.packed(row.sigil);
+            if existing.is_none() {
                 new_rows += 1;
             }
+            packed.push(existing);
         }
         if self.sigils.len().saturating_add(new_rows) > self.locus_cap {
             return Err(WorldError::LocusCap);
         }
-        self.append_snap_rows(snap);
+        self.append_snap_rows(snap, &packed);
         for row in snap.rows() {
             for &(r, b) in &row.rels {
                 if r == Rel::In {
@@ -280,9 +283,9 @@ impl Projection {
         Ok(u32::try_from(snap.len()).unwrap_or(u32::MAX))
     }
 
-    fn append_snap_rows(&mut self, snap: &PlaceSnap) {
-        for row in snap.rows() {
-            if let Some(i) = self.packed(row.sigil) {
+    fn append_snap_rows(&mut self, snap: &PlaceSnap, packed: &[Option<PackedIx>]) {
+        for (row, existing) in snap.rows().iter().zip(packed) {
+            if let Some(i) = *existing {
                 self.write_snap_row(i, row);
                 continue;
             }

@@ -19,13 +19,17 @@ use crate::sign::{Keypair, Signed, verify_intent, verifying_key_from_bytes};
 
 /// Hard cap on joined dedicated clients.
 pub const MAX_DEDICATED_PLAYERS: usize = 32;
+/// Maximum ticks between independently decodable Full pose refreshes.
+pub const POSE_FULL_REFRESH_TICKS: u64 = 30;
 
 struct Joined {
     vk: VerifyingKey,
     intent: Option<PlayerIntent>,
     interest: InterestDict,
-    /// Last pose/vel flushed. Loss recovery is Resync/Full, not a PoseDelta ack.
-    last_sent: BTreeMap<u16, (PoseMm, Vel3)>,
+    /// Last Full pose/vel block. Delta packets are relative to this stable
+    /// baseline, so dropping any individual Delta cannot poison later packets.
+    full_base: BTreeMap<u16, (PoseMm, Vel3)>,
+    full_at: Option<Tick>,
     send_full: bool,
 }
 
@@ -174,7 +178,8 @@ impl Server {
                 vk,
                 intent: None,
                 interest: InterestDict::default(),
-                last_sent: BTreeMap::new(),
+                full_base: BTreeMap::new(),
+                full_at: None,
                 send_full: true,
             },
         );
@@ -197,7 +202,8 @@ impl Server {
             return Err(NetError::Oversize);
         }
         slot.send_full = true;
-        slot.last_sent.clear();
+        slot.full_base.clear();
+        slot.full_at = None;
         slot.interest = dict.clone();
         let pkt = Packet::Interest {
             interest_gen: dict.interest_gen,
@@ -294,8 +300,8 @@ impl Server {
         Ok(all)
     }
 
-    /// PoseDelta for `player`: Full on dictionary change / first tick, else Delta vs last sent.
-    /// Loss recovery is Resync/Full, not a PoseDelta ack.
+    /// PoseDelta for `player`: Full on dictionary change / first tick, else an
+    /// independently decodable Delta against that Full baseline.
     pub fn flush_pose(
         &mut self,
         player: PlayerId,
@@ -303,8 +309,11 @@ impl Server {
         poses: &[(Sigil, PoseMm, Vel3)],
     ) -> Result<Packet, NetError> {
         let slot = self.joined.get_mut(&player).ok_or(NetError::NotJoined)?;
-        let block = build_pose_block(slot, poses);
-        update_last_sent(slot, poses);
+        let block = build_pose_block(slot, poses, tick);
+        if matches!(block, PoseBlock::Full(_)) {
+            update_full_base(slot, poses);
+            slot.full_at = Some(tick);
+        }
         slot.send_full = false;
         let pkt = Packet::PoseDelta {
             tick,
@@ -320,7 +329,8 @@ impl Server {
         let interest = {
             let slot = self.joined.get_mut(&player).ok_or(NetError::NotJoined)?;
             slot.send_full = true;
-            slot.last_sent.clear();
+            slot.full_base.clear();
+            slot.full_at = None;
             Packet::Interest {
                 interest_gen: slot.interest.interest_gen,
                 places: slot.interest.places.clone(),
@@ -461,18 +471,20 @@ impl Server {
     }
 }
 
-fn build_pose_block(slot: &Joined, poses: &[(Sigil, PoseMm, Vel3)]) -> PoseBlock {
+fn build_pose_block(slot: &Joined, poses: &[(Sigil, PoseMm, Vel3)], tick: Tick) -> PoseBlock {
     let mapped = map_poses(&slot.interest.sigils, poses);
-    if slot.send_full || slot.last_sent.is_empty() {
+    let refresh_due = slot
+        .full_at
+        .is_some_and(|at| tick.0.saturating_sub(at.0) >= POSE_FULL_REFRESH_TICKS);
+    if slot.send_full || slot.full_base.is_empty() || refresh_due {
         return full_block(&mapped);
     }
     let mut deltas = Vec::new();
     for (ix, pose, _) in &mapped {
-        match slot.last_sent.get(ix) {
+        match slot.full_base.get(ix) {
             None => return full_block(&mapped),
             // Delta rows carry pose only and the overlay never reads
-            // velocity, so a velocity-only change is baseline-tracked (via
-            // update_last_sent after every flush) with no transmission.
+            // velocity, so a velocity-only change needs no transmission.
             // Revisit if the overlay ever consumes velocity (prediction):
             // the honest options then are per-row Full (wire-format change)
             // or carrying vel in every delta entry (14 B -> 26 B each).
@@ -516,9 +528,9 @@ fn map_poses(dict: &[Sigil], poses: &[(Sigil, PoseMm, Vel3)]) -> Vec<(u16, PoseM
     out
 }
 
-fn update_last_sent(slot: &mut Joined, poses: &[(Sigil, PoseMm, Vel3)]) {
+fn update_full_base(slot: &mut Joined, poses: &[(Sigil, PoseMm, Vel3)]) {
     for (ix, pose, vel) in map_poses(&slot.interest.sigils, poses) {
-        slot.last_sent.insert(ix, (pose, vel));
+        slot.full_base.insert(ix, (pose, vel));
     }
 }
 
@@ -743,10 +755,100 @@ mod tests {
     }
 
     #[test]
+    fn later_delta_does_not_depend_on_receiving_earlier_delta() {
+        let canon = Hash::from_bytes([26; 32]);
+        let mut server = Server::new(canon, Epoch::ZERO, 30).unwrap();
+        let kp = Keypair::generate().unwrap();
+        let player = server.accept_join(&kp.verifying_bytes()).unwrap();
+        let s = actor();
+        server
+            .set_interest(
+                player,
+                InterestDict {
+                    interest_gen: 1,
+                    places: vec![],
+                    sigils: vec![s],
+                },
+            )
+            .unwrap();
+        let full = server
+            .flush_pose(player, Tick(1), &[(s, pose(10), Vel3::ZERO)])
+            .unwrap();
+        let dropped = server
+            .flush_pose(player, Tick(2), &[(s, pose(14), Vel3::ZERO)])
+            .unwrap();
+        let received = server
+            .flush_pose(player, Tick(3), &[(s, pose(18), Vel3::ZERO)])
+            .unwrap();
+        assert!(matches!(
+            full,
+            Packet::PoseDelta {
+                block: PoseBlock::Full(_),
+                ..
+            }
+        ));
+        assert!(matches!(
+            dropped,
+            Packet::PoseDelta {
+                block: PoseBlock::Delta(_),
+                ..
+            }
+        ));
+        match received {
+            Packet::PoseDelta {
+                block: PoseBlock::Delta(d),
+                ..
+            } => {
+                assert_eq!(d[0].dpose[0], 8);
+            }
+            other => panic!("expected Delta, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn periodic_full_converges_after_last_delta_is_lost() {
+        let canon = Hash::from_bytes([27; 32]);
+        let mut server = Server::new(canon, Epoch::ZERO, 30).unwrap();
+        let kp = Keypair::generate().unwrap();
+        let player = server.accept_join(&kp.verifying_bytes()).unwrap();
+        let s = actor();
+        server
+            .set_interest(
+                player,
+                InterestDict {
+                    interest_gen: 1,
+                    places: vec![],
+                    sigils: vec![s],
+                },
+            )
+            .unwrap();
+        let _full = server
+            .flush_pose(player, Tick(1), &[(s, pose(10), Vel3::ZERO)])
+            .unwrap();
+        let _lost = server
+            .flush_pose(player, Tick(2), &[(s, pose(14), Vel3::ZERO)])
+            .unwrap();
+        let refresh = server
+            .flush_pose(
+                player,
+                Tick(1 + POSE_FULL_REFRESH_TICKS),
+                &[(s, pose(14), Vel3::ZERO)],
+            )
+            .unwrap();
+        assert!(matches!(
+            refresh,
+            Packet::PoseDelta {
+                block: PoseBlock::Full(_),
+                ..
+            }
+        ));
+    }
+
+    #[test]
     fn flush_pose_vel_only_change_is_silent() {
-        // Velocity is baseline-tracked but never transmitted (the overlay
-        // holds poses only): a vel-only change must not force a Full block
-        // for every mover.
+        // Velocity travels only in periodic Full blocks (the overlay holds
+        // poses only): a vel-only change must not force an immediate Full for
+        // every mover.
         let canon = Hash::from_bytes([23; 32]);
         let mut server = Server::new(canon, Epoch::ZERO, 30).unwrap();
         let kp = Keypair::generate().unwrap();

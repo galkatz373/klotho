@@ -167,8 +167,7 @@ pub fn load(
     expected_prefix: Hash,
     expected_canon: Hash,
 ) -> Result<Arc<WorldSnapshot>, LoadError> {
-    check_load(&quad, expected_prefix, expected_canon)?;
-    Ok(quad.snapshot)
+    klotho_save::restore(&quad.as_blob(), expected_prefix, expected_canon)
 }
 
 #[cfg(test)]

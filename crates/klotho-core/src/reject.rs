@@ -29,7 +29,7 @@ pub enum RejectReason {
     WrongHull,
     /// Same-tick write conflict after ordered commit (K18 / K21).
     Conflict,
-    /// Pred-ops, rite-steps, or `us_sim` exhausted; fail closed.
+    /// Deterministic pred-op or rite-step budget exhausted; fail closed.
     Budget,
     /// More contact groups this tick than [`crate::MAX_ISLANDS`].
     TooManyIslands,

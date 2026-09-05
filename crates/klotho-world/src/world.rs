@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use klotho_canon::{Canon, OPAQUE};
 use klotho_core::{AffordanceId, Epoch, Hash, Tick};
-use klotho_trace::TraceLog;
+use klotho_trace::{TraceEvent, TraceLog, fold_prefix};
 
 use crate::error::SnapError;
 use crate::heap::IntentHeap;
@@ -166,6 +166,27 @@ impl WorldSnapshot {
     #[must_use]
     pub fn view(&self) -> WorldView<'_> {
         WorldView::at(&self.blob, self.tick)
+    }
+
+    /// Apply the state changes represented by a committed Trace suffix.
+    /// Callers validate suffix ancestry before use. Production saves use an
+    /// empty suffix so columns without event forms remain exact.
+    #[must_use]
+    pub fn replay_suffix(&self, suffix: &[TraceEvent]) -> Self {
+        let mut projection = (*self.blob).clone();
+        let mut tick = self.tick;
+        for event in suffix {
+            projection.apply_event(event);
+            tick = tick.max(event.tick);
+        }
+        projection.rebuild_space_ix();
+        Self {
+            epoch: self.epoch,
+            tick,
+            canon_hash: self.canon_hash,
+            trace_prefix_hash: fold_prefix(self.trace_prefix_hash, suffix),
+            blob: Arc::new(projection),
+        }
     }
 
     /// Conservative heap size of the projection blob. Cap is [`SNAPSHOT_CAP`].

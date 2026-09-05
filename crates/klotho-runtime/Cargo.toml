@@ -27,6 +27,14 @@ default = []
 net = ["dep:klotho-net"]
 net-listen = ["net"]
 net-dedicated = ["net"]
+phys = []
+jobs = []
+stream = []
+infer = []
+profile = []
+editor = []
+aaa-adventure = ["phys", "jobs", "stream"]
+aaa-shooter = ["phys", "jobs", "net-dedicated"]
 
 [dependencies]
 klotho-net = { workspace = true, optional = true }
@@ -48,6 +56,7 @@ klotho-motion.workspace = true
 klotho-mind.workspace = true
 klotho-infer.workspace = true
 klotho-ui.workspace = true
+klotho-phys.workspace = true
 
 [lints]
 workspace = true

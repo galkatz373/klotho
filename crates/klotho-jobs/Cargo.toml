@@ -17,6 +17,7 @@ klotho-world.workspace = true
 [dev-dependencies]
 ash-slice = { path = "../../examples/ash-slice" }
 klotho-ir.workspace = true
+loom = "0.7"
 
 [lints.rust]
 unsafe_code = "allow"

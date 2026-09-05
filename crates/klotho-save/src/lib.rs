@@ -1,7 +1,8 @@
-//! Epoch snapshots and Trace suffix I/O.
+//! Exact epoch snapshots and legacy Trace suffix I/O.
 //!
 //! Pause save copies the published projection with an empty suffix. Automatic
-//! epochs compact on a 30 s clock and refuse a suffix longer than 120 s.
+//! checkpoints do the same on a 30 s clock. The runtime may retain a separate
+//! 120 s Trace ring for replay and diagnostics; it is not a load checkpoint.
 //!
 //! `#![forbid(unsafe_code)]`.
 
@@ -13,12 +14,12 @@ mod codec;
 mod epoch;
 mod error;
 
-pub use blob::{SaveBlob, check_load, load, pause_save};
+pub use blob::{SaveBlob, check_load, load, pause_save, restore};
 pub use codec::{
     MAX_EVENT_BYTES, MAX_SUFFIX_EVENTS, SAVE_CAP, SAVE_MAGIC, SAVE_VERSION, assembled_size,
     check_assembled_size, decode, encode,
 };
-pub use epoch::{AUTOSAVE_SECS, EpochStore, SUFFIX_SECS, ticks_for_secs};
+pub use epoch::{AUTOSAVE_SECS, EpochStore, ticks_for_secs};
 pub use error::SaveError;
 
 #[cfg(test)]
@@ -30,7 +31,7 @@ mod tests {
         Epoch, Hash, LocusKind, Mm, PoseMm, ResourceId, Sigil, Tick, Vel3, VelFx, YawMd,
     };
     use klotho_ir::{CanonDiff, Rel, from_ron};
-    use klotho_trace::{TraceBody, TraceEvent, TraceLog, encode_event};
+    use klotho_trace::{TraceBody, TraceEvent, TraceLog, encode_event, fold_prefix, genesis_hash};
     use klotho_world::{SnapRow, World, WorldSnapshot};
 
     use super::*;
@@ -119,6 +120,49 @@ mod tests {
             check_load(&blob, snap.trace_prefix_hash, snap.canon_hash),
             Ok(())
         );
+    }
+
+    #[test]
+    fn in_memory_header_must_match_embedded_snapshot() {
+        let snap = empty_snap();
+        let mut blob = pause_save(&snap).unwrap();
+        blob.epoch = Epoch(blob.epoch.0 + 1);
+        assert_eq!(
+            check_load(&blob, snap.trace_prefix_hash, snap.canon_hash),
+            Err(SaveError::PrefixMismatch)
+        );
+
+        let mut blob = pause_save(&snap).unwrap();
+        blob.canon_hash = Hash::from_bytes([7; 32]);
+        assert_eq!(
+            check_load(&blob, snap.trace_prefix_hash, blob.canon_hash),
+            Err(SaveError::CanonMismatch)
+        );
+    }
+
+    #[test]
+    fn restore_replays_suffix_and_checks_terminal_prefix() {
+        let base = genesis_hash();
+        let snap = snap_at(Tick(10), base);
+        let event = qty_event(Tick(11));
+        let terminal = fold_prefix(base, std::slice::from_ref(&event));
+        let blob = SaveBlob {
+            canon_hash: snap.canon_hash,
+            epoch: snap.epoch,
+            prefix: base,
+            snap,
+            suffix: vec![event],
+            trace_from_tick: Tick(10),
+        };
+        assert_eq!(
+            check_load(&blob, base, blob.canon_hash),
+            Err(SaveError::PrefixMismatch),
+            "the base prefix is not a valid terminal prefix when a suffix exists"
+        );
+        let restored = restore(&blob, terminal, blob.canon_hash).unwrap();
+        assert_eq!(restored.tick, Tick(11));
+        assert_eq!(restored.trace_prefix_hash, terminal);
+        assert_eq!(restored.view().qty(relic(1), ResourceId(0)), 1);
     }
 
     #[test]
@@ -291,37 +335,29 @@ mod tests {
     }
 
     #[test]
-    fn automatic_30s_roll_empties_suffix() {
+    fn automatic_30s_roll_keeps_exact_snapshots() {
         let mut store = EpochStore::new();
         let genesis = klotho_trace::genesis_hash();
-        store.on_publish(snap_at(Tick(0), genesis), &[], 60);
-        store.on_publish(snap_at(Tick(1799), genesis), &[qty_event(Tick(1))], 60);
+        store.on_publish(snap_at(Tick(0), genesis), 60);
+        store.on_publish(snap_at(Tick(1799), genesis), 60);
         let before = store.current().unwrap();
         assert_eq!(before.trace_from_tick, Tick(0));
-        assert_eq!(before.suffix.len(), 1);
-        assert_eq!(before.suffix[0].tick, Tick(1));
-        store.on_publish(snap_at(Tick(1800), genesis), &[], 60);
+        assert!(before.suffix.is_empty());
+        store.on_publish(snap_at(Tick(1800), genesis), 60);
         let after = store.current().unwrap();
         assert_eq!(after.trace_from_tick, Tick(1800));
         assert!(after.suffix.is_empty());
     }
 
     #[test]
-    fn suffix_120s_forces_compact_without_dropping_chain() {
-        let mut log = TraceLog::new();
-        let e = qty_event(Tick(121));
-        log.append(e.clone());
-        let live = log.prefix_hash();
+    fn checkpoint_waits_for_30s_boundary() {
         let mut store = EpochStore::new();
         let genesis = klotho_trace::genesis_hash();
-        store.on_publish(snap_at(Tick(0), genesis), &[], 1);
-        store.on_publish(snap_at(Tick(20), genesis), std::slice::from_ref(&e), 1);
+        store.on_publish(snap_at(Tick(0), genesis), 1);
+        store.on_publish(snap_at(Tick(20), genesis), 1);
         let cur = store.current().unwrap();
-        assert_eq!(cur.trace_from_tick, Tick(20));
-        assert_eq!(cur.suffix.len(), 1);
-        assert_eq!(cur.suffix[0].tick, Tick(121));
-        let folded = TraceLog::replay_suffix(cur.prefix, &cur.suffix);
-        assert_eq!(folded, live);
+        assert_eq!(cur.trace_from_tick, Tick(0));
+        assert!(cur.suffix.is_empty());
     }
 
     #[test]
@@ -332,8 +368,8 @@ mod tests {
         let live = log.prefix_hash();
         let mut store = EpochStore::new();
         let genesis = klotho_trace::genesis_hash();
-        store.on_publish(snap_at(Tick(0), genesis), &[], 1);
-        store.on_publish(snap_at(Tick(121), live), &[e], 1);
+        store.on_publish(snap_at(Tick(0), genesis), 1);
+        store.on_publish(snap_at(Tick(121), live), 1);
         let cur = store.current().unwrap();
         assert!(cur.suffix.is_empty());
         assert_eq!(cur.prefix, live);
@@ -341,26 +377,21 @@ mod tests {
     }
 
     #[test]
-    fn events_at_or_before_epoch_tick_are_dropped() {
+    fn same_tick_publish_keeps_exact_checkpoint() {
         let mut store = EpochStore::new();
         let genesis = klotho_trace::genesis_hash();
-        store.on_publish(snap_at(Tick(10), genesis), &[], 60);
-        store.on_publish(
-            snap_at(Tick(10), genesis),
-            &[qty_event(Tick(9)), qty_event(Tick(10)), qty_event(Tick(11))],
-            60,
-        );
+        store.on_publish(snap_at(Tick(10), genesis), 60);
+        store.on_publish(snap_at(Tick(10), genesis), 60);
         let cur = store.current().unwrap();
-        assert_eq!(cur.suffix.len(), 1);
-        assert_eq!(cur.suffix[0].tick, Tick(11));
+        assert!(cur.suffix.is_empty());
     }
 
     #[test]
     fn pause_now_ignores_autosave_clock() {
         let mut store = EpochStore::new();
         let genesis = klotho_trace::genesis_hash();
-        store.on_publish(snap_at(Tick(0), genesis), &[qty_event(Tick(1))], 60);
-        assert_eq!(store.current().unwrap().suffix.len(), 1);
+        store.on_publish(snap_at(Tick(0), genesis), 60);
+        assert!(store.current().unwrap().suffix.is_empty());
         let now = snap_at(Tick(3), genesis);
         let blob = store.pause_now(Arc::clone(&now));
         assert!(blob.suffix.is_empty());
@@ -369,13 +400,12 @@ mod tests {
     }
 
     #[test]
-    fn automatic_blob_encode_includes_suffix() {
+    fn automatic_blob_encode_is_an_exact_snapshot() {
         let mut store = EpochStore::new();
         let genesis = klotho_trace::genesis_hash();
-        store.on_publish(snap_at(Tick(0), genesis), &[qty_event(Tick(1))], 60);
+        store.on_publish(snap_at(Tick(0), genesis), 60);
         let bytes = encode(store.current().unwrap()).unwrap();
         let back = decode(&bytes).unwrap();
-        assert_eq!(back.suffix.len(), 1);
-        assert_eq!(back.suffix[0].tick, Tick(1));
+        assert!(back.suffix.is_empty());
     }
 }

@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use klotho_core::{Epoch, Hash, Tick};
-use klotho_trace::TraceEvent;
+use klotho_trace::{TraceEvent, fold_prefix};
 use klotho_world::WorldSnapshot;
 
 use crate::error::SaveError;
@@ -37,18 +37,24 @@ pub fn pause_save(snap: &Arc<WorldSnapshot>) -> Result<SaveBlob, SaveError> {
     })
 }
 
-/// Refuse mismatched ancestry. The canon hash is always checked: a save from
-/// another Canon (or epoch) must never restore, even in-process.
+/// Refuse mismatched ancestry. `expected_prefix` is the terminal prefix after
+/// the suffix, not merely the checkpoint's base prefix.
 pub fn check_load(
     blob: &SaveBlob,
     expected_prefix: Hash,
     expected_canon: Hash,
 ) -> Result<(), SaveError> {
-    if blob.prefix != expected_prefix {
+    if blob.canon_hash != blob.snap.canon_hash || blob.canon_hash != expected_canon {
+        return Err(SaveError::CanonMismatch);
+    }
+    if blob.epoch != blob.snap.epoch
+        || blob.prefix != blob.snap.trace_prefix_hash
+        || blob.trace_from_tick != blob.snap.tick
+    {
         return Err(SaveError::PrefixMismatch);
     }
-    if blob.canon_hash != expected_canon {
-        return Err(SaveError::CanonMismatch);
+    if fold_prefix(blob.prefix, &blob.suffix) != expected_prefix {
+        return Err(SaveError::PrefixMismatch);
     }
     Ok(())
 }
@@ -61,4 +67,14 @@ pub fn load(
 ) -> Result<SaveBlob, SaveError> {
     check_load(&blob, expected_prefix, expected_canon)?;
     Ok(blob)
+}
+
+/// Validate ancestry and rebuild the checkpoint by applying its Trace suffix.
+pub fn restore(
+    blob: &SaveBlob,
+    expected_prefix: Hash,
+    expected_canon: Hash,
+) -> Result<Arc<WorldSnapshot>, SaveError> {
+    check_load(blob, expected_prefix, expected_canon)?;
+    Ok(Arc::new(blob.snap.replay_suffix(&blob.suffix)))
 }

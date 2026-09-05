@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use klotho_canon::cook;
 use klotho_commit::{CommitKernel, Proposal};
-use klotho_core::{Budget, Hash, LocusKind, PlayerId, Tick};
+use klotho_core::{Budget, Hash, LocusKind, MAX_LOCI_HEARTH, PlayerId, Tick};
 use klotho_ir::{
     CanonDiff, IntentDoc, MindSpec, Name, ProvenanceId, Rel, SeedFact, StyleIntent, from_ron,
 };
@@ -26,9 +26,19 @@ pub const HEARTH_DIFFS: &str =
 /// Cook Appendix A, seed the Hearth loci, bind player 0.
 #[must_use]
 pub fn boot() -> CommitKernel {
+    boot_with_locus_cap(MAX_LOCI_HEARTH)
+}
+
+/// Cook Appendix A with an explicit runtime locus capacity.
+#[must_use]
+pub fn boot_with_locus_cap(locus_cap: usize) -> CommitKernel {
     let doc = hearth_doc();
     let canon = cook(&doc).expect("Appendix A must cook");
-    let mut k = CommitKernel::new(World::new(Arc::new(canon), Hash::ZERO));
+    let mut k = CommitKernel::new(World::with_locus_cap(
+        Arc::new(canon),
+        Hash::ZERO,
+        locus_cap,
+    ));
     apply_seed(&mut k, &doc);
     let player = k.canon().pin("player").expect("player pin");
     k.bind_player(PlayerId(0), player);

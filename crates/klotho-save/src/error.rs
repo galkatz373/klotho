@@ -22,13 +22,14 @@ pub enum SaveError {
         /// Cap that was applied first.
         cap: usize,
     },
-    /// `trace_prefix_hash` does not match the expected prefix.
+    /// Prefix, epoch, or tick metadata is internally inconsistent or does not
+    /// match the expected terminal prefix.
     PrefixMismatch,
     /// `canon_hash` does not match the expected cook digest.
     CanonMismatch,
     /// Extra bytes after a well-formed record.
     Trailing,
-    /// A suffix event is at or before the snapshot tick.
+    /// A suffix event is at or before the snapshot tick, or ticks go backwards.
     TickWindow,
     /// A length-prefixed Trace event failed to decode.
     BadEvent,

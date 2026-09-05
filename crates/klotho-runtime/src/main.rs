@@ -10,17 +10,24 @@ use std::fs;
 use std::path::Path;
 use std::process::ExitCode;
 
-use hearth_slice::{boot, hearth_doc};
+#[cfg(test)]
+use hearth_slice::boot;
+use hearth_slice::{boot_with_locus_cap, hearth_doc};
 use klotho_commit::Proposal;
 use klotho_core::Tick;
 use klotho_infer::{InferHost, InferJob};
+use klotho_interest::InterestConfig;
 use klotho_ir::{InferIntent, MindSpec, PlayerIntent, from_ron};
 use klotho_mind::Mind;
 use klotho_motion::Motion;
-use klotho_sim::{METRIC_PROJ_US, METRIC_SNAP_BYTES, Sim};
+use klotho_phys::Phys;
+use klotho_sim::{FrameReport, METRIC_PROJ_US, METRIC_SNAP_BYTES, Sim};
 use klotho_space::Space;
 
-use klotho_runtime::{kernel_from_cooked, load_cooked_warp};
+use klotho_runtime::{
+    RuntimeProfile, apply_interest, ingest_island_jobs, kernel_from_cooked_profile,
+    load_cooked_warp,
+};
 
 fn main() -> ExitCode {
     match run() {
@@ -33,25 +40,31 @@ fn main() -> ExitCode {
 }
 
 fn run() -> Result<(), String> {
+    let profile = RuntimeProfile::compiled();
     let mut args = env::args().skip(1);
     let first = args.next();
     let (kernel, minds, script) = match first.as_deref() {
         Some(path) if path.ends_with(".warp") => {
             let cooked = load_cooked_warp(Path::new(path))?;
             let minds = cooked.doc.minds.clone();
-            let kernel = kernel_from_cooked(&cooked)?;
+            let kernel = kernel_from_cooked_profile(&cooked, profile)?;
             (kernel, minds, args.next())
         }
-        other => (boot(), hearth_doc().minds, other.map(str::to_string)),
+        other => (
+            boot_with_locus_cap(profile.locus_cap()),
+            hearth_doc().minds,
+            other.map(str::to_string),
+        ),
     };
     let mut mind = bind_mind(&kernel, minds);
     let intents: Vec<PlayerIntent> = load_intents(script.as_deref())?;
 
     let n = intents.len();
-    let mut sim = Sim::new(kernel);
+    let mut sim = Sim::with_budget(kernel, profile.budget());
     let host = InferHost::new();
     let mut space = Space;
     let mut motion = Motion::hearth();
+    let phys = Phys;
     let mut rejects = 0usize;
     let mut report = None;
     for mut pi in intents {
@@ -59,9 +72,7 @@ fn run() -> Result<(), String> {
         ingest_infer(&host, &mut sim);
         // Devices emit PlayerIntent; the runtime wraps Proposal::Player.
         sim.ingest(wrap_player(pi));
-        let r = sim
-            .tick(Tick(1), &mut [&mut space, &mut motion, &mut mind])
-            .map_err(|e| format!("sim tick: {e:?}"))?;
+        let r = tick_profiled(&mut sim, profile, &mut space, &mut motion, &mut mind, &phys)?;
         rejects += r.delta.rejects.len();
         report = Some(r);
         kick_infer(&host, &mut sim);
@@ -70,9 +81,7 @@ fn run() -> Result<(), String> {
         Some(r) => r,
         None => {
             ingest_infer(&host, &mut sim);
-            let r = sim
-                .tick(Tick(1), &mut [&mut space, &mut motion, &mut mind])
-                .map_err(|e| format!("sim tick: {e:?}"))?;
+            let r = tick_profiled(&mut sim, profile, &mut space, &mut motion, &mut mind, &phys)?;
             kick_infer(&host, &mut sim);
             r
         }
@@ -82,6 +91,32 @@ fn run() -> Result<(), String> {
         METRIC_SNAP_BYTES, report.snap_bytes, METRIC_PROJ_US, report.proj_us
     );
     Ok(())
+}
+
+fn tick_profiled(
+    sim: &mut Sim,
+    profile: RuntimeProfile,
+    space: &mut Space,
+    motion: &mut Motion,
+    mind: &mut Mind,
+    phys: &Phys,
+) -> Result<FrameReport, String> {
+    if !profile.uses_island_jobs() {
+        return sim
+            .tick(Tick(1), &mut [space, motion, mind])
+            .map_err(|e| format!("sim tick: {e:?}"));
+    }
+    apply_interest(sim.kernel_mut(), &InterestConfig::default());
+    sim.phase_interest();
+    sim.phase_partition();
+    sim.phase_propose_jobs();
+    let us_propose = ingest_island_jobs(sim.kernel_mut(), profile.workers(), &[phys, motion, mind]);
+    sim.phase_join();
+    let mut report = sim
+        .phase_step(Tick(1), &mut [])
+        .map_err(|e| format!("sim tick: {e:?}"))?;
+    report.us_propose = us_propose;
+    Ok(report)
 }
 
 fn load_intents(script: Option<&str>) -> Result<Vec<PlayerIntent>, String> {
@@ -176,7 +211,7 @@ mod tests {
 
     #[test]
     fn infer_off_npcs_act() {
-        let kernel = boot();
+        let kernel = boot_with_locus_cap(RuntimeProfile::Hearth.locus_cap());
         let mut mind = hearth_mind(&kernel);
         let mut sim = Sim::new(kernel);
         let host = InferHost::new();
@@ -204,7 +239,7 @@ mod tests {
 
     #[test]
     fn twelve_tick_old_infer_intent_is_ingested() {
-        let kernel = boot();
+        let kernel = boot_with_locus_cap(RuntimeProfile::Hearth.locus_cap());
         let mut mind = hearth_mind(&kernel);
         let mut sim = Sim::new(kernel);
         let host = InferHost::new();

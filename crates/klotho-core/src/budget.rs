@@ -1,7 +1,7 @@
-//! Per-tick kernel budgets. These are gates, not established facts (K14).
+//! Per-tick deterministic caps and wall-time targets (K14).
 
-/// Deterministic caps applied to one `CommitKernel::step`. Exceeding a cap is
-/// [`crate::RejectReason::Budget`], never a [`crate::KernelFault`].
+/// Caps and targets for one `CommitKernel::step`. Exhausting `pred_ops` or
+/// `rite_steps` yields [`crate::RejectReason::Budget`]; `us_sim` is telemetry.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct Budget {
     /// Kernel step wall-time target, microseconds. This is telemetry only and

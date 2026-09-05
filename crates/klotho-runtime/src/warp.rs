@@ -10,6 +10,8 @@ use klotho_ir::SeedFact;
 use klotho_platform::read_capped;
 use klotho_world::World;
 
+use crate::RuntimeProfile;
+
 /// Read a `.warp` with the desktop file cap, then unpack (headers, blob caps, licenses).
 pub fn load_cooked_warp(path: &Path) -> Result<Cooked, String> {
     load_cooked_warp_capped(path, WARP_CAP_DESKTOP)
@@ -36,9 +38,18 @@ pub fn load_warp(path: &Path) -> Result<CommitKernel, String> {
 ///
 /// Canon + seed only — not `hearth_slice::boot()`.
 pub fn kernel_from_cooked(cooked: &Cooked) -> Result<CommitKernel, String> {
-    let mut k = CommitKernel::new(World::new(
+    kernel_from_cooked_profile(cooked, RuntimeProfile::Hearth)
+}
+
+/// Seed a kernel using the capacity selected by `profile`.
+pub fn kernel_from_cooked_profile(
+    cooked: &Cooked,
+    profile: RuntimeProfile,
+) -> Result<CommitKernel, String> {
+    let mut k = CommitKernel::new(World::with_locus_cap(
         Arc::new(cooked.canon.clone()),
         cooked.canon_hash,
+        profile.locus_cap(),
     ));
     apply_seed(&mut k, &cooked.doc.seed)?;
     if let Some(player) = k.canon().pin("player") {

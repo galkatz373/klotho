@@ -18,6 +18,7 @@ pub struct Overlay {
     current: BTreeMap<Sigil, PoseMm>,
     previous: BTreeMap<Sigil, PoseMm>,
     applied: BTreeMap<Sigil, PoseMm>,
+    full_base: BTreeMap<Sigil, PoseMm>,
     local: Option<Sigil>,
     snap_mm: i32,
 }
@@ -45,8 +46,8 @@ impl Overlay {
     /// Map `local_ix` through `dict` and update current poses.
     ///
     /// Idle movers omitted (`n = 0`) keep the last pose. Unknown `local_ix` is
-    /// ignored. Deltas apply onto the last Full-or-Delta server pose, not the
-    /// blended display pose.
+    /// ignored. Deltas apply onto the last Full baseline, which makes every
+    /// Delta independently decodable after packet loss.
     pub fn apply_pose_delta(&mut self, dict: &[Sigil], block: &PoseBlock) {
         let n = match block {
             PoseBlock::Full(v) => v.len(),
@@ -62,6 +63,7 @@ impl Overlay {
                     let Some(&s) = dict.get(e.local_ix as usize) else {
                         continue;
                     };
+                    self.full_base.insert(s, e.pose);
                     self.commit_server_pose(s, e.pose);
                 }
             }
@@ -70,7 +72,7 @@ impl Overlay {
                     let Some(&s) = dict.get(e.local_ix as usize) else {
                         continue;
                     };
-                    let Some(base) = self.applied.get(&s).copied() else {
+                    let Some(base) = self.full_base.get(&s).copied() else {
                         continue;
                     };
                     let server = PoseMm {
@@ -129,6 +131,7 @@ impl Overlay {
         self.current.retain(|s, _| keep.contains(s));
         self.previous.retain(|s, _| keep.contains(s));
         self.applied.retain(|s, _| keep.contains(s));
+        self.full_base.retain(|s, _| keep.contains(s));
     }
 
     fn commit_server_pose(&mut self, s: Sigil, server: PoseMm) {
@@ -266,6 +269,23 @@ mod tests {
         let mid = overlay.interpolate(actor(), 500).unwrap();
         assert_eq!(mid.x, Mm(12));
         assert_eq!(mid.y, Mm(23));
+    }
+
+    #[test]
+    fn deltas_share_full_baseline_so_one_may_be_dropped() {
+        let dict = [actor()];
+        let mut overlay = Overlay::new();
+        overlay.apply_pose_delta(&dict, &full_block(0, pose_xyz(10, 20, 30)));
+        // The server's intermediate +5 packet was lost. The following packet
+        // is +8 from the Full baseline, not +3 from the lost packet.
+        overlay.apply_pose_delta(
+            &dict,
+            &PoseBlock::Delta(vec![PoseDeltaEntry {
+                local_ix: 0,
+                dpose: [8, 0, 0, 0, 0, 0],
+            }]),
+        );
+        assert_eq!(overlay.pose(actor()).unwrap().x, Mm(18));
     }
 
     #[test]

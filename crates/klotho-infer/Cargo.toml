@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Klotho infer isolator: InferHost stub returns InferIntent (no &mut World)"
+description = "Klotho OS-process infer isolator: snapshot IPC in, InferIntent out"
 readme = false
 publish = false
 

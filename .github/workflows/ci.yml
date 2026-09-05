@@ -83,3 +83,5 @@ jobs:
         run: cargo test -p klotho-runtime --features aaa-adventure
       - name: Shooter profile
         run: cargo test -p klotho-runtime --features aaa-shooter
+      - name: Infer OS-process sidecar
+        run: cargo test -p klotho-infer -p klotho-runtime --features klotho-runtime/infer

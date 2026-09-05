@@ -41,6 +41,7 @@ PR 18 — Debug + determinism CI (`klotho-debug` Trace player, replay.yml).
 PR 19 — `.warp` packaging (`klotho-compile` pack, `klotho-runtime` load, caps + license gate).
 PR 20 — `klotho-net` listen-server (ed25519, TraceDelta, 2-player local). Optional; Hearth local play is unchanged.
 AAA-21b — `klotho-ui` production HUD skin (Knows-gated attention, safe areas, accessibility palette).
+AAA-22 — `klotho-infer` OS-process sidecar (snapshot IPC, `InferIntent`-only output, fail-closed child death).
 
 ## Build
 
@@ -74,7 +75,7 @@ klotho/
   crates/klotho-phys/     # scalar XPBD island proposer
   crates/klotho-motion/   # verb→clip + root-motion SyncProposer (Actors)
   crates/klotho-mind/     # GOAP SyncProposer (MindIntent, no Agency)
-  crates/klotho-infer/    # InferHost stub; returns InferIntent (no &mut World)
+  crates/klotho-infer/    # Default-off OS sidecar; snapshot IPC → InferIntent only
   crates/klotho-manifest/ # Visual/Sonic/Ui manifests; tables pub(crate)
   crates/klotho-compile/  # kitbash retrieval cook → CAS → .warp / sharded catalog
   crates/klotho-dcc/      # glTF 2.0 cook → quantized KLTH mesh/hull/clip

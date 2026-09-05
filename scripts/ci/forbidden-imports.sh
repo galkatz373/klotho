@@ -217,13 +217,13 @@ if [[ -d crates ]]; then
   done
 fi
 
-# InferHost::{new,submit,poll} may appear only in klotho-runtime and klotho-infer.
+# InferHost::{new,spawn,submit,poll} may appear only in klotho-runtime and klotho-infer.
 if [[ -d crates ]]; then
   hits=""
   if command -v rg >/dev/null 2>&1; then
-    hits="$(rg -n --glob '!target/**' 'InferHost::(new|submit|poll)' crates || true)"
+    hits="$(rg -n --glob '!target/**' 'InferHost::(new|spawn|submit|poll)' crates || true)"
   else
-    hits="$(grep -RIn -E 'InferHost::(new|submit|poll)' crates || true)"
+    hits="$(grep -RIn -E 'InferHost::(new|spawn|submit|poll)' crates || true)"
   fi
   if [[ -n "$hits" ]]; then
     while IFS= read -r line; do

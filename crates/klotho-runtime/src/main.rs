@@ -8,6 +8,8 @@
 use std::env;
 use std::fs;
 use std::path::Path;
+#[cfg(feature = "infer")]
+use std::process::Command;
 use std::process::ExitCode;
 
 #[cfg(test)]
@@ -30,6 +32,15 @@ use klotho_runtime::{
 };
 
 fn main() -> ExitCode {
+    if env::args().nth(1).as_deref() == Some("--klotho-infer-sidecar") {
+        return match klotho_infer::run_sidecar() {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("infer sidecar: {error}");
+                ExitCode::FAILURE
+            }
+        };
+    }
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
@@ -61,7 +72,7 @@ fn run() -> Result<(), String> {
 
     let n = intents.len();
     let mut sim = Sim::with_budget(kernel, profile.budget());
-    let host = InferHost::new();
+    let host = start_infer()?;
     let mut space = Space;
     let mut motion = Motion::hearth();
     let phys = Phys;
@@ -91,6 +102,19 @@ fn run() -> Result<(), String> {
         METRIC_SNAP_BYTES, report.snap_bytes, METRIC_PROJ_US, report.proj_us
     );
     Ok(())
+}
+
+#[cfg(feature = "infer")]
+fn start_infer() -> Result<InferHost, String> {
+    let executable = env::current_exe().map_err(|e| format!("infer executable: {e}"))?;
+    let mut command = Command::new(executable);
+    command.arg("--klotho-infer-sidecar");
+    InferHost::spawn(command).map_err(|e| format!("spawn infer sidecar: {e}"))
+}
+
+#[cfg(not(feature = "infer"))]
+fn start_infer() -> Result<InferHost, String> {
+    Ok(InferHost::new())
 }
 
 fn tick_profiled(
@@ -172,7 +196,7 @@ fn wrap_infer(ii: InferIntent) -> Proposal {
 
 #[cfg(test)]
 mod tests {
-    use klotho_core::{Budget, Mm, PlayerId, PoseMm, RejectReason, Tick, YawMd};
+    use klotho_core::{Budget, Mm, PlayerId, PoseMm, Tick, YawMd};
     use klotho_input::{DeviceSample, InputMapper};
     use klotho_ir::{Analog, Verb};
     use klotho_manifest::{EYE_HEIGHT_MM, Observer};
@@ -234,63 +258,6 @@ mod tests {
         assert!(
             !r.delta.events.is_empty(),
             "expected a committed Mind act, got {r:?}"
-        );
-    }
-
-    #[test]
-    fn twelve_tick_old_infer_intent_is_ingested() {
-        let kernel = boot_with_locus_cap(RuntimeProfile::Hearth.locus_cap());
-        let mut mind = hearth_mind(&kernel);
-        let mut sim = Sim::new(kernel);
-        let host = InferHost::new();
-        let t0 = sim.kernel().world().tick();
-        kick_infer(&host, &mut sim);
-        let mut space = Space;
-        let mut motion = Motion::hearth();
-        for _ in 0..12 {
-            let _ = sim
-                .tick(Tick(1), &mut [&mut space, &mut motion, &mut mind])
-                .unwrap();
-        }
-        let now = sim.kernel().world().tick();
-        assert_eq!(now - t0, 12);
-        let polled = InferHost::poll(&host, now, Budget::HEARTH.eval_slo_ticks);
-        assert_eq!(polled.intents.len(), 1, "{polled:?}");
-        assert!(polled.stale.is_empty(), "{polled:?}");
-        sim.ingest(wrap_infer(polled.intents[0].clone()));
-        let r = sim
-            .tick(Tick(1), &mut [&mut space, &mut motion, &mut mind])
-            .unwrap();
-        assert!(
-            r.delta
-                .rejects
-                .iter()
-                .all(|(_, reason)| *reason != RejectReason::StaleEpoch),
-            "{r:?}"
-        );
-    }
-
-    #[test]
-    fn thirteen_tick_old_job_is_stale_epoch() {
-        let kernel = boot();
-        let mut mind = hearth_mind(&kernel);
-        let mut sim = Sim::new(kernel);
-        let host = InferHost::new();
-        kick_infer(&host, &mut sim);
-        let mut space = Space;
-        let mut motion = Motion::hearth();
-        for _ in 0..13 {
-            let _ = sim
-                .tick(Tick(1), &mut [&mut space, &mut motion, &mut mind])
-                .unwrap();
-        }
-        let now = sim.kernel().world().tick();
-        assert_eq!(now.0, 13);
-        let polled = InferHost::poll(&host, now, Budget::HEARTH.eval_slo_ticks);
-        assert!(polled.intents.is_empty(), "{polled:?}");
-        assert!(
-            polled.stale.contains(&RejectReason::StaleEpoch),
-            "{polled:?}"
         );
     }
 

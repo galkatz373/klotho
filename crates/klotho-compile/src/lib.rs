@@ -23,7 +23,10 @@ mod header;
 mod kit;
 mod warp;
 
-pub use catalog::{CATALOG_FILE, CatalogManifest, PlaceCatalogEntry, write_catalog};
+pub use catalog::{
+    CATALOG_FILE, CatalogManifest, IncrementalCatalog, LicenseCoverage, PlaceCatalogEntry,
+    license_coverage, write_catalog, write_catalog_incremental,
+};
 pub use cook::{
     Binding, COMPILER_VERSION, Cooked, DccArtifact, blob_of, cook_doc, cook_with, cook_with_dcc,
     digest_of,

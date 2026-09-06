@@ -47,6 +47,67 @@ pub struct PlaceCatalogEntry {
     pub prefix: Hash,
 }
 
+/// Artifact-license coverage checked before a catalog may be exported.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct LicenseCoverage {
+    /// Artifact nodes present in the provenance DAG.
+    pub artifacts: usize,
+    /// Artifact nodes carrying an exportable license.
+    pub exportable: usize,
+}
+
+impl LicenseCoverage {
+    /// Integer coverage percentage. An empty artifact set is fully covered.
+    #[must_use]
+    pub const fn percent(self) -> u8 {
+        match (self.exportable * 100).checked_div(self.artifacts) {
+            Some(percent) => percent as u8,
+            None => 100,
+        }
+    }
+
+    /// `true` only when every artifact is licensed for export.
+    #[must_use]
+    pub const fn is_complete(self) -> bool {
+        self.artifacts == self.exportable
+    }
+}
+
+/// Files changed or reused by an incremental catalog cook.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct IncrementalCatalog {
+    /// Complete output manifest.
+    pub manifest: CatalogManifest,
+    /// Place shards whose bytes changed and were written.
+    pub dirty_places: Vec<Sigil>,
+    /// Place shards already identical on disk.
+    pub reused_places: Vec<Sigil>,
+    /// KCAS volume paths whose bytes changed and were written.
+    pub dirty_volumes: Vec<PathBuf>,
+    /// KCAS volume paths already identical on disk.
+    pub reused_volumes: Vec<PathBuf>,
+    /// Artifact-license coverage at export time.
+    pub license_coverage: LicenseCoverage,
+}
+
+/// Count exportable artifact licenses in `dag`.
+#[must_use]
+pub fn license_coverage(dag: &ProvenanceDag) -> LicenseCoverage {
+    let mut coverage = LicenseCoverage {
+        artifacts: 0,
+        exportable: 0,
+    };
+    for node in dag.iter() {
+        if matches!(node.kind, ProvenanceKind::Artifact { .. }) {
+            coverage.artifacts += 1;
+            if node.license.is_exportable() {
+                coverage.exportable += 1;
+            }
+        }
+    }
+    coverage
+}
+
 /// Pack `cooked` + Place snaps into `dir` as catalog, volumes, and shards.
 ///
 /// Fails on Unknown license, oversize, or a snap whose `canon_hash` disagrees.
@@ -55,6 +116,23 @@ pub fn write_catalog(
     cooked: &Cooked,
     places: &[(PlaceSnap, AabbMm)],
 ) -> Result<CatalogManifest, CompileError> {
+    Ok(write_catalog_incremental(dir, cooked, places)?.manifest)
+}
+
+/// Incrementally pack `cooked` and rewrite only dirty Place/CAS files.
+///
+/// Catalog bytes are always refreshed last. Existing shard and volume files
+/// are reused only after a byte-for-byte comparison, so timestamps are not
+/// trusted as cook inputs.
+pub fn write_catalog_incremental(
+    dir: &Path,
+    cooked: &Cooked,
+    places: &[(PlaceSnap, AabbMm)],
+) -> Result<IncrementalCatalog, CompileError> {
+    let coverage = license_coverage(&cooked.dag);
+    if !coverage.is_complete() {
+        return Err(CompileError::prove(ProveError::UnknownLicense));
+    }
     cooked.dag.exportable().map_err(CompileError::prove)?;
     fs::create_dir_all(dir).map_err(|e| CompileError::Io(format!("{}: {e}", dir.display())))?;
 
@@ -84,6 +162,8 @@ pub fn write_catalog(
 
     let mut volumes = Vec::new();
     let mut blob_index = Vec::new();
+    let mut dirty_volumes = Vec::new();
+    let mut reused_volumes = Vec::new();
     for (i, vol) in packed.iter().enumerate() {
         if vol.bytes.len() > KCAS_VOLUME_CAP {
             return Err(warp_err(format!(
@@ -93,8 +173,11 @@ pub fn write_catalog(
         }
         let name = format!("vol-{i:04}.kcas");
         let path = dir.join(&name);
-        fs::write(&path, &vol.bytes)
-            .map_err(|e| CompileError::Io(format!("{}: {e}", path.display())))?;
+        if write_if_changed(&path, &vol.bytes)? {
+            dirty_volumes.push(path.clone());
+        } else {
+            reused_volumes.push(path.clone());
+        }
         let id = file_hash(&vol.bytes);
         for blob in &vol.ids {
             blob_index.push((*blob, id));
@@ -104,13 +187,18 @@ pub fn write_catalog(
 
     let mut place_refs = Vec::new();
     let mut place_entries = Vec::new();
+    let mut dirty_places = Vec::new();
+    let mut reused_places = Vec::new();
     for &i in &order {
         let (snap, aabb) = &places[i];
         let shard = encode_place_shard(snap).map_err(stream_err)?;
         let name = format!("place-{:032x}.kplc", snap.place.raw());
         let path = dir.join(&name);
-        fs::write(&path, &shard)
-            .map_err(|e| CompileError::Io(format!("{}: {e}", path.display())))?;
+        if write_if_changed(&path, &shard)? {
+            dirty_places.push(snap.place);
+        } else {
+            reused_places.push(snap.place);
+        }
         let shard_id = file_hash(&shard);
         place_refs.push(PlaceRef {
             place: snap.place,
@@ -142,18 +230,41 @@ pub fn write_catalog(
         )));
     }
     let catalog_path = dir.join(CATALOG_FILE);
-    fs::write(&catalog_path, catalog)
-        .map_err(|e| CompileError::Io(format!("{}: {e}", catalog_path.display())))?;
+    let _catalog_changed = write_if_changed(&catalog_path, &catalog)?;
 
-    Ok(CatalogManifest {
-        catalog_path,
-        canon_hash: cooked.canon_hash,
-        volumes: volumes
-            .into_iter()
-            .map(|v| (v.id, dir.join(v.filename)))
-            .collect(),
-        places: place_entries,
+    Ok(IncrementalCatalog {
+        manifest: CatalogManifest {
+            catalog_path,
+            canon_hash: cooked.canon_hash,
+            volumes: volumes
+                .into_iter()
+                .map(|v| (v.id, dir.join(v.filename)))
+                .collect(),
+            places: place_entries,
+        },
+        dirty_places,
+        reused_places,
+        dirty_volumes,
+        reused_volumes,
+        license_coverage: coverage,
     })
+}
+
+fn write_if_changed(path: &Path, bytes: &[u8]) -> Result<bool, CompileError> {
+    match fs::read(path) {
+        Ok(existing) if existing == bytes => Ok(false),
+        Ok(_) => {
+            fs::write(path, bytes)
+                .map_err(|e| CompileError::Io(format!("{}: {e}", path.display())))?;
+            Ok(true)
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            fs::write(path, bytes)
+                .map_err(|e| CompileError::Io(format!("{}: {e}", path.display())))?;
+            Ok(true)
+        }
+        Err(e) => Err(CompileError::Io(format!("{}: {e}", path.display()))),
+    }
 }
 
 struct PackedVolume {
@@ -348,6 +459,61 @@ mod tests {
         assert_eq!(&*fetched, bytes);
         assert_eq!(blob_id_of(&fetched), id);
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn incremental_catalog_rewrites_only_the_dirty_place() {
+        let cooked = hearth();
+        let p1 = place(1);
+        let p2 = place(2);
+        let dir = temp_dir();
+        let aabb = AabbMm::from_point(IVec3::ZERO);
+        let first = write_catalog_incremental(
+            &dir,
+            &cooked,
+            &[(snap_for(&cooked, p2), aabb), (snap_for(&cooked, p1), aabb)],
+        )
+        .unwrap();
+        assert_eq!(first.dirty_places, vec![p1, p2]);
+        assert!(first.reused_places.is_empty());
+        assert_eq!(first.license_coverage.percent(), 100);
+
+        let second = write_catalog_incremental(
+            &dir,
+            &cooked,
+            &[(snap_for(&cooked, p1), aabb), (snap_for(&cooked, p2), aabb)],
+        )
+        .unwrap();
+        assert!(second.dirty_places.is_empty());
+        assert_eq!(second.reused_places, vec![p1, p2]);
+        assert!(second.dirty_volumes.is_empty());
+        assert_eq!(second.reused_volumes.len(), first.dirty_volumes.len());
+
+        let changed = PlaceSnap::new(
+            p2,
+            cooked.canon_hash,
+            Hash::from_bytes([7; 32]),
+            vec![PlaceRow::new(p2, LocusKind::Place)],
+        );
+        let third = write_catalog_incremental(
+            &dir,
+            &cooked,
+            &[(snap_for(&cooked, p1), aabb), (changed, aabb)],
+        )
+        .unwrap();
+        assert_eq!(third.dirty_places, vec![p2]);
+        assert_eq!(third.reused_places, vec![p1]);
+        assert!(third.dirty_volumes.is_empty());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn artifact_license_coverage_is_explicit() {
+        let cooked = hearth();
+        let coverage = license_coverage(&cooked.dag);
+        assert!(coverage.artifacts > 0);
+        assert!(coverage.is_complete());
+        assert_eq!(coverage.percent(), 100);
     }
 
     #[test]

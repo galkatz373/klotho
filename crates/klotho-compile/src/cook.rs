@@ -80,7 +80,7 @@ pub struct DccArtifact {
     pub skinned: Option<Vec<u8>>,
     /// KLTH ClipSet bytes when animations were present.
     pub clips: Option<Vec<u8>>,
-    /// blake3 of the glTF bytes (and BIN if any).
+    /// blake3 of the glTF bytes, external buffers, and license sidecar.
     pub source_hash: Hash,
 }
 

@@ -188,13 +188,19 @@ struct KlothoMeta {
 /// Cook `path` as glTF 2.0 JSON. Relative buffer URIs resolve next to the file.
 pub fn import_gltf(path: &Path) -> Result<Vec<GltfImport>, DccError> {
     let json = fs::read(path).map_err(|e| DccError::Io(format!("{}: {e}", path.display())))?;
-    let sidecar = read_sidecar(path)?;
-    import_inner(&json, None, path.parent(), sidecar)
+    let (sidecar, sidecar_bytes) = read_sidecar(path)?;
+    import_inner(
+        &json,
+        None,
+        path.parent(),
+        sidecar,
+        sidecar_bytes.as_deref(),
+    )
 }
 
 /// Cook glTF JSON bytes. `bin` is buffer 0 when the JSON has no `uri`.
 pub fn import_gltf_bytes(json: &[u8], bin: Option<&[u8]>) -> Result<Vec<GltfImport>, DccError> {
-    import_inner(json, bin, None, None)
+    import_inner(json, bin, None, None, None)
 }
 
 fn import_inner(
@@ -202,6 +208,7 @@ fn import_inner(
     bin: Option<&[u8]>,
     base: Option<&Path>,
     sidecar: Option<LicenseSpan>,
+    source_extra: Option<&[u8]>,
 ) -> Result<Vec<GltfImport>, DccError> {
     let doc: GltfDoc =
         serde_json::from_slice(json).map_err(|e| DccError::Gltf(format!("json: {e}")))?;
@@ -211,7 +218,7 @@ fn import_inner(
             doc.asset.version
         )));
     }
-    let (buffers, source_hash) = load_buffers(&doc, json, bin, base)?;
+    let (buffers, source_hash) = load_buffers(&doc, json, bin, base, source_extra)?;
     let ctx = Ctx {
         doc,
         buffers,
@@ -676,11 +683,15 @@ fn load_buffers(
     json: &[u8],
     bin: Option<&[u8]>,
     base: Option<&Path>,
+    source_extra: Option<&[u8]>,
 ) -> Result<(Vec<Vec<u8>>, Hash), DccError> {
     let mut buffers = Vec::new();
     let mut external = Vec::new();
     if let Some(b) = bin {
         external.extend_from_slice(b);
+    }
+    if let Some(extra) = source_extra {
+        external.extend_from_slice(extra);
     }
     for (i, b) in doc.buffers.iter().enumerate() {
         let data = match b.uri.as_deref() {
@@ -740,17 +751,17 @@ fn resolve_buffer_path(dir: &Path, uri: &str) -> Result<PathBuf, DccError> {
     Ok(p)
 }
 
-fn read_sidecar(path: &Path) -> Result<Option<LicenseSpan>, DccError> {
+fn read_sidecar(path: &Path) -> Result<(Option<LicenseSpan>, Option<Vec<u8>>), DccError> {
     let mut name = path.as_os_str().to_os_string();
     name.push(".license.json");
     let p = Path::new(&name);
     if !p.is_file() {
-        return Ok(None);
+        return Ok((None, None));
     }
     let bytes = fs::read(p).map_err(|e| DccError::Io(format!("{}: {e}", p.display())))?;
     let v: Value =
         serde_json::from_slice(&bytes).map_err(|e| DccError::License(format!("sidecar: {e}")))?;
-    Ok(Some(parse_license_value(&v)?))
+    Ok((Some(parse_license_value(&v)?), Some(bytes)))
 }
 
 fn parse_klotho(extras: Option<&Value>) -> Result<KlothoMeta, DccError> {

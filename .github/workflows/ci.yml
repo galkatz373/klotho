@@ -85,3 +85,15 @@ jobs:
         run: cargo test -p klotho-runtime --features aaa-shooter
       - name: Infer OS-process sidecar
         run: cargo test -p klotho-infer -p klotho-runtime --features klotho-runtime/infer
+
+  cook-farm:
+    name: AAA cook farm gates
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.98.0
+      - name: Incremental and 50 GiB logical fixture
+        shell: bash
+        run: bash scripts/ci/cook-farm.sh

@@ -48,7 +48,7 @@ pub struct GltfImport {
     pub skinned: Option<Vec<u8>>,
     /// KLTH ClipSet when a translation animation targets the node.
     pub clips: Option<Vec<u8>>,
-    /// blake3 of the glTF JSON (and external BIN if any).
+    /// blake3 of the glTF JSON, external buffers, and license sidecar.
     pub source_hash: Hash,
 }
 
@@ -143,6 +143,21 @@ mod tests {
     fn missing_license_fails_import() {
         let e = import_gltf(&fixture("nolicense.gltf")).unwrap_err();
         assert!(matches!(e, DccError::License(_)), "{e}");
+    }
+
+    #[test]
+    fn license_sidecar_bytes_participate_in_source_hash() {
+        let dir = std::env::temp_dir().join(format!("klotho-dcc-sidecar-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("cube.gltf");
+        fs::copy(fixture("cube.gltf"), &path).unwrap();
+        let sidecar = dir.join("cube.gltf.license.json");
+        fs::write(&sidecar, br#"{"spdx":"CC0-1.0","copyright":"first"}"#).unwrap();
+        let first = import_gltf(&path).unwrap()[0].source_hash;
+        fs::write(&sidecar, br#"{"spdx":"CC0-1.0","copyright":"second"}"#).unwrap();
+        let second = import_gltf(&path).unwrap()[0].source_hash;
+        assert_ne!(first, second);
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

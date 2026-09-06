@@ -29,6 +29,13 @@ PR 01 `klotho-core` → 02 prove → 03 ir → 04a/b canon → 05 trace → 06 w
 
 Do not grow Hearth. Ash is the generality gate (K26). If Ash needs `DamageComponent`, the ontology has leaked.
 
+## First-title freeze (AAA-27)
+
+- Ship profile: single-player action-adventure, `RuntimeProfile::AaaAdventure`, 30 Hz authoritative simulation and 60–120 Hz presentation on desktop Windows/Linux/macOS. Infer stays default-off.
+- Release-blocking slices: Hearth and Ash (ontology/determinism), Ember (action combat), Drift (Phys + two-Place residency), and Chorus (SimLod scale). Keep them as bounded goldens; do not turn them into title content.
+- Shooter-only gates are maintained regressions, not first-title blockers: `RuntimeProfile::AaaShooter`, dedicated 60 Hz simulation, lag compensation/rewind acceptance, Netlock release acceptance, multiplayer lobby scale, and the competitive render permutation.
+- Console certification, live epoch deployment, GPU particles, runtime infer, marketplace/UGC, localization/UMG, 64-player scale, and virtualized geometry are post-title-one work. Their landed boundaries and tests stay intact.
+
 ## Vocabulary
 
 Author-facing: Locus, Canon, Intent, Trace, Manifest, Rite, Law.

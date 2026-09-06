@@ -11,7 +11,7 @@ This is not Bevy + an LLM. Models may propose; only `CommitKernel` commits.
 **Author-facing vocabulary:** Locus, Canon, Intent, Trace, Manifest, Rite, Law.
 **Tools:** Distaff (authoring), Weaver (cook + present), `.warp` (package).
 
-The full high-level design is in [`docs/hld.md`](docs/hld.md).
+The current high-level design is in [`docs/hld.md`](docs/hld.md). The original v1 design is preserved in [`docs/hld-v1.md`](docs/hld-v1.md).
 
 ## Status
 
@@ -42,6 +42,11 @@ PR 19 — `.warp` packaging (`klotho-compile` pack, `klotho-runtime` load, caps 
 PR 20 — `klotho-net` listen-server (ed25519, TraceDelta, 2-player local). Optional; Hearth local play is unchanged.
 AAA-21b — `klotho-ui` production HUD skin (Knows-gated attention, safe areas, accessibility palette).
 AAA-22 — `klotho-infer` OS-process sidecar (snapshot IPC, `InferIntent`-only output, fail-closed child death).
+AAA-23 — Netlock dedicated slice.
+AAA-24 — incremental cook farm and 50 GB logical fixture.
+AAA-25 — live Canon epoch packs.
+AAA-26 — console platform/render HAL boundary.
+AAA-27 — first-title freeze: 30 Hz single-player action-adventure on desktop; shooter gates remain regressions.
 
 ## Build
 
@@ -95,7 +100,8 @@ klotho/
   examples/ash-slice/     # Appendix B goldens (PR 07c)
   examples/chorus-slice/  # AAA-17: 2000 Far + 200 Full SimLod headless
   data/kitbash/           # hashed, licensed, affordance-tagged library
-  docs/hld.md             # High-level design (rev 5)
+  docs/hld.md             # Current high-level design (rev 6, AAA-01–27)
+  docs/hld-v1.md          # Preserved v1 high-level design (rev 5)
   docs/pred-lang.md       # Predicate / Rite RFC (PR 04a)
 ```
 

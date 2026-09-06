@@ -2,16 +2,16 @@
 
 | Field | Value |
 | --- | --- |
-| Document | Successor High-Level Design — Klotho at AAA production scale |
+| Document | High-Level Design — Klotho at AAA production scale |
 | Author | Grok (for Gal Katz) |
 | Date | 2026-09-05 |
-| Status | Draft (rev 5 — Era 1 + Era 2 + AAA-18–26 landed; Q8–Q16 closed; remaining: AAA-27) |
-| Last verified | 2026-09-06 through AAA-26 |
-| Supersedes | `docs/hld.md` rev 5 (2026-08-22) — v1 semantic kernel, Hearth/Ash slice |
+| Status | Current (rev 6 — AAA-01–27 landed; first-title profile frozen) |
+| Last verified | 2026-09-06 through AAA-27 |
+| Supersedes | `docs/hld-v1.md` rev 5 (2026-08-22) — v1 semantic kernel, Hearth/Ash slice |
 | Audience | Senior engine, tools, gameplay systems, and production engineers |
 | Language | Rust (edition 2024; 2021-compatible crates OK) |
 
-This is not a patch note on rev 5. It is the architecture for a studio that wants Klotho's programming model **and** a contemporary first-party quality bar. Rev 5 remains the law for crates that have not yet taken an AAA PR. **Landed on `main` (verified 2026-09-06 through AAA-26):** AAA-01, AAA-02, AAA-03, AAA-04, AAA-05, AAA-08.1, AAA-06, AAA-08, AAA-07, AAA-09, AAA-10, AAA-11, AAA-11b, AAA-12, AAA-13, AAA-14, AAA-15, AAA-16, AAA-17, AAA-18, AAA-19, AAA-20, AAA-21, AAA-21b, AAA-22, AAA-23, AAA-24, AAA-25, AAA-26 (plus rev-4 K58 caps). **Next unblocked work:** AAA-27.
+This is the current architecture for a studio that wants Klotho's programming model **and** a contemporary first-party quality bar. The preserved rev 5 baseline remains useful history, but this document is the law where the two differ. **Landed on `main` (verified 2026-09-06 through AAA-27):** AAA-01, AAA-02, AAA-03, AAA-04, AAA-05, AAA-08.1, AAA-06, AAA-08, AAA-07, AAA-09, AAA-10, AAA-11, AAA-11b, AAA-12, AAA-13, AAA-14, AAA-15, AAA-16, AAA-17, AAA-18, AAA-19, AAA-20, AAA-21, AAA-21b, AAA-22, AAA-23, AAA-24, AAA-25, AAA-26, AAA-27 (plus rev-4 K58 caps). **The planned AAA sequence is complete.**
 
 > **Freshness rule (keeps this doc from going stale):** every AAA PR that lands must bump the `Last verified` row, the landed list in this paragraph, the `Landed on main` line in §PR Plan, and the `— landed` suffix on its `#### AAA-NN` header in the same commit. `git log` is the source of truth; this list is a cached view of it.
 
@@ -1186,7 +1186,7 @@ flowchart LR
 | **1** Kernel-scale — **landed** | `PackedIx=u32`, Partition, Places, interest, parallel propose, Trace thinned, scalar phys, Ember+Drift **headless** (AAA-01–10) | Lumen, lag-comp, DCC farm, ragdoll-as-gameplay, 4 km terrain |
 | **2** Presentation-scale — **landed** | PBR, shadows, **probes+SSGI**, skinned ClipSet (MotionDb optional), spatial audio, Distaff viewport, glTF cook, Chorus headless, VFX decals (AAA-11–17) | Console SKU, live packs, GPU particles, loc/UI framework, SDFGI |
 | **3** Production-scale — **landed (AAA-18–24)** | Dedicated PoseDelta+lag-comp transport, save epochs, cinematics, HUD skin, infer sidecar, Netlock slice, and 50 GB logical cook-farm gate | Marketplace, NL→Rite, Nanite, 64p |
-| **4** Live / console — **partial (AAA-25–26 landed)** | Canon epoch packs and the console HAL spike landed; first-title freeze remains | Every Unreal checkbox; a certified console SKU |
+| **4** Live / console — **AAA-25–27 landed** | Canon epoch packs, console HAL boundary, and the 30 Hz adventure first-title freeze | Every Unreal checkbox; a certified console SKU |
 
 **Explicitly not in Era 1–2:** terrain mesh as Phys, foliage colliders, shader graph, loc/UI framework, GPU particle VFX, console SKU, live epoch packs, cinematic time-scale, Drift heightfield, Ember lag-comp, Chorus skinned crowds.
 
@@ -1194,7 +1194,7 @@ flowchart LR
 
 **Rollback:** see per-flag table. Golden Trace tags every milestone.
 
-**Staffing (indicative):** Era 1 is a **second engine**, not four people finishing rev 5. Plan: 2 kernel + 1 phys + 1 stream/tools as a *minimum*. **Era 1 (AAA-01–10), Era 2 (AAA-11–17), and AAA-18–26 already landed; Ember+Drift+Chorus+Netlock goldens exist.** Remaining: **AAA-27**. Do not claim PRs are independently mergeable; claim **main green, Hearth/Ash goldens pass**.
+**Staffing (indicative):** Era 1 is a **second engine**, not four people finishing rev 5. Plan: 2 kernel + 1 phys + 1 stream/tools as a *minimum*. **AAA-01–27 landed; Ember+Drift+Chorus+Netlock goldens exist.** The first-title release profile is frozen below. Do not claim PRs were independently mergeable; claim **main green, Hearth/Ash goldens pass**.
 
 ---
 
@@ -1237,7 +1237,7 @@ flowchart LR
 
 ## References
 
-- Landed HLD: [`docs/hld.md`](hld.md) rev 5 (2026-08-22).
+- Historical v1 HLD: [`docs/hld-v1.md`](hld-v1.md) rev 5 (2026-08-22).
 - Pred/Rite: [`docs/pred-lang.md`](pred-lang.md).
 - Agent rules: [`AGENTS.md`](../AGENTS.md).
 - Crate graph / firewall: workspace `Cargo.toml`, `scripts/ci/forbidden-imports.sh`, `clippy.toml` K25 disallowed HashMap iter.
@@ -1253,7 +1253,7 @@ flowchart LR
 
 This plan **supersedes rev 5 PRs after the already-landed 01–21 work**. Do not relitigate `klotho-core` existence. **Do not claim 27 independent merges.** Claim: each PR leaves `main` green; Hearth/Ash goldens pass (AAA-01 was the first allowed hash rewrite; later ABI flag-days already landed with 02/03/08.1). Flags keep Hearth playable if phys/stream/jobs are off.
 
-**Landed on `main` (do not re-implement; verified 2026-09-06 through AAA-26):** AAA-01 Trace tape, AAA-02 6DOF+budgets, AAA-03 `PackedIx`+CoW, AAA-04 jobs+Partition+`us_sim` telemetry, AAA-05 interest+SimLod, AAA-08.1 ISA/Verb/Rel, AAA-06 Residency, AAA-08 scalar phys, AAA-07 stream+shards, AAA-09 Ember, AAA-10 Drift, AAA-11 Manifest extract, AAA-11b VFX decals, AAA-12 PBR, AAA-13 ClipSet/MotionDb, AAA-14 glTF cook, AAA-15 editor viewport, AAA-16 spatial audio, AAA-17 Chorus, AAA-18 PoseDelta+overlay, AAA-19 rewind ring, AAA-20 save epochs, AAA-21 Cinematics, AAA-21b HUD skin, AAA-22 infer sidecar, AAA-23 Netlock, AAA-24 cook farm, AAA-25 Canon epoch packs, AAA-26 Console HAL spike. Rev 5 amends landed K48 (exact automatic snapshots), K53 (stable Full delta baseline), and K58 (phys-body flood, `NO_ISLAND`, fail-closed size/count caps). **Next:** AAA-27.
+**Landed on `main` (do not re-implement; verified 2026-09-06 through AAA-27):** AAA-01 Trace tape, AAA-02 6DOF+budgets, AAA-03 `PackedIx`+CoW, AAA-04 jobs+Partition+`us_sim` telemetry, AAA-05 interest+SimLod, AAA-08.1 ISA/Verb/Rel, AAA-06 Residency, AAA-08 scalar phys, AAA-07 stream+shards, AAA-09 Ember, AAA-10 Drift, AAA-11 Manifest extract, AAA-11b VFX decals, AAA-12 PBR, AAA-13 ClipSet/MotionDb, AAA-14 glTF cook, AAA-15 editor viewport, AAA-16 spatial audio, AAA-17 Chorus, AAA-18 PoseDelta+overlay, AAA-19 rewind ring, AAA-20 save epochs, AAA-21 Cinematics, AAA-21b HUD skin, AAA-22 infer sidecar, AAA-23 Netlock, AAA-24 cook farm, AAA-25 Canon epoch packs, AAA-26 Console HAL spike, AAA-27 first-title freeze. Rev 5 amends landed K48 (exact automatic snapshots), K53 (stable Full delta baseline), and K58 (phys-body flood, `NO_ISLAND`, fail-closed size/count caps). **The planned AAA sequence is complete.**
 
 ```mermaid
 flowchart TB
@@ -1508,11 +1508,17 @@ flowchart TB
 - **Depends on:** AAA-12, AAA-16
 - **Changes:** Devkit bring-up boundary. Public tree provides explicit Desktop/GDK/Prospero platform identities, a Manifest-level render HAL, target/backend pairing gates, and bounded replay evidence that requires the target-observed terminal Trace prefix to match the replay. Proprietary SDK adapters provide the device calls outside this workspace. **HAL remains native** (GDK=D3D12, Prospero=Gnm/AGC): desktop wgpu is rejected for console identities. Kernel unmodified. No public CI claim of hardware/SDK evidence and not a ship SKU.
 
-#### AAA-27 — First-title freeze
+#### AAA-27 — First-title freeze — **landed**
 
 - **Files:** `AGENTS.md`, `docs/hld.md` (replace rev 5 as current), slice list
 - **Depends on:** a chosen title's needed subset of AAA-01–26
-- **Changes:** Freeze which profile (adventure 30 Hz vs shooter 60 Hz) the first shipped title uses. Explicitly **cut** the other title's unique gates from the critical path. Do not grow Hearth.
+- **Changes:** The first shipped title is a **single-player action-adventure** using `RuntimeProfile::AaaAdventure`: 30 Hz authoritative simulation, 60–120 Hz presentation, `Budget::AAA_ADVENTURE`, Place streaming, scalar server/host Phys, exact epoch saves, and the adventure PBR/post permutation. Desktop Windows/Linux/macOS is the ship platform set. Infer remains default-off.
+
+  Release-blocking proving slices are **Hearth** and **Ash** for ontology/determinism, **Ember** for action-combat transactions, **Drift** for Phys plus two-Place residency, and **Chorus** for adventure SimLod scale. They remain small goldens; do not grow Hearth into title content.
+
+  The following shooter-unique gates are explicitly **cut from the first-title critical path**: `RuntimeProfile::AaaShooter`, 60 Hz dedicated authoritative sim, 8-player/32-player lobby targets, 60 Hz intent transport, the rewind/lag-comp ship gate, Netlock release acceptance, and the competitive no-GI render permutation. Netlock and the shooter profile remain maintained regression surfaces and must stay green; they are not first-title release blockers.
+
+  Console certification/device adapters, live Canon epoch deployment, runtime infer, GPU particles, a localization/UMG framework, marketplace/UGC, 64-player scale, and virtualized geometry are also post-title-one work. Landed boundaries and regression tests remain; this freeze authorizes no architectural rollback and no deletion of those capabilities.
 
 ---
 

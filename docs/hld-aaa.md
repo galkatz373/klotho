@@ -5,13 +5,13 @@
 | Document | Successor High-Level Design — Klotho at AAA production scale |
 | Author | Grok (for Gal Katz) |
 | Date | 2026-09-05 |
-| Status | Draft (rev 5 — Era 1 + Era 2 + AAA-18–22 landed; Q8–Q16 closed; remaining: AAA-23–27) |
-| Last verified | 2026-09-05 against `b2541d2` plus AAA-22 in this working tree |
+| Status | Draft (rev 5 — Era 1 + Era 2 + AAA-18–23 landed; Q8–Q16 closed; remaining: AAA-24–27) |
+| Last verified | 2026-09-06 against `2225e93` plus AAA-23 in this working tree |
 | Supersedes | `docs/hld.md` rev 5 (2026-08-22) — v1 semantic kernel, Hearth/Ash slice |
 | Audience | Senior engine, tools, gameplay systems, and production engineers |
 | Language | Rust (edition 2024; 2021-compatible crates OK) |
 
-This is not a patch note on rev 5. It is the architecture for a studio that wants Klotho's programming model **and** a contemporary first-party quality bar. Rev 5 remains the law for crates that have not yet taken an AAA PR. **Landed on `main` (verified 2026-09-05 against `b2541d2` plus AAA-22):** AAA-01, AAA-02, AAA-03, AAA-04, AAA-05, AAA-08.1, AAA-06, AAA-08, AAA-07, AAA-09, AAA-10, AAA-11, AAA-11b, AAA-12, AAA-13, AAA-14, AAA-15, AAA-16, AAA-17, AAA-18, AAA-19, AAA-20, AAA-21, AAA-21b, AAA-22 (plus rev-4 K58 caps). **Next unblocked work:** AAA-23, AAA-24 → Era 4 (AAA-25–27).
+This is not a patch note on rev 5. It is the architecture for a studio that wants Klotho's programming model **and** a contemporary first-party quality bar. Rev 5 remains the law for crates that have not yet taken an AAA PR. **Landed on `main` (verified 2026-09-06 against `2225e93` plus AAA-23):** AAA-01, AAA-02, AAA-03, AAA-04, AAA-05, AAA-08.1, AAA-06, AAA-08, AAA-07, AAA-09, AAA-10, AAA-11, AAA-11b, AAA-12, AAA-13, AAA-14, AAA-15, AAA-16, AAA-17, AAA-18, AAA-19, AAA-20, AAA-21, AAA-21b, AAA-22, AAA-23 (plus rev-4 K58 caps). **Next unblocked work:** AAA-24 → Era 4 (AAA-25–27).
 
 > **Freshness rule (keeps this doc from going stale):** every AAA PR that lands must bump the `Last verified` row, the landed list in this paragraph, the `Landed on main` line in §PR Plan, and the `— landed` suffix on its `#### AAA-NN` header in the same commit. `git log` is the source of truth; this list is a cached view of it.
 
@@ -1185,7 +1185,7 @@ flowchart LR
 | **0** (now) | Semantic kernel, Hearth/Ash, unlit pixels, 20 Hz optional listen-server | Engine |
 | **1** Kernel-scale — **landed** | `PackedIx=u32`, Partition, Places, interest, parallel propose, Trace thinned, scalar phys, Ember+Drift **headless** (AAA-01–10) | Lumen, lag-comp, DCC farm, ragdoll-as-gameplay, 4 km terrain |
 | **2** Presentation-scale — **landed** | PBR, shadows, **probes+SSGI**, skinned ClipSet (MotionDb optional), spatial audio, Distaff viewport, glTF cook, Chorus headless, VFX decals (AAA-11–17) | Console SKU, live packs, GPU particles, loc/UI framework, SDFGI |
-| **3** Production-scale — **partial (AAA-18–22 landed)** | Dedicated PoseDelta+lag-comp transport, save epochs, cinematics, HUD skin, and infer sidecar done; remaining: Netlock slice and 50 GB warp (AAA-23–24) | Marketplace, NL→Rite, Nanite, 64p |
+| **3** Production-scale — **partial (AAA-18–23 landed)** | Dedicated PoseDelta+lag-comp transport, save epochs, cinematics, HUD skin, infer sidecar, and Netlock slice done; remaining: 50 GB warp (AAA-24) | Marketplace, NL→Rite, Nanite, 64p |
 | **4** Live / console | Canon epoch **packs**, HAL TBD console spike, first-title freeze | Every Unreal checkbox |
 
 **Explicitly not in Era 1–2:** terrain mesh as Phys, foliage colliders, shader graph, loc/UI framework, GPU particle VFX, console SKU, live epoch packs, cinematic time-scale, Drift heightfield, Ember lag-comp, Chorus skinned crowds.
@@ -1194,7 +1194,7 @@ flowchart LR
 
 **Rollback:** see per-flag table. Golden Trace tags every milestone.
 
-**Staffing (indicative):** Era 1 is a **second engine**, not four people finishing rev 5. Plan: 2 kernel + 1 phys + 1 stream/tools as a *minimum*. **Era 1 (AAA-01–10), Era 2 (AAA-11–17), and AAA-18–22 already landed; Ember+Drift+Chorus goldens exist.** Remaining: **AAA-23, AAA-24 → Era 4 (AAA-25–27)**. Do not claim PRs are independently mergeable; claim **main green, Hearth/Ash goldens pass**.
+**Staffing (indicative):** Era 1 is a **second engine**, not four people finishing rev 5. Plan: 2 kernel + 1 phys + 1 stream/tools as a *minimum*. **Era 1 (AAA-01–10), Era 2 (AAA-11–17), and AAA-18–23 already landed; Ember+Drift+Chorus+Netlock goldens exist.** Remaining: **AAA-24 → Era 4 (AAA-25–27)**. Do not claim PRs are independently mergeable; claim **main green, Hearth/Ash goldens pass**.
 
 ---
 
@@ -1253,7 +1253,7 @@ flowchart LR
 
 This plan **supersedes rev 5 PRs after the already-landed 01–21 work**. Do not relitigate `klotho-core` existence. **Do not claim 27 independent merges.** Claim: each PR leaves `main` green; Hearth/Ash goldens pass (AAA-01 was the first allowed hash rewrite; later ABI flag-days already landed with 02/03/08.1). Flags keep Hearth playable if phys/stream/jobs are off.
 
-**Landed on `main` (do not re-implement; verified 2026-09-05 against `b2541d2` plus AAA-22):** AAA-01 Trace tape, AAA-02 6DOF+budgets, AAA-03 `PackedIx`+CoW, AAA-04 jobs+Partition+`us_sim` telemetry, AAA-05 interest+SimLod, AAA-08.1 ISA/Verb/Rel, AAA-06 Residency, AAA-08 scalar phys, AAA-07 stream+shards, AAA-09 Ember, AAA-10 Drift, AAA-11 Manifest extract, AAA-11b VFX decals, AAA-12 PBR, AAA-13 ClipSet/MotionDb, AAA-14 glTF cook, AAA-15 editor viewport, AAA-16 spatial audio, AAA-17 Chorus, AAA-18 PoseDelta+overlay, AAA-19 rewind ring, AAA-20 save epochs, AAA-21 Cinematics, AAA-21b HUD skin, AAA-22 infer sidecar. Rev 5 amends landed K48 (exact automatic snapshots), K53 (stable Full delta baseline), and K58 (phys-body flood, `NO_ISLAND`, fail-closed size/count caps). **Next:** AAA-23, AAA-24.
+**Landed on `main` (do not re-implement; verified 2026-09-06 against `2225e93` plus AAA-23):** AAA-01 Trace tape, AAA-02 6DOF+budgets, AAA-03 `PackedIx`+CoW, AAA-04 jobs+Partition+`us_sim` telemetry, AAA-05 interest+SimLod, AAA-08.1 ISA/Verb/Rel, AAA-06 Residency, AAA-08 scalar phys, AAA-07 stream+shards, AAA-09 Ember, AAA-10 Drift, AAA-11 Manifest extract, AAA-11b VFX decals, AAA-12 PBR, AAA-13 ClipSet/MotionDb, AAA-14 glTF cook, AAA-15 editor viewport, AAA-16 spatial audio, AAA-17 Chorus, AAA-18 PoseDelta+overlay, AAA-19 rewind ring, AAA-20 save epochs, AAA-21 Cinematics, AAA-21b HUD skin, AAA-22 infer sidecar, AAA-23 Netlock. Rev 5 amends landed K48 (exact automatic snapshots), K53 (stable Full delta baseline), and K58 (phys-body flood, `NO_ISLAND`, fail-closed size/count caps). **Next:** AAA-24.
 
 ```mermaid
 flowchart TB
@@ -1482,7 +1482,7 @@ flowchart TB
 - **Depends on:** AAA-18 (host-only still)
 - **Changes:** **OS process** sidecar (Q13 closed), not wasmtime, not in-process. Snapshot via IPC. Still `InferIntent` only. Panic/OOM disables infer. Default off. UB recovery not claimed.
 
-#### AAA-23 — Netlock slice
+#### AAA-23 — Netlock slice — **landed**
 
 - **Files:** `examples/netlock-slice/**`
 - **Depends on:** AAA-18, AAA-19

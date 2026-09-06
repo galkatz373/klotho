@@ -1670,6 +1670,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "netlock-slice"
+version = "0.1.0"
+dependencies = [
+ "klotho-canon",
+ "klotho-commit",
+ "klotho-core",
+ "klotho-ir",
+ "klotho-net",
+ "klotho-trace",
+ "klotho-world",
+]
+
+[[package]]
 name = "nu-ansi-term"
 version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

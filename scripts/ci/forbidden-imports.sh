@@ -71,6 +71,7 @@ check_gameplay_jobs examples/ash-slice
 check_gameplay_jobs examples/ember-slice
 check_gameplay_jobs examples/drift-slice
 check_gameplay_jobs examples/chorus-slice
+check_gameplay_jobs examples/netlock-slice
 check_gameplay_jobs crates/klotho-author
 check_gameplay_jobs crates/klotho-editor
 
@@ -97,6 +98,7 @@ check_no_dcc examples/ash-slice
 check_no_dcc examples/ember-slice
 check_no_dcc examples/drift-slice
 check_no_dcc examples/chorus-slice
+check_no_dcc examples/netlock-slice
 check_no_dcc crates/klotho-author
 check_no_dcc crates/klotho-editor
 check_no_dcc crates/klotho-sim
@@ -125,6 +127,7 @@ check_no_phys examples/ash-slice
 check_no_phys examples/ember-slice
 check_no_phys examples/drift-slice
 check_no_phys examples/chorus-slice
+check_no_phys examples/netlock-slice
 check_no_phys crates/klotho-author
 check_no_phys crates/klotho-editor
 check_no_phys crates/klotho-motion
@@ -155,6 +158,7 @@ check_no_stream examples/ash-slice
 check_no_stream examples/ember-slice
 check_no_stream examples/drift-slice
 check_no_stream examples/chorus-slice
+check_no_stream examples/netlock-slice
 check_no_stream crates/klotho-author
 check_no_stream crates/klotho-editor
 check_no_stream crates/klotho-sim

@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Klotho platform: window, OS events, Look accumulation, audio device (no world mutation)"
+description = "Klotho platform HAL: desktop devices, console target identity, replay evidence (no world mutation)"
 readme = false
 publish = false
 

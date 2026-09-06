@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Klotho wgpu presenter: clustered forward+ PBR, unlit lambert goldens, render thread"
+description = "Klotho render HAL and wgpu presenter: clustered forward+ PBR, goldens, render thread"
 readme = false
 publish = false
 
@@ -14,6 +14,7 @@ klotho-anim.workspace = true
 klotho-compile.workspace = true
 klotho-core.workspace = true
 klotho-manifest.workspace = true
+klotho-platform.workspace = true
 klotho-prove.workspace = true
 klotho-world.workspace = true
 pollster = "0.4"

@@ -1,4 +1,4 @@
-//! wgpu presenter: clustered forward+ PBR, unlit lambert goldens, render thread.
+//! Render HAL and wgpu presenter: clustered forward+ PBR, goldens, render thread.
 //!
 //! The renderer is a pure function of [`VisualManifest`] + [`Observer`] +
 //! [`GpuBudget`]. Header-validate kitbash meshes before GPU upload. Sim does
@@ -12,6 +12,7 @@
 mod cluster;
 mod extract;
 mod gpu;
+mod hal;
 mod math;
 mod overlay;
 mod palette;
@@ -27,6 +28,7 @@ pub use extract::{
     VisualBind, binds_from_cooked, extract_visual, extract_visual_with_clips, skinned_instance,
 };
 pub use gpu::{GOLDEN_HEIGHT, GOLDEN_WIDTH, WgpuPresenter};
+pub use hal::{HalPresenter, RenderHal, RenderHalError};
 pub use overlay::{overlay_hud, write_bmp};
 pub use palette::{albedo, metalness_roughness};
 pub use perm::{PresenterPerm, cascade_count, gi_enabled, permutation, ssgi_enabled};
@@ -36,6 +38,7 @@ pub use surface::WindowedPresenter;
 pub use thread::RenderThread;
 
 pub use klotho_manifest::{GpuBudget, Observer, VisualManifest};
+pub use klotho_platform::GraphicsApi;
 
 /// WGSL source for the unlit+lambert family (Hearth goldens).
 pub const SHADER_WGSL: &str = include_str!("shader.wgsl");

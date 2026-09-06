@@ -6,9 +6,11 @@ use std::time::Instant;
 use klotho_compile::{decode_mesh, decode_skinned_mesh, peek_kind};
 use klotho_core::BlobId;
 use klotho_manifest::{GpuBudget, LightKind, Observer, VisualManifest};
+use klotho_platform::GraphicsApi;
 use klotho_prove::{ArtifactKind, Cas};
 use wgpu::util::DeviceExt;
 
+use crate::hal::{RenderHal, RenderHalError};
 use crate::math::{model_from_pose, view_proj};
 use crate::palette::albedo;
 use crate::pbr_pass::{self, PbrResources};
@@ -621,6 +623,22 @@ impl Presenter for WgpuPresenter {
     fn present(&mut self, vis: &VisualManifest, observer: Observer, budget: GpuBudget) {
         let view = self.color.clone();
         self.present_to(&view, vis, observer, budget);
+    }
+}
+
+impl RenderHal for WgpuPresenter {
+    fn graphics_api(&self) -> GraphicsApi {
+        GraphicsApi::DesktopWgpu
+    }
+
+    fn present_manifest(
+        &mut self,
+        vis: &VisualManifest,
+        observer: Observer,
+        budget: GpuBudget,
+    ) -> Result<(), RenderHalError> {
+        self.present(vis, observer, budget);
+        Ok(())
     }
 }
 

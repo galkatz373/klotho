@@ -6,6 +6,7 @@
 #[cfg(all(feature = "aaa-adventure", feature = "aaa-shooter"))]
 compile_error!("aaa-adventure and aaa-shooter are mutually exclusive runtime profiles");
 
+mod epoch;
 mod interest;
 mod jobs;
 mod profile;
@@ -13,6 +14,9 @@ mod residency;
 mod stream;
 mod warp;
 
+pub use epoch::{HaltedEpoch, halt_for_epoch};
+#[cfg(any(feature = "net", feature = "net-listen", feature = "net-dedicated"))]
+pub use epoch::{HaltedServerEpoch, ServerEpochApplyError, halt_server_for_epoch};
 pub use interest::apply_interest;
 pub use jobs::ingest_island_jobs;
 pub use klotho_stream::StreamCatalog;

@@ -114,6 +114,28 @@ impl Server {
         self.epoch
     }
 
+    /// Canon identity advertised on Hello.
+    #[must_use]
+    pub fn canon_hash(&self) -> Hash {
+        self.canon_hash
+    }
+
+    /// Install the identity of a committed Canon epoch. Existing clients must
+    /// download that pack and join again, or remain disconnected.
+    pub fn install_epoch(&mut self, canon_hash: Hash, epoch: Epoch) -> Result<(), NetError> {
+        if epoch.0 != self.epoch.0.checked_add(1).ok_or(NetError::HelloMismatch)?
+            || canon_hash == self.canon_hash
+        {
+            return Err(NetError::HelloMismatch);
+        }
+        self.canon_hash = canon_hash;
+        self.epoch = epoch;
+        self.joined.clear();
+        self.wire_player = None;
+        self.next_slot = 0;
+        Ok(())
+    }
+
     /// Advertised intent rate.
     #[must_use]
     pub fn intent_hz(&self) -> u8 {
@@ -654,6 +676,26 @@ mod tests {
         assert_eq!(err, NetError::HelloMismatch);
         assert_eq!(server.disconnect_reason(), None);
         assert_eq!(server.player_count(), 0);
+    }
+
+    #[test]
+    fn installed_epoch_requires_clients_to_rejoin() {
+        let old = Hash::from_bytes([1; 32]);
+        let new = Hash::from_bytes([2; 32]);
+        let mut server = Server::new(old, Epoch::ZERO, 60).unwrap();
+        let client = Client::with_join(old, Epoch::ZERO, 60).unwrap();
+        let Packet::Hello { verifying_key, .. } = client.hello_packet() else {
+            unreachable!()
+        };
+        server.accept_join(&verifying_key).unwrap();
+        assert_eq!(server.player_count(), 1);
+        server.install_epoch(new, Epoch(1)).unwrap();
+        assert_eq!(server.epoch(), Epoch(1));
+        assert_eq!(server.player_count(), 0);
+        assert_eq!(
+            server.install_epoch(new, Epoch(1)),
+            Err(NetError::HelloMismatch)
+        );
     }
 
     #[test]

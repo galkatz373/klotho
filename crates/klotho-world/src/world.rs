@@ -159,6 +159,14 @@ impl World {
     pub(crate) fn set_tick(&mut self, t: Tick) {
         self.tick = t;
     }
+
+    pub(crate) fn replace_canon(&mut self, canon: Arc<Canon>, canon_hash: Hash, epoch: Epoch) {
+        self.canon = canon;
+        self.canon_hash = canon_hash;
+        self.epoch = epoch;
+        self.snaps = [None, None];
+        self.snap_i = 0;
+    }
 }
 
 impl WorldSnapshot {

@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use klotho_canon::RiteId;
+use klotho_canon::{Canon, EpochMap, OPAQUE, RiteId};
 use klotho_core::{
     AabbMm, AffordanceId, BlobId, Hash, IVec3, LocusKind, PackedIx, PhysRequest, PoseMm,
     ResourceId, Sigil, SimLod, Support, Vel3, rotate_xz,
@@ -171,6 +171,67 @@ impl Projection {
             space_ix: Arc::new(PlaceIndex::new()),
             opaque_id: opaque,
         }
+    }
+
+    /// Remap every Canon-packed projection column at an epoch boundary.
+    /// Returns active rites that cannot resume in the replacement Canon.
+    pub(crate) fn remap_epoch(&mut self, map: &EpochMap, canon: &Canon) -> Vec<(Sigil, u16)> {
+        for i in 0..self.afford.len() {
+            let old_bits = self.afford.get(i).copied().unwrap_or(0);
+            let mut new_bits = 0u64;
+            for bit in 0..64u16 {
+                if old_bits & (1u64 << bit) == 0 {
+                    continue;
+                }
+                if let Some(new) = map.affordance(AffordanceId(bit)) {
+                    if new.0 < 64 {
+                        new_bits |= 1u64 << new.0;
+                    }
+                }
+            }
+            self.afford.set(i, new_bits);
+        }
+
+        let mut qty = BTreeMap::new();
+        for (&(packed, old), &value) in self.qty.iter() {
+            if let Some(new) = map.resource(old) {
+                qty.insert((packed, new), value);
+            }
+        }
+        self.qty = Arc::new(qty);
+
+        let mut evicted = Vec::new();
+        let mut rites = BTreeMap::new();
+        for (&(packed, old), &machine) in self.rites.iter() {
+            let old_id = RiteId(old);
+            let Some(new_id) = map.rite(old_id) else {
+                if let Some(actor) = self.sigil(packed) {
+                    evicted.push((actor, old));
+                }
+                continue;
+            };
+            let resumable = canon
+                .rites
+                .get(usize::from(new_id.0))
+                .is_some_and(|rite| rite.chunk.instrs.iter().any(|i| i.pc == machine.pc));
+            if resumable {
+                rites.insert((packed, new_id.0), machine);
+            } else if let Some(actor) = self.sigil(packed) {
+                evicted.push((actor, old));
+            }
+        }
+        self.rites = Arc::new(rites);
+
+        let mut knows = BTreeSet::new();
+        for &(packed, old) in self.knows.iter() {
+            if let Some(new) = map.fact(old) {
+                knows.insert((packed, new));
+            }
+        }
+        self.knows = Arc::new(knows);
+        self.opaque_id = canon.affordance_id(OPAQUE);
+        self.rebuild_space_ix();
+        evicted
     }
 
     /// Packed-row cap for this projection.

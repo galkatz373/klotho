@@ -15,7 +15,7 @@ use crate::style::StyleIntent;
 pub struct IntentDoc {
     /// Presentation / kitbash hints.
     pub style: StyleIntent,
-    /// Canon patches. `RetractLaw` is cook-time only (K16).
+    /// Canon patches. Retractions are cook-time / epoch-pack only (K16).
     pub canon_diffs: Vec<CanonDiff>,
     /// Seed Trace facts (loci, rels, qtys, poses).
     pub seed: Vec<SeedFact>,

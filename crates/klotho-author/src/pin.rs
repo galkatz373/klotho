@@ -114,6 +114,7 @@ fn canon_identity(a: &CanonDiff, b: &CanonDiff) -> bool {
         (CanonDiff::RetractLaw { id: x, .. }, CanonDiff::RetractLaw { id: y, .. }) => x == y,
         (CanonDiff::AddAffordance(x), CanonDiff::AddAffordance(y)) => x.id == y.id,
         (CanonDiff::AddRite(x), CanonDiff::AddRite(y)) => x.id == y.id,
+        (CanonDiff::RetractRite { id: x, .. }, CanonDiff::RetractRite { id: y, .. }) => x == y,
         (CanonDiff::AddBeat(x), CanonDiff::AddBeat(y)) => x.id == y.id,
         _ => false,
     }
@@ -123,6 +124,8 @@ fn canon_opposite(a: &CanonDiff, b: &CanonDiff) -> bool {
     match (a, b) {
         (CanonDiff::AddLaw(x), CanonDiff::RetractLaw { id: y, .. }) => x.id == *y,
         (CanonDiff::RetractLaw { id: x, .. }, CanonDiff::AddLaw(y)) => *x == y.id,
+        (CanonDiff::AddRite(x), CanonDiff::RetractRite { id: y, .. }) => x.id == *y,
+        (CanonDiff::RetractRite { id: x, .. }, CanonDiff::AddRite(y)) => *x == y.id,
         _ => false,
     }
 }

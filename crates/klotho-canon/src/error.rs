@@ -30,7 +30,7 @@ pub enum CookError {
     InvalidDoc(String),
     /// Duplicate Law / Affordance / Rite / Beat / seed locus id.
     DuplicateId(String),
-    /// `RetractLaw` named a law that is not in the draft.
+    /// A retraction named a declaration that is not in the draft.
     UnknownRetract(String),
     /// Compiled pred exceeds [`crate::PRED_OPS_PER_EVAL`].
     PredTooLarge,

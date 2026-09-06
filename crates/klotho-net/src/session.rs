@@ -168,6 +168,21 @@ impl Host {
         self.epoch
     }
 
+    /// Install a committed Canon epoch and require the remote to rejoin.
+    pub fn install_epoch(&mut self, canon_hash: Hash, epoch: Epoch) -> Result<(), NetError> {
+        if epoch.0 != self.epoch.0.checked_add(1).ok_or(NetError::HelloMismatch)?
+            || canon_hash == self.canon_hash
+        {
+            return Err(NetError::HelloMismatch);
+        }
+        self.canon_hash = canon_hash;
+        self.epoch = epoch;
+        self.remote = None;
+        self.keys.retain(|player, _| *player == PlayerId(0));
+        self.slots.retain(|player, _| *player == PlayerId(0));
+        Ok(())
+    }
+
     /// Advertised intent rate.
     #[must_use]
     pub fn intent_hz(&self) -> u8 {
@@ -526,6 +541,34 @@ impl Client {
     #[must_use]
     pub fn epoch(&self) -> Epoch {
         self.epoch
+    }
+
+    /// Finish an out-of-band epoch-pack download and prepare to Hello again.
+    /// Without this call, a mismatched Hello stays disconnected.
+    pub fn install_downloaded_epoch(
+        &mut self,
+        canon_hash: Hash,
+        epoch: Epoch,
+    ) -> Result<(), NetError> {
+        if epoch.0 != self.epoch.0.checked_add(1).ok_or(NetError::HelloMismatch)?
+            || canon_hash == self.canon_hash
+        {
+            return Err(NetError::HelloMismatch);
+        }
+        self.canon_hash = canon_hash;
+        self.epoch = epoch;
+        self.player = None;
+        self.overlay = Overlay::new();
+        self.expected_prefix = genesis_hash();
+        self.last_tick = Tick::ZERO;
+        self.saw_snapshot = false;
+        self.disconnected = false;
+        self.disconnect_reason = None;
+        self.interest_gen = 0;
+        self.interest_sigils.clear();
+        self.needs_resync = false;
+        self.awaiting_interest = false;
+        Ok(())
     }
 
     /// Intent rate stored from the last Hello (server-advertised on reply).
@@ -1223,5 +1266,31 @@ mod tests {
         assert_eq!(host.dropped_older().len(), 1);
         assert_eq!(host.dropped_older()[0].analog.stick_x, 1);
         assert_eq!(host.ingested(), got.as_slice());
+    }
+
+    #[test]
+    fn client_can_install_downloaded_pack_and_hello_again() {
+        let old = Hash::from_bytes([18; 32]);
+        let new = Hash::from_bytes([19; 32]);
+        let mut client = Client::new(old).unwrap();
+        let mismatch = Packet::Hello {
+            canon_hash: new,
+            epoch: Epoch(1),
+            build: CompilerStamp::current(),
+            verifying_key: [0; 32],
+            slot: PlayerId(1),
+            intent_hz: 60,
+        };
+        assert_eq!(
+            client.handle(mismatch.clone()),
+            Err(NetError::HelloMismatch)
+        );
+        assert!(client.disconnected());
+        client.install_downloaded_epoch(new, Epoch(1)).unwrap();
+        assert!(!client.disconnected());
+        client.handle(mismatch).unwrap();
+        assert_eq!(client.epoch(), Epoch(1));
+        assert_eq!(client.player(), Some(PlayerId(1)));
+        assert_eq!(client.intent_hz(), 60);
     }
 }

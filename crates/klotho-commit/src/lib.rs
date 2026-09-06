@@ -20,7 +20,7 @@ mod rite;
 mod swept;
 
 pub use admit::{AdmitBuf, IslandProposer, SyncProposer};
-pub use kernel::CommitKernel;
+pub use kernel::{CommitKernel, EpochApplyError};
 pub use klotho_core::{KernelFault, RejectReason};
 pub use klotho_trace::TraceDelta;
 pub use partition::{Partition, partition_islands};

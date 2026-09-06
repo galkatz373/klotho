@@ -364,6 +364,7 @@ impl Draft {
                     d.rite_ix.insert(g.id.clone(), d.rites.len());
                     d.rites.push(g.clone());
                 }
+                CanonDiff::RetractRite { id, .. } => d.retract_rite(id)?,
                 CanonDiff::AddBeat(b) => {
                     if d.beat_ix.contains_key(&b.id) {
                         return Err(CookError::DuplicateId(b.id.0.clone()));
@@ -384,6 +385,18 @@ impl Draft {
         self.law_ix.clear();
         for (j, (n, _)) in self.laws.iter().enumerate() {
             self.law_ix.insert(n.clone(), j);
+        }
+        Ok(())
+    }
+
+    fn retract_rite(&mut self, id: &Name) -> Result<(), CookError> {
+        let Some(i) = self.rite_ix.remove(id) else {
+            return Err(CookError::UnknownRetract(id.0.clone()));
+        };
+        self.rites.remove(i);
+        self.rite_ix.clear();
+        for (j, rite) in self.rites.iter().enumerate() {
+            self.rite_ix.insert(rite.id.clone(), j);
         }
         Ok(())
     }

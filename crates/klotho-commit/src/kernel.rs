@@ -3,14 +3,14 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use klotho_canon::Canon;
+use klotho_canon::{Canon, EpochMap};
 use klotho_core::{
-    Budget, IVec3, KernelFault, Mm, NO_ISLAND, PlayerId, PoseMm, RejectReason, Sigil, Tick, Vel3,
-    YawMd, look_offset, rotate_xz,
+    Budget, Epoch, Hash, IVec3, KernelFault, Mm, NO_ISLAND, PlayerId, PoseMm, RejectReason, Sigil,
+    Tick, Vel3, YawMd, look_offset, rotate_xz,
 };
 use klotho_ir::{Channel, IntentTarget, PlayerIntent, Rel, SourceKind, Verb};
 use klotho_trace::{
-    ISLAND_SNAP_PERIOD_TICKS, IslandSnap, ProposalKind, TraceBody, TraceDelta, TraceEvent,
+    ISLAND_SNAP_PERIOD_TICKS, IslandSnap, ProposalKind, RiteEnd, TraceBody, TraceDelta, TraceEvent,
 };
 use klotho_world::{HITSCAN_RANGE_MM, RewindRing, World, WorldMut, WorldSnapshot, WorldView};
 
@@ -31,6 +31,29 @@ pub struct CommitKernel {
     ring: RewindRing,
     last_rewind_ticks_used: u16,
 }
+
+/// Why a halted Canon epoch transition was refused before any write.
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum EpochApplyError {
+    /// Pack ancestry does not name the live Canon hash.
+    CanonMismatch,
+    /// Pack ancestry or successor does not name the live/next epoch.
+    EpochMismatch,
+    /// A transition must mint a new Canon identity.
+    UnchangedCanon,
+}
+
+impl core::fmt::Display for EpochApplyError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::CanonMismatch => write!(f, "CanonMismatch"),
+            Self::EpochMismatch => write!(f, "EpochMismatch"),
+            Self::UnchangedCanon => write!(f, "UnchangedCanon"),
+        }
+    }
+}
+
+impl core::error::Error for EpochApplyError {}
 
 impl CommitKernel {
     /// Wrap a world. Bind players with [`Self::bind_player`].
@@ -66,6 +89,66 @@ impl CommitKernel {
     #[must_use]
     pub fn canon(&self) -> &Canon {
         self.world.canon()
+    }
+
+    /// Commit a pre-cooked Canon replacement while the runtime is halted.
+    ///
+    /// Pending proposals are from the old view and are discarded. Active
+    /// `WAIT`s resume only when their stable Rite name and next `pc` exist in
+    /// the replacement; all others end with [`RiteEnd::Evicted`].
+    #[allow(clippy::too_many_arguments)]
+    pub fn apply_canon_epoch(
+        &mut self,
+        from_canon_hash: Hash,
+        from_epoch: Epoch,
+        canon_hash: Hash,
+        epoch: Epoch,
+        canon: Arc<Canon>,
+        map: &EpochMap,
+    ) -> Result<TraceDelta, EpochApplyError> {
+        if self.world.canon_hash() != from_canon_hash {
+            return Err(EpochApplyError::CanonMismatch);
+        }
+        let expected = self
+            .world
+            .epoch()
+            .0
+            .checked_add(1)
+            .map(Epoch)
+            .ok_or(EpochApplyError::EpochMismatch)?;
+        if self.world.epoch() != from_epoch || epoch != expected {
+            return Err(EpochApplyError::EpochMismatch);
+        }
+        if canon_hash == from_canon_hash {
+            return Err(EpochApplyError::UnchangedCanon);
+        }
+
+        self.heap.clear();
+        self.partition_rejects.clear();
+        let tick = self.world.tick();
+        let evicted = self
+            .world
+            .mutate()
+            .apply_canon_epoch(canon, canon_hash, epoch, map);
+        let mut delta = TraceDelta::empty(tick);
+        for (actor, rite) in evicted {
+            let event = TraceEvent::new(
+                tick,
+                TraceBody::RiteEnded {
+                    actor,
+                    rite,
+                    status: RiteEnd::Evicted,
+                },
+            );
+            self.world.mutate().append(event.clone());
+            delta.events.push(event);
+        }
+        let cap = self.ring.cap();
+        self.ring = RewindRing::new(cap);
+        let snap = self.world.snapshot();
+        self.ring.push(Arc::clone(&snap));
+        delta.snap_bytes = u32::try_from(snap.approx_bytes()).unwrap_or(u32::MAX);
+        Ok(delta)
     }
 
     /// Enqueue a proposal for the next [`Self::step`].

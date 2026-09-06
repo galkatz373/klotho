@@ -37,6 +37,8 @@ pub enum CompileError {
     Warp(String),
     /// DCC ingest failed (duplicate tag, malformed cooked blob from import).
     Gltf(String),
+    /// The current epoch is `u64::MAX` and cannot advance.
+    EpochOverflow,
 }
 
 impl CompileError {
@@ -67,6 +69,7 @@ impl fmt::Display for CompileError {
             Self::Io(s) => write!(f, "Io({s})"),
             Self::Warp(s) => write!(f, "Warp({s})"),
             Self::Gltf(s) => write!(f, "Gltf({s})"),
+            Self::EpochOverflow => write!(f, "EpochOverflow"),
         }
     }
 }

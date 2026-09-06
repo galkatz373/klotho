@@ -1,9 +1,12 @@
 //! Write path. Public via [`World::mutate`] when feature `mutate` is on
 //! (`klotho-commit` only). Always compiled so projection writers stay linked.
 
+use std::sync::Arc;
+
+use klotho_canon::{Canon, EpochMap};
 use klotho_core::{
-    AabbMm, AffordanceId, BlobId, IVec3, LocusKind, PackedIx, PhysRequest, PoseMm, ResourceId,
-    Sigil, SimLod, Support, Tick, Vel3,
+    AabbMm, AffordanceId, BlobId, Epoch, Hash, IVec3, LocusKind, PackedIx, PhysRequest, PoseMm,
+    ResourceId, Sigil, SimLod, Support, Tick, Vel3,
 };
 use klotho_ir::{PlayerIntent, Rel};
 use klotho_trace::TraceEvent;
@@ -30,6 +33,22 @@ impl World {
 
 #[cfg_attr(not(any(test, feature = "mutate")), allow(dead_code))]
 impl WorldMut<'_> {
+    /// Atomically replace Canon and remap its packed Projection ids.
+    /// Returns old Rite ids that could not resume in the new Canon.
+    pub fn apply_canon_epoch(
+        &mut self,
+        canon: Arc<Canon>,
+        canon_hash: Hash,
+        epoch: Epoch,
+        map: &EpochMap,
+    ) -> Vec<(Sigil, u16)> {
+        let mut projection = self.world.projection().clone();
+        let evicted = projection.remap_epoch(map, &canon);
+        *self.world.projection_mut() = projection;
+        self.world.replace_canon(canon, canon_hash, epoch);
+        evicted
+    }
+
     /// Allocate a locus. Existing sigils are returned as-is.
     pub fn insert_locus(&mut self, s: Sigil, kind: LocusKind) -> Result<PackedIx, WorldError> {
         self.world.projection_mut().insert_locus(s, kind)

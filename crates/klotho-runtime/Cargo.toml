@@ -60,3 +60,7 @@ klotho-phys.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+klotho-save.workspace = true
+klotho-trace.workspace = true

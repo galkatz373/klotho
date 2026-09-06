@@ -13,6 +13,7 @@ mod cfg;
 mod compile;
 mod contradict;
 mod cook;
+mod epoch;
 mod error;
 mod eval;
 mod tables;
@@ -25,6 +26,7 @@ pub use ast::{
 pub use cfg::check_rite_cfg;
 pub use compile::compile_pred;
 pub use cook::{cook, cook_diffs};
+pub use epoch::EpochMap;
 pub use error::CookError;
 pub use eval::{EvalCtx, MemStore, PredStore, eval_pred};
 pub use klotho_ir::{

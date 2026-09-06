@@ -18,6 +18,7 @@
 mod catalog;
 mod cook;
 mod encode;
+mod epoch;
 mod error;
 mod header;
 mod kit;
@@ -32,6 +33,9 @@ pub use cook::{
     digest_of,
 };
 pub use encode::{encode_clipset, encode_hull, encode_mesh_i16};
+pub use epoch::{
+    COMPILER_EPOCH_PACK_VERSION, CanonEpochPack, cook_epoch_pack, cook_next_epoch_pack,
+};
 pub use error::CompileError;
 pub use header::{
     ClipSetInfo, DecodedClip, DecodedGrain, DecodedMesh, DecodedSkinnedMesh, GRAIN_HZ, GrainInfo,

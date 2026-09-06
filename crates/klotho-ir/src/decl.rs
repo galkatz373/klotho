@@ -303,7 +303,7 @@ impl Beat {
     }
 }
 
-/// A Canon patch in an [`crate::IntentDoc`]. `RetractLaw` is cook-time only (K16).
+/// A Canon patch in an [`crate::IntentDoc`]. Retractions are offline-only (K16).
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
 pub enum CanonDiff {
     /// Add a Law.
@@ -319,6 +319,13 @@ pub enum CanonDiff {
     AddAffordance(Affordance),
     /// Add a Rite.
     AddRite(RiteGraph),
+    /// Retract a Rite in an offline Canon cook / epoch pack.
+    RetractRite {
+        /// Rite id.
+        id: Name,
+        /// Why.
+        reason: String,
+    },
     /// Add a Beat.
     AddBeat(Beat),
 }
@@ -327,7 +334,7 @@ impl CanonDiff {
     pub(crate) fn check(&self) -> Result<(), IrError> {
         match self {
             Self::AddLaw(l) => l.check(),
-            Self::RetractLaw { id, reason } => {
+            Self::RetractLaw { id, reason } | Self::RetractRite { id, reason } => {
                 id.check()?;
                 if reason.is_empty() {
                     Err(IrError::EmptyName)

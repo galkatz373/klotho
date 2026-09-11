@@ -250,4 +250,37 @@ EOF
   fi
 fi
 
+# Studio AI crate is not in the engine graph and may not import commit/world/sim/runtime/infer.
+if [[ -d engine/crates ]]; then
+  if command -v rg >/dev/null 2>&1; then
+    if rg -n --glob '!target/**' 'klotho_ai::|klotho-ai' engine; then
+      echo "engine must not import klotho-ai" >&2
+      fail=1
+    fi
+  else
+    if grep -RIn -E 'klotho_ai::|klotho-ai' engine >/dev/null 2>&1; then
+      echo "engine must not import klotho-ai" >&2
+      fail=1
+    fi
+  fi
+fi
+
+if [[ -d studio/crates/klotho-ai ]]; then
+  if command -v rg >/dev/null 2>&1; then
+    if rg -n --glob '!target/**' 'klotho_commit::|klotho-commit|klotho_world::|klotho-world|klotho_sim::|klotho-sim|klotho_runtime::|klotho-runtime|klotho_infer::|klotho-infer' studio/crates/klotho-ai; then
+      echo "klotho-ai must not import commit/world/sim/runtime/infer" >&2
+      fail=1
+    fi
+  else
+    if grep -RIn -E 'klotho_commit::|klotho-commit|klotho_world::|klotho-world|klotho_sim::|klotho-sim|klotho_runtime::|klotho-runtime|klotho_infer::|klotho-infer' studio/crates/klotho-ai >/dev/null 2>&1; then
+      echo "klotho-ai must not import commit/world/sim/runtime/infer" >&2
+      fail=1
+    fi
+  fi
+  if grep -E 'klotho-commit|klotho-world|klotho-sim|klotho-runtime|klotho-infer' studio/crates/klotho-ai/Cargo.toml >/dev/null 2>&1; then
+    echo "klotho-ai Cargo.toml must not depend on commit/world/sim/runtime/infer" >&2
+    fail=1
+  fi
+fi
+
 exit "$fail"

@@ -52,7 +52,7 @@ impl Default for TxBudget {
     }
 }
 
-/// Acceptance contract stub (full claims land in KAI-06).
+/// Acceptance contract stub.
 #[derive(Clone, Eq, PartialEq, Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AcceptanceContract {
@@ -72,7 +72,7 @@ pub struct AuthoringProvenance {
     pub parent: Option<ChangeId>,
 }
 
-/// Pattern argument stub until KAI-05.
+/// Pattern argument stub.
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PatternArg {
@@ -82,7 +82,7 @@ pub struct PatternArg {
     pub value: ParameterValue,
 }
 
-/// Pattern instance stub until KAI-05.
+/// Pattern instance stub.
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PatternInstance {
@@ -98,7 +98,7 @@ pub struct PatternInstance {
     pub args: Vec<PatternArg>,
 }
 
-/// Journey stub until KAI-06.
+/// Journey stub.
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct JourneySpec {
@@ -135,12 +135,12 @@ pub enum AuthorOp {
         /// Module body.
         module: IntentModule,
     },
-    /// Instantiate a pattern. Apply fails closed until KAI-05.
+    /// Instantiate a pattern. Apply fails closed.
     Instantiate {
         /// Instance payload.
         instance: PatternInstance,
     },
-    /// Set a pattern argument. Apply fails closed until KAI-05.
+    /// Set a pattern argument. Apply fails closed.
     SetArgument {
         /// Instance identity.
         instance: AnchorId,
@@ -181,7 +181,7 @@ pub enum AuthorOp {
         /// Request identity.
         request: AssetRequestId,
     },
-    /// Add a journey. Apply fails closed until KAI-06.
+    /// Add a journey. Apply fails closed.
     AddJourney {
         /// Journey payload.
         journey: JourneySpec,

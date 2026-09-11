@@ -93,11 +93,14 @@ fn apply_one_inner(snap: &mut AuthoringSnapshot, op: &AuthorOp) -> Result<Prepar
     })
 }
 
-/// Re-check captured preconditions against `snap`.
+/// Re-check captured preconditions, applying earlier ops onto a rolling copy of `snap`.
 pub fn check_prepared(snap: &AuthoringSnapshot, prepared: &[PreparedOp]) -> Result<(), AiError> {
+    let mut rolling = snap.clone();
+    let id = ChangeId::derive(b"precheck");
     for item in prepared {
         fail_closed(&item.op)?;
-        check_listed(snap, &item.preconditions, &item.op)?;
+        check_listed(&rolling, &item.preconditions, &item.op)?;
+        apply_ops(&mut rolling, id, std::slice::from_ref(&item.op))?;
     }
     Ok(())
 }

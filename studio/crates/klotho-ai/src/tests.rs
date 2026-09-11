@@ -1,6 +1,6 @@
-//! KAI-03 gates: isolation, commute, conflict matrix, merge, rebase, lease.
+//! Isolation, commute, conflict matrix, merge, rebase, and lease gates.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -462,17 +462,115 @@ fn conflict_matrix_every_pair() {
                         ),
                         "{a} vs {b} disjoint: {class:?}"
                     );
-                    if a == OpKind::AddFact && b == OpKind::AddFact {
-                        let x = qty(w.module, w.oak, 1);
-                        let y = qty(w.module, w.oak, 9);
-                        let neg = classify_pair(&w.snap, a_id, &x, b_id, &y);
-                        assert!(
-                            matches!(neg, MergeClass::Conflict(ref w) if w.reason == ConflictReason::OverlappingWrite)
-                        );
-                        let pos = classify_pair(&w.snap, a_id, &x, b_id, &x);
-                        assert!(matches!(pos, MergeClass::Coalesce));
-                    }
                 }
+            }
+            if let Some((x, y)) = conflict_sample(a, b, &w) {
+                let neg = classify_pair(&w.snap, a_id, &x, b_id, &y);
+                assert!(
+                    matches!(neg, MergeClass::Conflict(_)),
+                    "{a} vs {b} overlapping: {neg:?}"
+                );
+            }
+        }
+    }
+}
+
+fn oak_write(kind: OpKind, w: &World) -> Option<AuthorOp> {
+    match kind {
+        OpKind::AddFact => Some(qty(w.module, w.oak, 3)),
+        OpKind::BindAsset => Some(AuthorOp::BindAsset {
+            locus: w.oak,
+            request: AssetRequestId::derive(b"oak"),
+        }),
+        OpKind::AddReference => Some(AuthorOp::AddReference {
+            target: w.oak,
+            reference: ReferenceId::derive(b"oak"),
+        }),
+        OpKind::Rename => Some(AuthorOp::Rename {
+            target: w.oak,
+            to: name("brass_door"),
+        }),
+        OpKind::Remove => Some(AuthorOp::Remove {
+            target: w.oak,
+            reason: "also".into(),
+        }),
+        OpKind::SetArgument => Some(sample_op(OpKind::SetArgument, 0, w)),
+        _ => None,
+    }
+}
+
+fn conflict_sample(a: OpKind, b: OpKind, w: &World) -> Option<(AuthorOp, AuthorOp)> {
+    use crate::conflict::MatrixRule;
+    match matrix_rule(a, b) {
+        MatrixRule::AssetCoexist | MatrixRule::RenameVsEdit => None,
+        MatrixRule::RemoveVsDependent => {
+            if a == OpKind::Remove && b == OpKind::Remove {
+                return None;
+            }
+            let remove = AuthorOp::Remove {
+                target: w.oak,
+                reason: "gone".into(),
+            };
+            let other = if a == OpKind::Remove {
+                oak_write(b, w)?
+            } else {
+                oak_write(a, w)?
+            };
+            Some((remove, other))
+        }
+        MatrixRule::RenameVsRename => Some((
+            AuthorOp::Rename {
+                target: w.oak,
+                to: name("brass_door"),
+            },
+            AuthorOp::Rename {
+                target: w.oak,
+                to: name("iron_door"),
+            },
+        )),
+        MatrixRule::CanonNoBulk => Some((
+            sample_op(OpKind::AddCanonDiff, 0, w),
+            sample_op(OpKind::AddCanonDiff, 1, w),
+        )),
+        MatrixRule::PatternUnlessIdentical => Some((sample_op(a, 0, w), sample_op(b, 1, w))),
+        MatrixRule::MergeByChildId => {
+            let c = change("same-locus");
+            let anchor = derive_op_anchor(&name("hearth"), c, b"same");
+            Some((
+                AuthorOp::AddLocus {
+                    module: w.module,
+                    anchor,
+                    name: name("alpha"),
+                    kind: LocusKind::Relic,
+                },
+                AuthorOp::AddLocus {
+                    module: w.module,
+                    anchor,
+                    name: name("beta"),
+                    kind: LocusKind::Relic,
+                },
+            ))
+        }
+        MatrixRule::CoalesceIfIdentical | MatrixRule::CommuteIfDisjoint => {
+            if a != b {
+                return None;
+            }
+            match a {
+                OpKind::AddFact => Some((qty(w.module, w.oak, 1), qty(w.module, w.oak, 9))),
+                OpKind::AddModule => {
+                    let m1 = extra_module("dup");
+                    let mut m2 = m1.clone();
+                    m2.version = 2;
+                    Some((
+                        AuthorOp::AddModule { module: m1 },
+                        AuthorOp::AddModule { module: m2 },
+                    ))
+                }
+                OpKind::AddCanonDiff => Some((
+                    sample_op(OpKind::AddCanonDiff, 0, w),
+                    sample_op(OpKind::AddCanonDiff, 1, w),
+                )),
+                _ => None,
             }
         }
     }
@@ -584,6 +682,99 @@ fn rebase_stale_precondition_fails_closed() {
     );
     let _ = fs::remove_dir_all(&base_dir);
     let _ = fs::remove_dir_all(&ws);
+}
+
+#[test]
+fn rebase_create_then_edit_onto_unchanged_base() {
+    let base_dir = scratch("base-rebase-create");
+    let ws = scratch("ws-rebase-create");
+    write_bundle(&hearth_bundle(), &base_dir).unwrap();
+    let mut store = TransactionStore::open(&ws, &base_dir.join("project.ron")).unwrap();
+    let bundle = hearth_bundle();
+    let id = store
+        .create_from_bundle(
+            bundle.clone(),
+            ChangeScope::unrestricted(),
+            TxBudget::default(),
+        )
+        .unwrap();
+    let w = world();
+    let locus = add_locus(w.module, change("new"), "stool", "stool");
+    let anchor = match &locus {
+        AuthorOp::AddLocus { anchor, .. } => *anchor,
+        _ => panic!("locus"),
+    };
+    store
+        .apply(id, vec![locus, qty(w.module, anchor, 3)])
+        .unwrap();
+    let before = store.snapshot(id).unwrap().content_hash().unwrap();
+    let after = store.rebase(id, &bundle).unwrap();
+    assert_eq!(before, after);
+    assert_eq!(
+        store.snapshot(id).unwrap().qty(anchor, &name("mass_g")),
+        Some(3)
+    );
+    let _ = fs::remove_dir_all(&base_dir);
+    let _ = fs::remove_dir_all(&ws);
+}
+
+#[test]
+fn scoped_add_locus_requires_parent_module() {
+    let base_dir = scratch("base-scope");
+    let ws = scratch("ws-scope");
+    let mut bundle = hearth_bundle();
+    let extra = extra_module("other");
+    let other = extra.anchor;
+    klotho_author::apply_edit(
+        &mut bundle,
+        klotho_author::SemanticEdit::AddModule { module: extra },
+    )
+    .unwrap();
+    write_bundle(&bundle, &base_dir).unwrap();
+    let mut store = TransactionStore::open(&ws, &base_dir.join("project.ron")).unwrap();
+    let main = bundle
+        .modules
+        .iter()
+        .find(|m| m.id.as_str() == "main")
+        .unwrap()
+        .anchor;
+    let mut scope = ChangeScope::unrestricted();
+    scope.modules = BTreeSet::from([main]);
+    scope.anchors = BTreeSet::new();
+    let id = store
+        .create_from_bundle(bundle, scope, TxBudget::default())
+        .unwrap();
+    store
+        .apply(
+            id,
+            vec![add_locus(main, change("in-main"), "stool", "stool")],
+        )
+        .unwrap();
+    let err = store
+        .apply(
+            id,
+            vec![add_locus(other, change("in-other"), "crate", "crate")],
+        )
+        .unwrap_err();
+    assert!(matches!(err, AiError::Scope(_)), "{err}");
+    let _ = fs::remove_dir_all(&base_dir);
+    let _ = fs::remove_dir_all(&ws);
+}
+
+#[test]
+fn coalesce_removes_with_different_reasons() {
+    let w = world();
+    let a = AuthorOp::Remove {
+        target: w.oak,
+        reason: "one".into(),
+    };
+    let b = AuthorOp::Remove {
+        target: w.oak,
+        reason: "two".into(),
+    };
+    let merged = merge_ops(&w.snap, change("a"), &[a], change("b"), &[b]).unwrap();
+    assert!(merged.tombstoned(w.oak));
+    assert!(merged.lookup(w.oak).is_none());
 }
 
 #[test]

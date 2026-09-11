@@ -82,7 +82,7 @@ pub struct TransactionStore {
     review: Vec<ReviewQueueEntry>,
 }
 
-/// Thin holder around [`TransactionStore`]. Routing/agents land later.
+/// Thin holder around [`TransactionStore`].
 pub struct KlothoAi {
     /// Isolated transactions.
     pub transactions: TransactionStore,
@@ -318,9 +318,7 @@ impl TransactionStore {
         if tx.status == TxStatus::Submitted {
             return Err(AiError::Submitted);
         }
-        if let Some(lease) = tx.lease {
-            self.leases.remove(&lease);
-        }
+        self.leases.retain(|_, lease| lease.tx != id);
         self.txs.remove(&id);
         self.workspace.delete_tx(&id.to_string())?;
         self.audit(
@@ -380,7 +378,7 @@ impl TransactionStore {
         self.sequence += 1;
         let now = self.sequence;
         for lease in self.leases.values() {
-            if lease.expired(now) {
+            if lease.expired(now) || lease.tx == id {
                 continue;
             }
             let holder = self
@@ -408,9 +406,12 @@ impl TransactionStore {
             root,
             expires_at: now + DEFAULT_LEASE_TTL,
         };
+        if let Some(prev) = tx.lease {
+            self.leases.remove(&prev);
+        }
         self.leases.insert(lease_id, lease);
-        if let Some(tx) = self.txs.get_mut(&id) {
-            tx.lease = Some(lease_id);
+        if let Some(live) = self.txs.get_mut(&id) {
+            live.lease = Some(lease_id);
         }
         self.audit(
             AuditKind::LeaseAcquire,
@@ -438,7 +439,7 @@ impl TransactionStore {
             .leases
             .get(&lease)
             .cloned()
-            .ok_or_else(|| AiError::Io("unknown lease".into()))?;
+            .ok_or(AiError::UnknownLease(lease))?;
         if held.tx != id {
             return Err(AiError::LeaseHeld {
                 anchor: held.root,
@@ -458,7 +459,7 @@ impl TransactionStore {
                 None,
             );
             self.persist()?;
-            return Err(AiError::Io("lease expired".into()));
+            return Err(AiError::LeaseExpired(lease));
         }
         if let Some(row) = self.leases.get_mut(&lease) {
             row.expires_at = now + DEFAULT_LEASE_TTL;
@@ -561,9 +562,22 @@ impl TransactionStore {
             return Ok(());
         }
         let decl = declare(op, Some(snap));
+        let parent = op_parent_module(op, snap);
+        let created = op.created_anchor();
         for cell in decl.writes {
-            let module = snap.owning_module(cell.anchor);
-            if scope.allows(cell.anchor) || module.is_some_and(|m| scope.allows(m)) {
+            if scope.allows(cell.anchor) {
+                continue;
+            }
+            if created == Some(cell.anchor) && parent.is_some_and(|m| scope.allows(m)) {
+                continue;
+            }
+            if parent.is_some_and(|m| scope.allows(m)) {
+                continue;
+            }
+            if snap
+                .owning_module(cell.anchor)
+                .is_some_and(|m| scope.allows(m))
+            {
                 continue;
             }
             return Err(AiError::Scope(cell.anchor));
@@ -605,7 +619,7 @@ impl TransactionStore {
         let dir = self.workspace.root().join("tx").join(id.to_string());
         fs::create_dir_all(&dir).map_err(|e| AiError::Io(e.to_string()))?;
         let text = to_ron(tx).map_err(|e| AiError::Ser(e.to_string()))?;
-        fs::write(dir.join("tx.ron"), text).map_err(|e| AiError::Io(e.to_string()))
+        write_atomic(&dir.join("tx.ron"), &text)
     }
 
     fn persist(&self) -> Result<(), AiError> {
@@ -618,8 +632,39 @@ impl TransactionStore {
             txs: self.txs.keys().copied().collect(),
         };
         let text = to_ron(&meta).map_err(|e| AiError::Ser(e.to_string()))?;
-        fs::write(self.workspace.root().join("store.ron"), text)
-            .map_err(|e| AiError::Io(e.to_string()))
+        write_atomic(&self.workspace.root().join("store.ron"), &text)
+    }
+}
+
+fn write_atomic(path: &Path, contents: &str) -> Result<(), AiError> {
+    let tmp = path.with_extension("tmp");
+    fs::write(&tmp, contents).map_err(|e| AiError::Io(e.to_string()))?;
+    match fs::rename(&tmp, path) {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            let _ = fs::remove_file(&tmp);
+            Err(AiError::Io(e.to_string()))
+        }
+    }
+}
+
+fn op_parent_module(op: &AuthorOp, snap: &AuthoringSnapshot) -> Option<AnchorId> {
+    match op {
+        AuthorOp::AddLocus { module, .. }
+        | AuthorOp::AddFact { module, .. }
+        | AuthorOp::AddCanonDiff { module, .. } => Some(*module),
+        AuthorOp::AddModule { module } => Some(module.anchor),
+        AuthorOp::BindAsset { locus, .. }
+        | AuthorOp::AddReference { target: locus, .. }
+        | AuthorOp::Remove { target: locus, .. }
+        | AuthorOp::Rename { target: locus, .. }
+        | AuthorOp::SetArgument {
+            instance: locus, ..
+        } => snap.owning_module(*locus).or(Some(*locus)),
+        AuthorOp::Instantiate { instance } => snap
+            .owning_module(instance.anchor)
+            .or(Some(instance.anchor)),
+        AuthorOp::AddJourney { .. } => None,
     }
 }
 

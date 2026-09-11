@@ -6,7 +6,7 @@ use klotho_author::AuthorError;
 use klotho_ir::AnchorId;
 
 use crate::conflict::ConflictWitness;
-use crate::ids::TxId;
+use crate::ids::{LeaseId, TxId};
 use crate::ops::OpKind;
 
 /// Authoring-AI failure. Never a [`klotho_core::KernelFault`].
@@ -33,6 +33,10 @@ pub enum AiError {
         /// Holder.
         by: TxId,
     },
+    /// Lease id is not in the store.
+    UnknownLease(LeaseId),
+    /// Lease clock has passed expiry. Expiry does not authorize overwrite.
+    LeaseExpired(LeaseId),
     /// Write outside the transaction scope.
     Scope(AnchorId),
     /// Operation budget exhausted.
@@ -56,6 +60,8 @@ impl fmt::Display for AiError {
             Self::Precondition(s) => write!(f, "precondition {s}"),
             Self::FailClosed(k) => write!(f, "fail-closed {k}"),
             Self::LeaseHeld { anchor, by } => write!(f, "lease held on {anchor} by {by}"),
+            Self::UnknownLease(id) => write!(f, "unknown lease {id}"),
+            Self::LeaseExpired(id) => write!(f, "lease expired {id}"),
             Self::Scope(id) => write!(f, "out of scope {id}"),
             Self::Budget => write!(f, "transaction budget exhausted"),
             Self::Cancelled => write!(f, "transaction cancelled"),

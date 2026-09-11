@@ -20,11 +20,11 @@ pub struct TxId(pub [u8; 16]);
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default)]
 pub struct LeaseId(pub [u8; 16]);
 
-/// Stub asset request identity until Weaver lands.
+/// Stub asset request identity.
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default)]
 pub struct AssetRequestId(pub [u8; 16]);
 
-/// Stub reference identity until the reference graph lands.
+/// Stub reference identity.
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default)]
 pub struct ReferenceId(pub [u8; 16]);
 

@@ -8,7 +8,7 @@ use crate::ids::{ChangeId, FieldId};
 use crate::ops::AuthorOp;
 use crate::workspace::AuthoringSnapshot;
 
-/// Merge two change lists onto `base`. Not line-based, not last-writer-wins.
+/// Merge two change lists onto `base` using cells and the conflict matrix.
 pub fn merge_ops(
     base: &AuthoringSnapshot,
     a_id: ChangeId,
@@ -41,15 +41,23 @@ pub fn merge_ops(
             .then(id_a.cmp(id_b))
     });
     let mut snap = base.clone();
-    let mut seen = Vec::new();
+    let mut seen: Vec<(AuthorOp, ChangeId)> = Vec::new();
     for (id, op) in combined {
-        if seen.iter().any(|prev: &AuthorOp| prev == &op) {
+        if seen.iter().any(|(kept, _)| coalesce_eq(kept, &op)) {
+            seen.push((op, id));
             continue;
         }
         apply_ops(&mut snap, id, std::slice::from_ref(&op))?;
-        seen.push(op);
+        seen.push((op, id));
     }
     Ok(snap)
+}
+
+fn coalesce_eq(a: &AuthorOp, b: &AuthorOp) -> bool {
+    match (a, b) {
+        (AuthorOp::Remove { target: t1, .. }, AuthorOp::Remove { target: t2, .. }) => t1 == t2,
+        _ => a == b,
+    }
 }
 
 /// Three-way merge of snapshots: `base` / `current` / `proposed`.

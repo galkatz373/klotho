@@ -356,7 +356,10 @@ fn instantiate(
     name_checked(&instance.pattern)?;
     if instance.version == 0 {
         return Err(AuthorError::Pattern(
-            "pattern version must be non-zero".into(),
+            klotho_pattern::PatternError::Version {
+                id: instance.pattern.0.clone(),
+                requested: 0,
+            },
         ));
     }
     if occupied_anchors(bundle).contains(&instance.anchor) {
@@ -384,9 +387,11 @@ fn set_argument(
 ) -> Result<ApplyOutcome, AuthorError> {
     name_checked(&key)?;
     if value.key != key {
-        return Err(AuthorError::Pattern(
-            "SetArgument key must match PatternArg.key".into(),
-        ));
+        return Err(AuthorError::Pattern(klotho_pattern::PatternError::Arg {
+            id: "set_argument".into(),
+            key: key.0.clone(),
+            reason: "SetArgument key must match PatternArg.key".into(),
+        }));
     }
     let idx = owning_module_index(bundle, instance)?;
     let module = &mut bundle.modules[idx];

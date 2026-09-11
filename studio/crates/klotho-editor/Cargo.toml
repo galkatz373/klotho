@@ -25,6 +25,7 @@ klotho-manifest.workspace = true
 klotho-render.workspace = true
 klotho-ui.workspace = true
 klotho-world.workspace = true
+serde.workspace = true
 
 [lints]
 workspace = true

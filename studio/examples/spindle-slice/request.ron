@@ -1,0 +1,21 @@
+(
+    outcome: "KAI-SPINDLE-001",
+    request: "Inside the observatory, make the approved oak door require the brass key. Show denial, unlock, and opened evidence, then Pin the mechanic without title code.",
+    assumption: "The brass key is iron_key; lockpick_tool must not satisfy this passage.",
+    pattern: "traversal.door_key",
+    version: 2,
+    instance: "observatory_lock",
+    player: "player",
+    place: "hearth",
+    passage: "oak_door",
+    intended_key: "iron_key",
+    seeded_wrong_key: "lockpick_tool",
+    journeys: ["denied.ron", "unlock.ron", "opened.ron"],
+    approved_bindings: [
+        ("hearth", "place.hearth.interior"),
+        ("player", "npc.human.biped"),
+        ("oak_door", "door.oak.lockable"),
+        ("iron_key", "relic.key"),
+        ("lockpick_tool", "relic.lockpick"),
+    ],
+)

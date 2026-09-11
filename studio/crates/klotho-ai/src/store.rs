@@ -663,9 +663,7 @@ fn op_parent_module(op: &AuthorOp, snap: &AuthoringSnapshot) -> Option<AnchorId>
         | AuthorOp::SetArgument {
             instance: locus, ..
         } => snap.owning_module(*locus).or(Some(*locus)),
-        AuthorOp::Instantiate { instance } => snap
-            .owning_module(instance.anchor)
-            .or(Some(instance.anchor)),
+        AuthorOp::Instantiate { instance } => Some(instance.module),
         AuthorOp::AddJourney { .. } => None,
     }
 }

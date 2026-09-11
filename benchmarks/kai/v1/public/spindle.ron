@@ -1,0 +1,17 @@
+(
+    version: 1,
+    outcomes: [
+        (
+            id: "KAI-SPINDLE-001",
+            domain: "mechanic",
+            difficulty: "composed",
+            input: "Inside the observatory, make the approved oak door require the brass key. Show denial, unlock, and opened evidence, then Pin the mechanic without title code.",
+            acceptance: "spindle-zero-code",
+            maximum_scope: (semantic_operations: 3, files: 5, assets: 0),
+            required_journeys: ["spindle-denied", "spindle-unlock", "spindle-opened"],
+            seeded_fault: "The first candidate relates oak_door to lockpick_tool instead of iron_key.",
+            repair_cap: 3,
+            title_rust: 0,
+        ),
+    ],
+)

@@ -22,6 +22,16 @@ use crate::policy::{ExecutionPolicy, SecretStore};
 use crate::store::TransactionStore;
 use crate::tools::{ToolCall, ToolEnvironment, ToolRegistry, ToolResult};
 
+/// Result of one bounded counterexample-driven repair attempt.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct RepairOutcome {
+    /// Updated request progress and accounting.
+    pub progress: AiProgress,
+    /// Remaining trusted validation failures. Empty means the repaired
+    /// candidate is ready for evaluation.
+    pub diagnostics: Vec<klotho_ir::Diagnostic>,
+}
+
 /// Review-facing candidate. It describes meaning and evidence; it cannot merge.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ReviewPackage {
@@ -136,6 +146,7 @@ impl KlothoAi {
             context,
             capability: record.request.model_capability,
             max_tokens: record.request.budget.tokens,
+            diagnostics: Vec::new(),
         };
         let encoded_request = klotho_ir::to_ron(&backend_request)
             .map_err(|error| AiError::BackendProtocol(error.to_string()))?;
@@ -383,6 +394,143 @@ impl KlothoAi {
             self.transactions.transaction_base_snapshot(transaction)?,
             self.transactions.snapshot(transaction)?,
         ))
+    }
+
+    /// Apply one model-proposed repair to an existing isolated candidate.
+    /// The trusted diagnostic envelope is supplied verbatim to the backend;
+    /// only typed operations may return. Attempts and all resource use are
+    /// accumulated against the original request's hard caps.
+    pub fn repair(
+        &mut self,
+        change: crate::ids::ChangeId,
+        diagnostics: Vec<klotho_ir::Diagnostic>,
+    ) -> Result<RepairOutcome, AiError> {
+        if diagnostics.is_empty() {
+            return Err(AiError::RequestState(
+                "repair requires a structured counterexample".into(),
+            ));
+        }
+        let record = self
+            .agents
+            .find_change(change)
+            .cloned()
+            .ok_or_else(|| AiError::RequestState("unknown candidate change".into()))?;
+        if record.state != RequestState::Candidate {
+            return Err(AiError::RequestState(format!("{:?}", record.state)));
+        }
+        if record.usage.repairs >= record.request.budget.repairs {
+            return Err(AiError::RequestBudget);
+        }
+        let transaction = record
+            .transaction
+            .ok_or_else(|| AiError::RequestState("candidate has no transaction".into()))?;
+        let context = ContextBuilder::compile(
+            &self.project,
+            &self.catalog,
+            &self.memory,
+            &ContextRequest {
+                anchors: record
+                    .request
+                    .scope
+                    .anchors
+                    .iter()
+                    .chain(record.request.scope.modules.iter())
+                    .copied()
+                    .collect(),
+                max_entries: 512,
+                include_memory: true,
+            },
+        );
+        let remaining_tokens = record
+            .request
+            .budget
+            .tokens
+            .saturating_sub(record.usage.tokens);
+        let backend_request = BackendRequest {
+            request: record.id,
+            prompt: record.request.text.clone(),
+            context,
+            capability: record.request.model_capability,
+            max_tokens: remaining_tokens,
+            diagnostics,
+        };
+        let encoded = klotho_ir::to_ron(&backend_request)
+            .map_err(|error| AiError::BackendProtocol(error.to_string()))?;
+        if encoded.len() as u64 > self.policy.max_request_bytes {
+            return Err(AiError::BackendPayload);
+        }
+        let started = Instant::now();
+        let (backend, response) = self.models.invoke(
+            &backend_request,
+            &record.request.disclosure,
+            record.request.preferred_backend.as_ref(),
+        )?;
+        let wall_ms = u64::try_from(started.elapsed().as_millis())
+            .unwrap_or(u64::MAX)
+            .max(1);
+        let encoded_response = klotho_ir::to_ron(&response)
+            .map_err(|error| AiError::BackendProtocol(error.to_string()))?;
+        let artifacts = u32::try_from(
+            response
+                .operations
+                .iter()
+                .filter(|operation| matches!(operation, crate::ops::AuthorOp::BindAsset { .. }))
+                .count(),
+        )
+        .unwrap_or(u32::MAX);
+        let next_usage = crate::agent::Usage {
+            wall_ms: record.usage.wall_ms.saturating_add(wall_ms),
+            tokens: record.usage.tokens.saturating_add(response.output_tokens),
+            micro_usd: record
+                .usage
+                .micro_usd
+                .saturating_add(response.cost_micro_usd),
+            tool_calls: record.usage.tool_calls.saturating_add(2),
+            artifacts: record.usage.artifacts.saturating_add(artifacts),
+            repairs: record.usage.repairs.saturating_add(1),
+        };
+        if encoded_response.len() as u64 > self.policy.max_response_bytes
+            || response.output_tokens > remaining_tokens
+            || next_usage.exceeds(&record.request.budget)
+        {
+            return Err(AiError::RequestBudget);
+        }
+        // Count an invoked repair before applying its untrusted operations. A
+        // malformed repair cannot evade the attempt cap by failing apply.
+        self.evidence_by_change.remove(&change);
+        if let Some(row) = self.agents.get_mut(record.id) {
+            row.backend = Some(backend);
+            row.usage = next_usage;
+            row.summary.clone_from(&response.summary);
+        }
+        let profile = self
+            .policy
+            .profiles
+            .get(&record.request.role)
+            .cloned()
+            .ok_or(AiError::CapabilityDenied(
+                crate::policy::Capability::ChangeApply,
+            ))?;
+        ToolRegistry::execute(
+            &profile,
+            ToolCall::ChangeApply {
+                transaction,
+                operations: response.operations,
+            },
+            self.tool_env(),
+        )?;
+        let validation = ToolRegistry::execute(
+            &profile,
+            ToolCall::ValidateRun { transaction },
+            self.tool_env(),
+        )?;
+        let ToolResult::Diagnostics(remaining) = validation else {
+            unreachable!("closed validation result")
+        };
+        Ok(RepairOutcome {
+            progress: self.poll(record.id)?,
+            diagnostics: remaining,
+        })
     }
 
     fn tool_env(&mut self) -> ToolEnvironment<'_> {

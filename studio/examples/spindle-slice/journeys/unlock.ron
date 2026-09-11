@@ -1,0 +1,38 @@
+(
+    id: "spindle-unlock",
+    start: (name: "observatory-locked"),
+    steps: [
+        Device(action: (
+            player: PlayerId(0),
+            buttons: [KeyE],
+            stick_x: 0,
+            stick_z: 0,
+            look_yaw: 0,
+            look_pitch: 0,
+            phase: 0,
+            target: Name("iron_key"),
+        )),
+        Device(action: (
+            player: PlayerId(0),
+            buttons: [KeyE],
+            stick_x: 0,
+            stick_z: 0,
+            look_yaw: 0,
+            look_pitch: 0,
+            phase: 0,
+            target: Name("oak_door"),
+        )),
+    ],
+    assertions: [
+        Rel(a: "iron_key", rel: OwnedBy, b: "player", present: true),
+        Rel(a: "oak_door", rel: LockedBy, b: "oak_door", present: false),
+        Trace(contains: "Unlocked"),
+    ],
+    capture_points: [
+        (name: "door_unlocked", after_step: 1, kind: semantic),
+    ],
+    max_ticks: 8,
+    depends_on: ["spindle-denied"],
+    anchors: [],
+    modules: [],
+)

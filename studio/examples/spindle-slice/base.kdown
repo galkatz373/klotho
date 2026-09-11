@@ -1,0 +1,21 @@
+# Spindle starts from an approved observatory greybox and kit. The mechanic is absent.
+style notes "cold brass instruments, worn oak, readable silhouettes"
+style palette stone
+style palette metal
+style tag place.hearth.interior
+style tag door.oak.lockable
+style tag npc.human.biped
+style tag relic.key
+style tag relic.lockpick
+
+seed locus hearth Place
+seed locus player Actor
+seed locus oak_door Relic
+seed locus iron_key Relic
+seed locus lockpick_tool Relic
+seed locus Openable Relic
+seed locus Carryable Relic
+seed rel player In hearth
+seed rel oak_door Knows Openable
+seed rel iron_key Knows Carryable
+seed rel lockpick_tool Knows Carryable

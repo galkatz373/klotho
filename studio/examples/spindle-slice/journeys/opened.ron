@@ -1,0 +1,29 @@
+(
+    id: "spindle-opened",
+    start: (name: "observatory-locked"),
+    steps: [
+        Fixture(
+            player: PlayerId(0),
+            verb: Use,
+            target: Name("iron_key"),
+            analog: (phase: 0, stick_x: 0, stick_z: 0, look_yaw: YawMd(0), look_pitch: 0),
+        ),
+        Fixture(
+            player: PlayerId(0),
+            verb: Open,
+            target: Name("oak_door"),
+            analog: (phase: 0, stick_x: 0, stick_z: 0, look_yaw: YawMd(0), look_pitch: 0),
+        ),
+    ],
+    assertions: [
+        Rel(a: "oak_door", rel: LockedBy, b: "oak_door", present: false),
+        Place(locus: "player", place: "hearth"),
+    ],
+    capture_points: [
+        (name: "door_open", after_step: 1, kind: semantic),
+    ],
+    max_ticks: 8,
+    depends_on: ["spindle-unlock"],
+    anchors: [],
+    modules: [],
+)

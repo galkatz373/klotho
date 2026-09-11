@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use serde::{Deserialize, Serialize};
 
 use klotho_core::Hash;
-use klotho_ir::{from_ron, to_ron};
+use klotho_ir::{Diagnostic, from_ron, to_ron};
 use klotho_prove::hash_bytes;
 
 use crate::agent::RequestId;
@@ -89,6 +89,10 @@ pub struct BackendRequest {
     pub capability: ModelCapability,
     /// Maximum output tokens.
     pub max_tokens: u64,
+    /// Structured counterexamples from the trusted validator/evaluator. Empty
+    /// for the initial proposal and populated only for a bounded repair.
+    #[serde(default)]
+    pub diagnostics: Vec<Diagnostic>,
 }
 
 /// Schema-validated model response. Only typed operations cross the boundary.

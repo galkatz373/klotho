@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use klotho_core::{Hash, PlayerId};
 use klotho_input::Button;
-use klotho_ir::{Analog, Cmp, IntentTarget, Name, Rel, Verb};
+use klotho_ir::{Analog, Cmp, IntentDoc, IntentTarget, Name, Rel, SeedFact, Verb, to_ron};
 use klotho_prove::hash_bytes;
 
 use crate::error::EvalError;
@@ -66,9 +66,60 @@ impl ScriptHost {
         h.add_rel(&h.door.clone(), Rel::LockedBy, &h.door.clone());
         h.add_rel(&h.player.clone(), Rel::In, &h.place.clone());
         h.add_rel(&h.key.clone(), Rel::In, &h.place.clone());
-        h.add_rel(&h.key.clone(), Rel::KeyedBy, &h.door.clone());
+        h.add_rel(&h.door.clone(), Rel::KeyedBy, &h.key.clone());
         h.qty.insert((h.player.clone(), "stamina".into()), 10);
         h
+    }
+
+    /// Build the deterministic semantic fixture from an expanded authoring
+    /// document. The named player, passage, key, and Place select the bounded
+    /// interaction under test; all seed relations and quantities remain exact.
+    pub fn from_intent(
+        doc: &IntentDoc,
+        player: &Name,
+        door: &Name,
+        key: &Name,
+        place: &Name,
+    ) -> Result<Self, EvalError> {
+        let encoded = to_ron(doc).map_err(|error| EvalError::Host(error.to_string()))?;
+        let mut host = Self {
+            player: player.0.clone(),
+            door: door.0.clone(),
+            key: key.0.clone(),
+            place: place.0.clone(),
+            rels: BTreeSet::new(),
+            qty: BTreeMap::new(),
+            knows: BTreeSet::new(),
+            events: Vec::new(),
+            saves: BTreeMap::new(),
+            captures: BTreeSet::new(),
+            ticks: 0,
+            last_state: "door-locked".into(),
+            blocked: String::new(),
+            project_hash: hash_bytes(encoded.as_bytes()),
+            toolchain_hash: hash_bytes(b"intent-script-toolchain-v1"),
+            canon_hash: hash_bytes(encoded.as_bytes()),
+        };
+        for fact in &doc.seed {
+            match fact {
+                SeedFact::Rel { a, rel, b } => {
+                    host.add_rel(a.as_str(), *rel, b.as_str());
+                    if *rel == Rel::Knows {
+                        host.knows
+                            .insert((a.as_str().to_owned(), b.as_str().to_owned()));
+                    }
+                }
+                SeedFact::Qty { of, res, value } => {
+                    host.qty
+                        .insert((of.as_str().to_owned(), res.as_str().to_owned()), *value);
+                }
+                SeedFact::Locus { .. } | SeedFact::Pose { .. } => {}
+            }
+        }
+        if !host.has_rel(door.as_str(), Rel::LockedBy, door.as_str()) {
+            host.last_state = "door-open".into();
+        }
+        Ok(host)
     }
 
     fn edge(a: &str, rel: Rel, b: &str) -> (String, u8, String) {
@@ -102,6 +153,10 @@ impl ScriptHost {
         self.has_rel(&self.key, Rel::OwnedBy, &self.player)
     }
 
+    fn key_fits(&self) -> bool {
+        self.has_rel(&self.door, Rel::KeyedBy, &self.key)
+    }
+
     fn use_on(&mut self, target: &str) {
         if target == self.key {
             self.add_rel(&self.key.clone(), Rel::OwnedBy, &self.player.clone());
@@ -111,7 +166,7 @@ impl ScriptHost {
             return;
         }
         if target == self.door {
-            if self.has_key() {
+            if self.has_key() && self.key_fits() {
                 self.rels
                     .remove(&Self::edge(&self.door, Rel::LockedBy, &self.door));
                 self.events.push("Unlocked".into());

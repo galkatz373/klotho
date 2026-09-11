@@ -1,0 +1,26 @@
+(
+    id: "spindle-denied",
+    start: (name: "observatory-locked"),
+    steps: [
+        Device(action: (
+            player: PlayerId(0),
+            buttons: [KeyE],
+            stick_x: 0,
+            stick_z: 0,
+            look_yaw: 0,
+            look_pitch: 0,
+            phase: 0,
+            target: Name("oak_door"),
+        )),
+    ],
+    assertions: [
+        Rel(a: "oak_door", rel: LockedBy, b: "oak_door", present: true),
+    ],
+    capture_points: [
+        (name: "door_denied", after_step: 0, kind: semantic),
+    ],
+    max_ticks: 8,
+    depends_on: [],
+    anchors: [],
+    modules: [],
+)

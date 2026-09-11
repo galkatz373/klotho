@@ -56,6 +56,8 @@ KAI-04 — structured diagnostics: stable codes, anchors, minimal witnesses, leg
 KAI-05 — pattern compiler and standard library v1.
 KAI-06 — journeys, public-input execution, trusted evidence, affected-test selection.
 KAI-07 — built-in Klotho AI service, semantic context/index, model fabric, typed tools, budgets, policy, and approved memory.
+KAI-08 — Distaff conversational planning, semantic diff, evidence review, risk routing, and grouped Pin.
+KAI-09 — Spindle data-only observatory slice with bounded counterexample repair and three journey gates.
 
 ## Build
 
@@ -101,6 +103,7 @@ klotho/
   studio/crates/klotho-ai/    # Built-in authoring AI, model fabric, typed tools, transactions, evidence broker
   studio/crates/klotho-eval/  # Journeys, evidence bundles, affected-test selection
   studio/crates/klotho-pattern/ # Deterministic pattern expansion and standard library v1
+  studio/examples/spindle-slice/ # KAI-09 data-only request, approved kit, and journeys
   studio/crates/klotho-dcc/ # glTF 2.0 cook → quantized KLTH mesh/hull/clip
   engine/crates/klotho-stream/   # Place shard pager, KCAS volumes (mmap after header validate)
   engine/crates/klotho-save/     # epoch compaction, K19/K48 I/O

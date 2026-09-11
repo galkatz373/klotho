@@ -74,7 +74,7 @@ pub use review::{
     ArtifactClass, BatchItem, FrozenBatch, OwnerBudget, OwnerQueues, R0Rule, RiskInput, RiskLevel,
     RiskPolicy, SampleDisposition, SampleRecord, SamplingPolicy,
 };
-pub use service::{KlothoAi, ReviewPackage};
+pub use service::{KlothoAi, RepairOutcome, ReviewPackage};
 pub use store::{AuthoringTransaction, TransactionStore, TxStatus};
 pub use tools::{ToolCall, ToolRegistry, ToolResult};
 pub use workspace::{AuthoringSnapshot, ContentWorkspace};

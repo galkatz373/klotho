@@ -32,7 +32,7 @@ pub enum AuthorError {
     /// No module with this identity is loaded.
     ModuleNotFound(String),
     /// Pattern expansion failed.
-    Pattern(String),
+    Pattern(PatternError),
 }
 
 impl fmt::Display for AuthorError {
@@ -49,7 +49,7 @@ impl fmt::Display for AuthorError {
             Self::TombstoneReuse(name) => write!(f, "tombstone reuse {name}"),
             Self::AliasCollision(name) => write!(f, "alias collision {name}"),
             Self::ModuleNotFound(id) => write!(f, "module not found {id}"),
-            Self::Pattern(s) => write!(f, "{s}"),
+            Self::Pattern(e) => write!(f, "{e}"),
         }
     }
 }
@@ -70,6 +70,6 @@ impl From<CompileError> for AuthorError {
 
 impl From<PatternError> for AuthorError {
     fn from(e: PatternError) -> Self {
-        Self::Pattern(e.to_string())
+        Self::Pattern(e)
     }
 }

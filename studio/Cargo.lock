@@ -939,6 +939,7 @@ dependencies = [
  "klotho-render",
  "klotho-ui",
  "klotho-world",
+ "serde",
 ]
 
 [[package]]

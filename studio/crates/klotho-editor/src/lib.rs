@@ -39,4 +39,6 @@ pub use klotho_ui::Pause;
 #[cfg(test)]
 mod kai08_tests;
 #[cfg(test)]
+mod kai09_tests;
+#[cfg(test)]
 mod tests;

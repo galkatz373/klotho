@@ -199,9 +199,9 @@ impl ToolRegistry {
             }
             ToolCall::ValidateRun { transaction } => {
                 let snapshot = env.transactions.snapshot(transaction)?;
-                let diagnostics = match snapshot.project.flatten(&snapshot.modules) {
+                let diagnostics = match klotho_author::flatten_bundle(&snapshot.bundle()) {
                     Ok(_) => Vec::new(),
-                    Err(error) => vec![Diagnostic::from(&error)],
+                    Err(error) => vec![author_diagnostic(&error)],
                 };
                 Ok(ToolResult::Diagnostics(diagnostics))
             }
@@ -233,5 +233,21 @@ impl ToolRegistry {
         .into_iter()
         .map(Name::from)
         .collect()
+    }
+}
+
+fn author_diagnostic(error: &klotho_author::AuthorError) -> Diagnostic {
+    match error {
+        klotho_author::AuthorError::Ir(error) => Diagnostic::from(error),
+        klotho_author::AuthorError::Pattern(error) => {
+            error.to_diagnostic(klotho_ir::AnchorId::ZERO)
+        }
+        other => klotho_ir::diagnose_named(
+            "IR.Parse",
+            klotho_ir::FailureClass::Schema,
+            "authoring",
+            "project",
+            other.to_string(),
+        ),
     }
 }

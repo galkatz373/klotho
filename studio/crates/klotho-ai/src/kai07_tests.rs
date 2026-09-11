@@ -174,6 +174,7 @@ fn remote_route_requires_explicit_full_disclosure() {
         ),
         capability: ModelCapability::Reasoning,
         max_tokens: 8,
+        diagnostics: Vec::new(),
     };
     assert!(matches!(
         router.invoke(&backend_request, &DisclosurePolicy::LocalOnly, None),

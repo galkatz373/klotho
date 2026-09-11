@@ -1,0 +1,11 @@
+(version:1,entries:[
+  (id:"KAI-V1-FAULT-CONTRADICTION",class:"contradiction",seed:"Mutually exclusive Canon facts on one anchor",expected_code:"KAI-DIAG-CONTRADICTION",legal_repair:"remove one scoped fact"),
+  (id:"KAI-V1-FAULT-CFG",class:"cfg",seed:"Rite branch targets a missing step",expected_code:"KAI-DIAG-CFG-TARGET",legal_repair:"retarget within the owned Rite"),
+  (id:"KAI-V1-FAULT-CAP",class:"cap",seed:"Rite exceeds the frozen step cap",expected_code:"KAI-DIAG-CAP",legal_repair:"reduce or split authored flow without changing OutcomeId"),
+  (id:"KAI-V1-FAULT-AGENCY",class:"agency",seed:"Tool attempts to construct player Agency",expected_code:"KAI-DIAG-AGENCY",legal_repair:"use public test-input adapter"),
+  (id:"KAI-V1-FAULT-PROVENANCE",class:"provenance",seed:"Asset blob lacks LicenseSpan",expected_code:"KAI-DIAG-PROVENANCE",legal_repair:"bind approved license evidence or remove blob"),
+  (id:"KAI-V1-FAULT-PACKAGE",class:"package",seed:"Authoring-only model artifact enters ship allowlist",expected_code:"KAI-DIAG-PACKAGE",legal_repair:"remove authoring artifact from package graph"),
+  (id:"KAI-V1-FAULT-JOURNEY",class:"journey",seed:"Required path cannot reach its assertion",expected_code:"KAI-DIAG-JOURNEY",legal_repair:"repair owned semantic operation from minimized witness"),
+  (id:"KAI-V1-FAULT-BUDGET",class:"budget",seed:"Change exceeds AaaAdventure serial-admit budget",expected_code:"KAI-DIAG-BUDGET",legal_repair:"reduce scoped cost without weakening budget"),
+  (id:"KAI-V1-FAULT-HASH-DRIFT",class:"reproducibility",seed:"Accepted bytes differ under identical environment hashes",expected_code:"KAI-DIAG-HASH-DRIFT",legal_repair:"reject candidate and isolate nondeterministic input"),
+])

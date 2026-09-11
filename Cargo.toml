@@ -34,6 +34,7 @@ members = [
     "crates/klotho-debug",
     "crates/klotho-runtime",
     "crates/klotho-net",
+    "crates/klotho-kai-bench",
     "examples/hearth-slice",
     "examples/ash-slice",
     "examples/ember-slice",
@@ -88,6 +89,7 @@ klotho-net = { path = "crates/klotho-net" }
 ron = "0.11.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.151"
+sha2 = "=0.10.9"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -1,0 +1,1 @@
+(version:1,id:"desktop-minimum",os:"Windows 10 22H2 x86-64",graphics_api:"D3D12 feature level 12_0",resolution:"1920x1080",quality:"minimum",refresh_hz:60,vrr:false,controller:"required gamepad plus remapping matrix",package_claim_level:"P0 until bound P1/P2 evidence exists")

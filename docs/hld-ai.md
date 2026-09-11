@@ -5,7 +5,7 @@
 | Document | High-Level Design — AI-native production for Klotho's first AAA title |
 | Author | Gal Katz |
 | Date | 2026-09-11 |
-| Status | Proposed successor plan (KAI-00–24 not landed) |
+| Status | Active successor plan (KAI-00 landed; KAI-01–24 not landed) |
 | Baseline | `docs/hld.md` rev 6; AAA-01–27 landed |
 | Audience | Engine, tools, gameplay, content, AI platform, build, QA, and production leads |
 | Language | Rust (edition 2024; 2021-compatible crates OK) |
@@ -1911,9 +1911,9 @@ managers.
 
 ## PR plan
 
-Landed baseline: AAA-01–27. KAI PRs are new and **none are landed** when this
-document is written. Each header gains `— landed` only with its implementation,
-tests, date bump, and this section's landed list update.
+Landed baseline: AAA-01–27 and KAI-00 (2026-09-11). KAI-01–24 remain planned.
+Each header gains `— landed` only with its implementation, tests, date bump, and
+this section's landed list update.
 
 ```mermaid
 flowchart TB
@@ -1988,7 +1988,7 @@ flowchart TB
 
 ### Foundation
 
-#### KAI-00 — Benchmark, hardware, model, and farm contract
+#### KAI-00 — Benchmark, hardware, model, and farm contract — **landed 2026-09-11**
 
 - **Files:** `benchmarks/kai/v1/**`, `ci/machines/**`, `ci/farms/**`,
   `models/kai-benchmark.lock`, `planning/kai-program.ron`, timing harness and

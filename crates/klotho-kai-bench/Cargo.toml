@@ -1,0 +1,20 @@
+[package]
+name = "klotho-kai-bench"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "KAI benchmark contract validator, timing harness, and promotion gate"
+readme = false
+publish = false
+
+[dependencies]
+blake3.workspace = true
+ron.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+
+[lints]
+workspace = true

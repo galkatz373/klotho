@@ -1,0 +1,1 @@
+(version:1,id:"linux-vulkan-high",os:"Ubuntu 24.04.3 LTS",graphics_api:"Vulkan 1.3",resolution:"1920x1080",quality:"high",refresh_hz:60,vrr:false,controller:"required gamepad plus remapping matrix",package_claim_level:"P0 until bound P1/P2 evidence exists")

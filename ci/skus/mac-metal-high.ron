@@ -1,0 +1,1 @@
+(version:1,id:"mac-metal-high",os:"macOS 26.1 build 25B78",graphics_api:"Metal",resolution:"1920x1080",quality:"high",refresh_hz:60,vrr:false,controller:"required gamepad plus remapping matrix",package_claim_level:"P0 until bound P1/P2 evidence exists")

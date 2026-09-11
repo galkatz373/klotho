@@ -1,0 +1,1636 @@
+{
+  "version": 1,
+  "toolchain_hash": "03e56198089aee7605e606a51c82d6bd63bf64c2d2f0a9b11017db37c28e0135",
+  "kinds": [
+    {
+      "id": "klotho_ir::IntentDoc",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "style",
+          "ty": "StyleIntent",
+          "description": "presentation hints",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "canon_diffs",
+          "ty": "Vec<CanonDiff>",
+          "description": "Canon patches",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "seed",
+          "ty": "Vec<SeedFact>",
+          "description": "seed Trace facts",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "minds",
+          "ty": "Vec<MindSpec>",
+          "description": "NPC specifications",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "provenance",
+          "ty": "ProvenanceId",
+          "description": "document provenance root",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(style:(notes:\"\",palettes:[],kitbash_tags:[]),canon_diffs:[],seed:[],minds:[],provenance:\"0000000000000000000000000000000000000000000000000000000000000000\")",
+      "negative_example": "(style:())"
+    },
+    {
+      "id": "klotho_ir::StyleIntent",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "notes",
+          "ty": "String",
+          "description": "free-form visual direction",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "palettes",
+          "ty": "Vec<Name>",
+          "description": "palette ids",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "kitbash_tags",
+          "ty": "Vec<Name>",
+          "description": "required asset tags",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(notes:\"readable\",palettes:[\"stone\"],kitbash_tags:[])",
+      "negative_example": "(notes:\"\",unknown:[] )"
+    },
+    {
+      "id": "klotho_ir::MindSpec",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "locus",
+          "ty": "Name",
+          "description": "seed actor",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "goals",
+          "ty": "Vec<Name>",
+          "description": "goal ids",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "templates",
+          "ty": "Vec<String>",
+          "description": "dialogue templates",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(locus:\"smith\",goals:[\"work\"],templates:[])",
+      "negative_example": "(locus:\"\",goals:[],templates:[] )"
+    },
+    {
+      "id": "klotho_ir::Law",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "id",
+          "ty": "Name",
+          "description": "law id",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "when",
+          "ty": "Pred",
+          "description": "selection predicate",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "body",
+          "ty": "LawBody",
+          "description": "admission or continuous body",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(id:\"alive\",when:SelfIs(Self),body:Pred(must:SelfIs(Self),ought:None))",
+      "negative_example": "(id:\"\",when:SelfIs(Self),body:Pred(must:SelfIs(Self),ought:None))"
+    },
+    {
+      "id": "klotho_ir::Cost",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "res",
+          "ty": "Name",
+          "description": "resource id",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "amount",
+          "ty": "i32",
+          "description": "amount spent",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(res:\"stamina\",amount:1)",
+      "negative_example": "(res:\"\",amount:1)"
+    },
+    {
+      "id": "klotho_ir::Affordance",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "id",
+          "ty": "Name",
+          "description": "capability id",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "requires",
+          "ty": "Vec<Pred>",
+          "description": "eligibility predicates",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "grants",
+          "ty": "Vec<Name>",
+          "description": "verb or Rite tags",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "conflicts",
+          "ty": "Vec<Name>",
+          "description": "exclusive capabilities",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(id:\"Portable\",requires:[],grants:[\"Carry\"],conflicts:[])",
+      "negative_example": "(id:\"\",requires:[],grants:[],conflicts:[])"
+    },
+    {
+      "id": "klotho_ir::RiteGraph",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "id",
+          "ty": "Name",
+          "description": "Rite id",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "cap_steps",
+          "ty": "u16",
+          "description": "per-tick instruction cap",
+          "min": 1,
+          "max": 65535
+        },
+        {
+          "name": "cap_ticks",
+          "ty": "u16",
+          "description": "wall-tick cap",
+          "min": 1,
+          "max": 65535
+        },
+        {
+          "name": "entry",
+          "ty": "u16",
+          "description": "entry pc",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "nodes",
+          "ty": "Vec<RiteNode>",
+          "description": "instruction graph",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(id:\"open\",cap_steps:8,cap_ticks:30,entry:0,nodes:[Op(Halt(Success))])",
+      "negative_example": "(id:\"open\",cap_steps:0,cap_ticks:0,entry:0,nodes:[])"
+    },
+    {
+      "id": "klotho_ir::Beat",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "id",
+          "ty": "Name",
+          "description": "Beat id",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "notes",
+          "ty": "String",
+          "description": "author notes",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(id:\"arrival\",notes:\"\")",
+      "negative_example": "(id:\"\",notes:\"\")"
+    },
+    {
+      "id": "klotho_ir::Analog",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "phase",
+          "ty": "u16",
+          "description": "WAIT phase per-mille",
+          "min": 0,
+          "max": 1000
+        },
+        {
+          "name": "stick_x",
+          "ty": "i16",
+          "description": "lateral input",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "stick_z",
+          "ty": "i16",
+          "description": "forward input",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "look_yaw",
+          "ty": "YawMd",
+          "description": "yaw delta",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "look_pitch",
+          "ty": "i32",
+          "description": "pitch delta",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(phase:0,stick_x:0,stick_z:0,look_yaw:0,look_pitch:0)",
+      "negative_example": "(phase:1001,stick_x:0,stick_z:0,look_yaw:0,look_pitch:0)"
+    },
+    {
+      "id": "klotho_ir::Agency",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "claimed",
+          "ty": "Vec<Channel>",
+          "description": "claimed player-only channels",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "assist",
+          "ty": "AssistLevel",
+          "description": "assist policy",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(claimed:[],assist:None)",
+      "negative_example": "(claimed:[Timing,Timing],assist:None)"
+    },
+    {
+      "id": "klotho_ir::CanonDiff",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "AddLaw",
+          "discriminant": null,
+          "payload": "Law",
+          "description": "Canon patch"
+        },
+        {
+          "name": "RetractLaw",
+          "discriminant": null,
+          "payload": "{id:Name,reason:String}",
+          "description": "Canon patch"
+        },
+        {
+          "name": "AddAffordance",
+          "discriminant": null,
+          "payload": "Affordance",
+          "description": "Canon patch"
+        },
+        {
+          "name": "AddRite",
+          "discriminant": null,
+          "payload": "RiteGraph",
+          "description": "Canon patch"
+        },
+        {
+          "name": "RetractRite",
+          "discriminant": null,
+          "payload": "{id:Name,reason:String}",
+          "description": "Canon patch"
+        },
+        {
+          "name": "AddBeat",
+          "discriminant": null,
+          "payload": "Beat",
+          "description": "Canon patch"
+        }
+      ],
+      "positive_example": "AddBeat((id:\"arrival\",notes:\"\"))",
+      "negative_example": "UnknownVariant"
+    },
+    {
+      "id": "klotho_ir::LawBody",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "Pred",
+          "discriminant": null,
+          "payload": "{must:Pred,ought:Option<Cost>}",
+          "description": "Law body"
+        },
+        {
+          "name": "Ramp",
+          "discriminant": null,
+          "payload": "{res:Name,per_tick:i32,quantum:i32,cap:i32}",
+          "description": "Law body"
+        },
+        {
+          "name": "Spread",
+          "discriminant": null,
+          "payload": "{res:Name,per_tick:i32,near:Mm,cap_global:u16,ignite_at:i32}",
+          "description": "Law body"
+        },
+        {
+          "name": "Conserve",
+          "discriminant": null,
+          "payload": "{res:Name,over:Rel}",
+          "description": "Law body"
+        },
+        {
+          "name": "Cap",
+          "discriminant": null,
+          "payload": "{mark:Pred,n:u16,require_rel:Option<(Rel,Slot)>}",
+          "description": "Law body"
+        }
+      ],
+      "positive_example": "Pred(must:SelfIs(Self),ought:None)",
+      "negative_example": "UnknownVariant"
+    },
+    {
+      "id": "klotho_ir::RiteNode",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "Op",
+          "discriminant": null,
+          "payload": "RiteOp",
+          "description": "implicit pc"
+        },
+        {
+          "name": "Labeled",
+          "discriminant": null,
+          "payload": "{pc:u16,op:RiteOp}",
+          "description": "explicit pc"
+        }
+      ],
+      "positive_example": "Op(Halt(Success))",
+      "negative_example": "UnknownVariant"
+    },
+    {
+      "id": "klotho_ir::RiteOp",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "Halt",
+          "discriminant": 0,
+          "payload": "Status",
+          "description": "Rite ISA operation"
+        },
+        {
+          "name": "Guard",
+          "discriminant": 1,
+          "payload": "(Pred,u16)",
+          "description": "Rite ISA operation"
+        },
+        {
+          "name": "Spend",
+          "discriminant": 2,
+          "payload": "(Name,i32,u16)",
+          "description": "Rite ISA operation"
+        },
+        {
+          "name": "Wait",
+          "discriminant": 3,
+          "payload": "(u16,Option<Channel>)",
+          "description": "Rite ISA operation"
+        },
+        {
+          "name": "Emit",
+          "discriminant": 4,
+          "payload": "Name",
+          "description": "Rite ISA operation"
+        },
+        {
+          "name": "Branch",
+          "discriminant": 5,
+          "payload": "(Pred,u16,u16)",
+          "description": "Rite ISA operation"
+        },
+        {
+          "name": "Bind",
+          "discriminant": 6,
+          "payload": "BindSrc",
+          "description": "Rite ISA operation"
+        },
+        {
+          "name": "Setq",
+          "discriminant": 7,
+          "payload": "(Slot,Name,i32)",
+          "description": "Rite ISA operation"
+        },
+        {
+          "name": "RelAdd",
+          "discriminant": 8,
+          "payload": "(Slot,Rel,Slot)",
+          "description": "Rite ISA operation"
+        },
+        {
+          "name": "RelDel",
+          "discriminant": 9,
+          "payload": "(Slot,Rel,Slot)",
+          "description": "Rite ISA operation"
+        },
+        {
+          "name": "Awake",
+          "discriminant": 10,
+          "payload": "Slot",
+          "description": "Rite ISA operation"
+        },
+        {
+          "name": "Complete",
+          "discriminant": 11,
+          "payload": "Status",
+          "description": "Rite ISA operation"
+        },
+        {
+          "name": "Spawn",
+          "discriminant": 12,
+          "payload": "Name",
+          "description": "Rite ISA operation"
+        },
+        {
+          "name": "PhysReq",
+          "discriminant": 13,
+          "payload": "{lin:IVec3,ang:IVec3}",
+          "description": "Rite ISA operation"
+        }
+      ],
+      "positive_example": "Halt(Success)",
+      "negative_example": "UnknownVariant"
+    },
+    {
+      "id": "klotho_ir::Pred",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "Affordance",
+          "discriminant": null,
+          "payload": "(Slot,Name)",
+          "description": "authoring predicate"
+        },
+        {
+          "name": "Rel",
+          "discriminant": null,
+          "payload": "(Slot,Rel,Slot)",
+          "description": "authoring predicate"
+        },
+        {
+          "name": "Qty",
+          "discriminant": null,
+          "payload": "(Slot,Name,Cmp,i32)",
+          "description": "authoring predicate"
+        },
+        {
+          "name": "EqVerb",
+          "discriminant": null,
+          "payload": "Verb",
+          "description": "authoring predicate"
+        },
+        {
+          "name": "RiteActive",
+          "discriminant": null,
+          "payload": "Name",
+          "description": "authoring predicate"
+        },
+        {
+          "name": "AabbNear",
+          "discriminant": null,
+          "payload": "(Slot,Slot,Mm)",
+          "description": "authoring predicate"
+        },
+        {
+          "name": "InWindow",
+          "discriminant": null,
+          "payload": "(Name,Channel)",
+          "description": "authoring predicate"
+        },
+        {
+          "name": "Knows",
+          "discriminant": null,
+          "payload": "(Slot,Name)",
+          "description": "authoring predicate"
+        },
+        {
+          "name": "SourceIs",
+          "discriminant": null,
+          "payload": "SourceKind",
+          "description": "authoring predicate"
+        },
+        {
+          "name": "AgencyClaimed",
+          "discriminant": null,
+          "payload": "Channel",
+          "description": "authoring predicate"
+        },
+        {
+          "name": "Burning",
+          "discriminant": null,
+          "payload": "Slot",
+          "description": "authoring predicate"
+        },
+        {
+          "name": "OpaqueClosed",
+          "discriminant": null,
+          "payload": "Slot",
+          "description": "authoring predicate"
+        },
+        {
+          "name": "SweptHitsOpaqueClosed",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "authoring predicate"
+        },
+        {
+          "name": "IslandAwake",
+          "discriminant": null,
+          "payload": "Slot",
+          "description": "authoring predicate"
+        },
+        {
+          "name": "SelfIs",
+          "discriminant": null,
+          "payload": "Slot",
+          "description": "authoring predicate"
+        },
+        {
+          "name": "TargetIs",
+          "discriminant": null,
+          "payload": "Slot",
+          "description": "authoring predicate"
+        },
+        {
+          "name": "OtherIs",
+          "discriminant": null,
+          "payload": "Slot",
+          "description": "authoring predicate"
+        },
+        {
+          "name": "RayHits",
+          "discriminant": null,
+          "payload": "{from:Slot,dir:IVec3,max:Mm,mask:u8}",
+          "description": "authoring predicate"
+        },
+        {
+          "name": "SimLodIs",
+          "discriminant": null,
+          "payload": "(Slot,SimLod)",
+          "description": "authoring predicate"
+        },
+        {
+          "name": "InPlace",
+          "discriminant": null,
+          "payload": "(Slot,Slot)",
+          "description": "authoring predicate"
+        },
+        {
+          "name": "And",
+          "discriminant": null,
+          "payload": "(Pred,Pred)",
+          "description": "authoring predicate"
+        },
+        {
+          "name": "Or",
+          "discriminant": null,
+          "payload": "(Pred,Pred)",
+          "description": "authoring predicate"
+        },
+        {
+          "name": "Not",
+          "discriminant": null,
+          "payload": "Pred",
+          "description": "authoring predicate"
+        },
+        {
+          "name": "ExistsRelated",
+          "discriminant": null,
+          "payload": "{of:Slot,rel:Rel,pred:Pred}",
+          "description": "authoring predicate"
+        },
+        {
+          "name": "CountRelated",
+          "discriminant": null,
+          "payload": "{of:Slot,rel:Rel,pred:Pred,cmp:Cmp,n:i32}",
+          "description": "authoring predicate"
+        }
+      ],
+      "positive_example": "SelfIs(Self)",
+      "negative_example": "UnknownVariant"
+    },
+    {
+      "id": "klotho_ir::SeedFact",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "Locus",
+          "discriminant": null,
+          "payload": "{name:Name,kind:LocusKind}",
+          "description": "seed Trace fact"
+        },
+        {
+          "name": "Rel",
+          "discriminant": null,
+          "payload": "{a:Name,rel:Rel,b:Name}",
+          "description": "seed Trace fact"
+        },
+        {
+          "name": "Qty",
+          "discriminant": null,
+          "payload": "{of:Name,res:Name,value:i32}",
+          "description": "seed Trace fact"
+        },
+        {
+          "name": "Pose",
+          "discriminant": null,
+          "payload": "{of:Name,pose:PoseMm}",
+          "description": "seed Trace fact"
+        }
+      ],
+      "positive_example": "Locus(name:\"hero\",kind:Actor)",
+      "negative_example": "UnknownVariant"
+    },
+    {
+      "id": "klotho_ir::Slot",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "Self",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "acting locus"
+        },
+        {
+          "name": "Target",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "intent target"
+        },
+        {
+          "name": "Other",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "quantifier binding"
+        },
+        {
+          "name": "Name",
+          "discriminant": null,
+          "payload": "Name",
+          "description": "cook-time pin"
+        }
+      ],
+      "positive_example": "Self",
+      "negative_example": "UnknownVariant"
+    },
+    {
+      "id": "klotho_ir::IntentTarget",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "None",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "no target"
+        },
+        {
+          "name": "Sigil",
+          "discriminant": null,
+          "payload": "Sigil",
+          "description": "packed runtime target"
+        },
+        {
+          "name": "Name",
+          "discriminant": null,
+          "payload": "Name",
+          "description": "authoring target"
+        }
+      ],
+      "positive_example": "None",
+      "negative_example": "UnknownVariant"
+    },
+    {
+      "id": "klotho_ir::Cmp",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "Lt",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "less"
+        },
+        {
+          "name": "Le",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "less or equal"
+        },
+        {
+          "name": "Eq",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "equal"
+        },
+        {
+          "name": "Ge",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "greater or equal"
+        },
+        {
+          "name": "Gt",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "greater"
+        }
+      ],
+      "positive_example": "Eq",
+      "negative_example": "UnknownVariant"
+    },
+    {
+      "id": "klotho_ir::SourceKind",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "Player",
+          "discriminant": 0,
+          "payload": "unit",
+          "description": "proposal source"
+        },
+        {
+          "name": "Mind",
+          "discriminant": 1,
+          "payload": "unit",
+          "description": "proposal source"
+        },
+        {
+          "name": "Space",
+          "discriminant": 2,
+          "payload": "unit",
+          "description": "proposal source"
+        },
+        {
+          "name": "Motion",
+          "discriminant": 3,
+          "payload": "unit",
+          "description": "proposal source"
+        },
+        {
+          "name": "Infer",
+          "discriminant": 4,
+          "payload": "unit",
+          "description": "proposal source"
+        },
+        {
+          "name": "Phys",
+          "discriminant": 5,
+          "payload": "unit",
+          "description": "proposal source"
+        },
+        {
+          "name": "Residency",
+          "discriminant": 6,
+          "payload": "unit",
+          "description": "proposal source"
+        }
+      ],
+      "positive_example": "Player",
+      "negative_example": "UnknownVariant"
+    },
+    {
+      "id": "klotho_ir::Channel",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "Timing",
+          "discriminant": 1,
+          "payload": "unit",
+          "description": "player-only skill channel"
+        },
+        {
+          "name": "Aim",
+          "discriminant": 2,
+          "payload": "unit",
+          "description": "player-only skill channel"
+        },
+        {
+          "name": "ResourceSpend",
+          "discriminant": 3,
+          "payload": "unit",
+          "description": "player-only skill channel"
+        },
+        {
+          "name": "DialogueChoice",
+          "discriminant": 4,
+          "payload": "unit",
+          "description": "player-only skill channel"
+        }
+      ],
+      "positive_example": "Timing",
+      "negative_example": "UnknownVariant"
+    },
+    {
+      "id": "klotho_ir::AssistLevel",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "None",
+          "discriminant": 0,
+          "payload": "unit",
+          "description": "no assist"
+        }
+      ],
+      "positive_example": "None",
+      "negative_example": "UnknownVariant"
+    },
+    {
+      "id": "klotho_core::LocusKind",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "Actor",
+          "discriminant": 1,
+          "payload": "unit",
+          "description": "locus kind"
+        },
+        {
+          "name": "Place",
+          "discriminant": 2,
+          "payload": "unit",
+          "description": "locus kind"
+        },
+        {
+          "name": "Relic",
+          "discriminant": 3,
+          "payload": "unit",
+          "description": "locus kind"
+        },
+        {
+          "name": "Law",
+          "discriminant": 4,
+          "payload": "unit",
+          "description": "locus kind"
+        },
+        {
+          "name": "Beat",
+          "discriminant": 5,
+          "payload": "unit",
+          "description": "locus kind"
+        },
+        {
+          "name": "Chorus",
+          "discriminant": 6,
+          "payload": "unit",
+          "description": "locus kind"
+        },
+        {
+          "name": "Observer",
+          "discriminant": 7,
+          "payload": "unit",
+          "description": "locus kind"
+        }
+      ],
+      "positive_example": "Actor",
+      "negative_example": "UnknownVariant"
+    },
+    {
+      "id": "klotho_core::SimLod",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "Full",
+          "discriminant": 0,
+          "payload": "unit",
+          "description": "simulation rate class"
+        },
+        {
+          "name": "Far",
+          "discriminant": 1,
+          "payload": "unit",
+          "description": "simulation rate class"
+        },
+        {
+          "name": "Dormant",
+          "discriminant": 2,
+          "payload": "unit",
+          "description": "simulation rate class"
+        }
+      ],
+      "positive_example": "Full",
+      "negative_example": "UnknownVariant"
+    },
+    {
+      "id": "klotho_core::IVec3",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "x",
+          "ty": "i32",
+          "description": "millimetres",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "y",
+          "ty": "i32",
+          "description": "millimetres",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "z",
+          "ty": "i32",
+          "description": "millimetres",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(x:0,y:0,z:0)",
+      "negative_example": "(x:\"zero\",y:0,z:0)"
+    },
+    {
+      "id": "klotho_core::PoseMm",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "x",
+          "ty": "Mm",
+          "description": "X in millimetres",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "y",
+          "ty": "Mm",
+          "description": "Y in millimetres",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "z",
+          "ty": "Mm",
+          "description": "Z in millimetres",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "yaw",
+          "ty": "YawMd",
+          "description": "yaw in millidegrees",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "pitch",
+          "ty": "YawMd",
+          "description": "pitch in millidegrees",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "roll",
+          "ty": "YawMd",
+          "description": "roll in millidegrees",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(x:0,y:0,z:0,yaw:0,pitch:0,roll:0)",
+      "negative_example": "(x:\"zero\",y:0,z:0,yaw:0,pitch:0,roll:0)"
+    }
+  ],
+  "verbs": [
+    {
+      "name": "Look",
+      "discriminant": 0
+    },
+    {
+      "name": "Move",
+      "discriminant": 1
+    },
+    {
+      "name": "Use",
+      "discriminant": 2
+    },
+    {
+      "name": "Carry",
+      "discriminant": 3
+    },
+    {
+      "name": "Drop",
+      "discriminant": 4
+    },
+    {
+      "name": "Pay",
+      "discriminant": 5
+    },
+    {
+      "name": "Fire",
+      "discriminant": 6
+    },
+    {
+      "name": "Time",
+      "discriminant": 7
+    },
+    {
+      "name": "Open",
+      "discriminant": 8
+    },
+    {
+      "name": "Talk",
+      "discriminant": 9
+    },
+    {
+      "name": "Investigate",
+      "discriminant": 10
+    },
+    {
+      "name": "Steer",
+      "discriminant": 11
+    },
+    {
+      "name": "Reload",
+      "discriminant": 12
+    }
+  ],
+  "rels": [
+    {
+      "name": "In",
+      "discriminant": 0
+    },
+    {
+      "name": "OwnedBy",
+      "discriminant": 1
+    },
+    {
+      "name": "WieldedBy",
+      "discriminant": 2
+    },
+    {
+      "name": "KeyedBy",
+      "discriminant": 3
+    },
+    {
+      "name": "Knows",
+      "discriminant": 4
+    },
+    {
+      "name": "Owes",
+      "discriminant": 5
+    },
+    {
+      "name": "Fears",
+      "discriminant": 6
+    },
+    {
+      "name": "PartOf",
+      "discriminant": 7
+    },
+    {
+      "name": "DerivedFrom",
+      "discriminant": 8
+    },
+    {
+      "name": "LockedBy",
+      "discriminant": 9
+    },
+    {
+      "name": "Dead",
+      "discriminant": 10
+    },
+    {
+      "name": "PilotedBy",
+      "discriminant": 11
+    },
+    {
+      "name": "AttachedTo",
+      "discriminant": 12
+    }
+  ],
+  "predicates": [
+    {
+      "name": "Affordance",
+      "discriminant": null,
+      "payload": "(Slot,Name)",
+      "description": "authoring predicate"
+    },
+    {
+      "name": "Rel",
+      "discriminant": null,
+      "payload": "(Slot,Rel,Slot)",
+      "description": "authoring predicate"
+    },
+    {
+      "name": "Qty",
+      "discriminant": null,
+      "payload": "(Slot,Name,Cmp,i32)",
+      "description": "authoring predicate"
+    },
+    {
+      "name": "EqVerb",
+      "discriminant": null,
+      "payload": "Verb",
+      "description": "authoring predicate"
+    },
+    {
+      "name": "RiteActive",
+      "discriminant": null,
+      "payload": "Name",
+      "description": "authoring predicate"
+    },
+    {
+      "name": "AabbNear",
+      "discriminant": null,
+      "payload": "(Slot,Slot,Mm)",
+      "description": "authoring predicate"
+    },
+    {
+      "name": "InWindow",
+      "discriminant": null,
+      "payload": "(Name,Channel)",
+      "description": "authoring predicate"
+    },
+    {
+      "name": "Knows",
+      "discriminant": null,
+      "payload": "(Slot,Name)",
+      "description": "authoring predicate"
+    },
+    {
+      "name": "SourceIs",
+      "discriminant": null,
+      "payload": "SourceKind",
+      "description": "authoring predicate"
+    },
+    {
+      "name": "AgencyClaimed",
+      "discriminant": null,
+      "payload": "Channel",
+      "description": "authoring predicate"
+    },
+    {
+      "name": "Burning",
+      "discriminant": null,
+      "payload": "Slot",
+      "description": "authoring predicate"
+    },
+    {
+      "name": "OpaqueClosed",
+      "discriminant": null,
+      "payload": "Slot",
+      "description": "authoring predicate"
+    },
+    {
+      "name": "SweptHitsOpaqueClosed",
+      "discriminant": null,
+      "payload": "unit",
+      "description": "authoring predicate"
+    },
+    {
+      "name": "IslandAwake",
+      "discriminant": null,
+      "payload": "Slot",
+      "description": "authoring predicate"
+    },
+    {
+      "name": "SelfIs",
+      "discriminant": null,
+      "payload": "Slot",
+      "description": "authoring predicate"
+    },
+    {
+      "name": "TargetIs",
+      "discriminant": null,
+      "payload": "Slot",
+      "description": "authoring predicate"
+    },
+    {
+      "name": "OtherIs",
+      "discriminant": null,
+      "payload": "Slot",
+      "description": "authoring predicate"
+    },
+    {
+      "name": "RayHits",
+      "discriminant": null,
+      "payload": "{from:Slot,dir:IVec3,max:Mm,mask:u8}",
+      "description": "authoring predicate"
+    },
+    {
+      "name": "SimLodIs",
+      "discriminant": null,
+      "payload": "(Slot,SimLod)",
+      "description": "authoring predicate"
+    },
+    {
+      "name": "InPlace",
+      "discriminant": null,
+      "payload": "(Slot,Slot)",
+      "description": "authoring predicate"
+    },
+    {
+      "name": "And",
+      "discriminant": null,
+      "payload": "(Pred,Pred)",
+      "description": "authoring predicate"
+    },
+    {
+      "name": "Or",
+      "discriminant": null,
+      "payload": "(Pred,Pred)",
+      "description": "authoring predicate"
+    },
+    {
+      "name": "Not",
+      "discriminant": null,
+      "payload": "Pred",
+      "description": "authoring predicate"
+    },
+    {
+      "name": "ExistsRelated",
+      "discriminant": null,
+      "payload": "{of:Slot,rel:Rel,pred:Pred}",
+      "description": "authoring predicate"
+    },
+    {
+      "name": "CountRelated",
+      "discriminant": null,
+      "payload": "{of:Slot,rel:Rel,pred:Pred,cmp:Cmp,n:i32}",
+      "description": "authoring predicate"
+    }
+  ],
+  "rite_ops": [
+    {
+      "name": "Halt",
+      "discriminant": 0,
+      "payload": "Status",
+      "description": "Rite ISA operation"
+    },
+    {
+      "name": "Guard",
+      "discriminant": 1,
+      "payload": "(Pred,u16)",
+      "description": "Rite ISA operation"
+    },
+    {
+      "name": "Spend",
+      "discriminant": 2,
+      "payload": "(Name,i32,u16)",
+      "description": "Rite ISA operation"
+    },
+    {
+      "name": "Wait",
+      "discriminant": 3,
+      "payload": "(u16,Option<Channel>)",
+      "description": "Rite ISA operation"
+    },
+    {
+      "name": "Emit",
+      "discriminant": 4,
+      "payload": "Name",
+      "description": "Rite ISA operation"
+    },
+    {
+      "name": "Branch",
+      "discriminant": 5,
+      "payload": "(Pred,u16,u16)",
+      "description": "Rite ISA operation"
+    },
+    {
+      "name": "Bind",
+      "discriminant": 6,
+      "payload": "BindSrc",
+      "description": "Rite ISA operation"
+    },
+    {
+      "name": "Setq",
+      "discriminant": 7,
+      "payload": "(Slot,Name,i32)",
+      "description": "Rite ISA operation"
+    },
+    {
+      "name": "RelAdd",
+      "discriminant": 8,
+      "payload": "(Slot,Rel,Slot)",
+      "description": "Rite ISA operation"
+    },
+    {
+      "name": "RelDel",
+      "discriminant": 9,
+      "payload": "(Slot,Rel,Slot)",
+      "description": "Rite ISA operation"
+    },
+    {
+      "name": "Awake",
+      "discriminant": 10,
+      "payload": "Slot",
+      "description": "Rite ISA operation"
+    },
+    {
+      "name": "Complete",
+      "discriminant": 11,
+      "payload": "Status",
+      "description": "Rite ISA operation"
+    },
+    {
+      "name": "Spawn",
+      "discriminant": 12,
+      "payload": "Name",
+      "description": "Rite ISA operation"
+    },
+    {
+      "name": "PhysReq",
+      "discriminant": 13,
+      "payload": "{lin:IVec3,ang:IVec3}",
+      "description": "Rite ISA operation"
+    }
+  ],
+  "affordances": [],
+  "patterns": [],
+  "diagnostics": [
+    {
+      "code": "IR.Parse",
+      "source": "klotho-ir",
+      "retryable": false
+    },
+    {
+      "code": "IR.Ser",
+      "source": "klotho-ir",
+      "retryable": false
+    },
+    {
+      "code": "IR.EmptyName",
+      "source": "klotho-ir",
+      "retryable": false
+    },
+    {
+      "code": "IR.NestedQuantifier",
+      "source": "klotho-ir",
+      "retryable": false
+    },
+    {
+      "code": "IR.InvalidRiteCap",
+      "source": "klotho-ir",
+      "retryable": false
+    },
+    {
+      "code": "IR.InvalidPhase",
+      "source": "klotho-ir",
+      "retryable": false
+    },
+    {
+      "code": "IR.DuplicateChannel",
+      "source": "klotho-ir",
+      "retryable": false
+    },
+    {
+      "code": "CANON.MixedLabeling",
+      "source": "klotho-canon",
+      "retryable": false
+    },
+    {
+      "code": "CANON.DuplicatePc",
+      "source": "klotho-canon",
+      "retryable": false
+    },
+    {
+      "code": "CANON.MissingEntry",
+      "source": "klotho-canon",
+      "retryable": false
+    },
+    {
+      "code": "CANON.MissingTarget",
+      "source": "klotho-canon",
+      "retryable": false
+    },
+    {
+      "code": "CANON.Unreachable",
+      "source": "klotho-canon",
+      "retryable": false
+    },
+    {
+      "code": "CANON.FallOff",
+      "source": "klotho-canon",
+      "retryable": false
+    },
+    {
+      "code": "CANON.Cycle",
+      "source": "klotho-canon",
+      "retryable": false
+    },
+    {
+      "code": "CANON.UnboundName",
+      "source": "klotho-canon",
+      "retryable": false
+    },
+    {
+      "code": "CANON.InvalidDoc",
+      "source": "klotho-canon",
+      "retryable": false
+    },
+    {
+      "code": "CANON.DuplicateId",
+      "source": "klotho-canon",
+      "retryable": false
+    },
+    {
+      "code": "CANON.UnknownRetract",
+      "source": "klotho-canon",
+      "retryable": false
+    },
+    {
+      "code": "CANON.PredTooLarge",
+      "source": "klotho-canon",
+      "retryable": false
+    },
+    {
+      "code": "CANON.TableFull",
+      "source": "klotho-canon",
+      "retryable": false
+    },
+    {
+      "code": "CANON.Contradiction",
+      "source": "klotho-canon",
+      "retryable": false
+    },
+    {
+      "code": "CANON.LockableNeedsKeyOrRite",
+      "source": "klotho-canon",
+      "retryable": false
+    }
+  ],
+  "budgets": [
+    {
+      "name": "hearth",
+      "us_sim": 4000,
+      "pred_ops": 8192,
+      "rite_steps": 2000,
+      "eval_slo_ticks": 12,
+      "rewind_ticks": 0
+    },
+    {
+      "name": "aaa_adventure",
+      "us_sim": 8000,
+      "pred_ops": 65536,
+      "rite_steps": 16384,
+      "eval_slo_ticks": 6,
+      "rewind_ticks": 0
+    },
+    {
+      "name": "aaa_shooter",
+      "us_sim": 5000,
+      "pred_ops": 32768,
+      "rite_steps": 8192,
+      "eval_slo_ticks": 12,
+      "rewind_ticks": 12
+    }
+  ],
+  "operations": [
+    {
+      "id": "locus.add@1",
+      "input": "SeedFact::Locus",
+      "writes": [
+        "seed"
+      ],
+      "cost_units": 1
+    },
+    {
+      "id": "locus.remove@1",
+      "input": "Name",
+      "writes": [
+        "seed",
+        "canon_diffs"
+      ],
+      "cost_units": 3
+    },
+    {
+      "id": "locus.rename@1",
+      "input": "{from:Name,to:Name}",
+      "writes": [
+        "seed",
+        "canon_diffs",
+        "minds"
+      ],
+      "cost_units": 2
+    },
+    {
+      "id": "canon.diff.add@1",
+      "input": "CanonDiff",
+      "writes": [
+        "canon_diffs"
+      ],
+      "cost_units": 2
+    },
+    {
+      "id": "seed.fact.add@1",
+      "input": "SeedFact",
+      "writes": [
+        "seed"
+      ],
+      "cost_units": 1
+    },
+    {
+      "id": "mind.set@1",
+      "input": "MindSpec",
+      "writes": [
+        "minds"
+      ],
+      "cost_units": 1
+    },
+    {
+      "id": "style.set@1",
+      "input": "StyleIntent",
+      "writes": [
+        "style"
+      ],
+      "cost_units": 1
+    },
+    {
+      "id": "reference.replace@1",
+      "input": "{old:ProvenanceId,new:ProvenanceId}",
+      "writes": [
+        "provenance"
+      ],
+      "cost_units": 2
+    }
+  ]
+}

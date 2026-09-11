@@ -23,8 +23,8 @@ jobs:
         with:
           toolchain: 1.98.0
       - name: golden Trace prefix hashes (P0)
-        run: cargo test -p klotho-debug
+        run: cargo test --manifest-path engine/Cargo.toml -p klotho-debug
       - name: 64-awake 4 ms gate (fail)
-        run: cargo test -p klotho-debug --release --test awake64
+        run: cargo test --manifest-path engine/Cargo.toml -p klotho-debug --release --test awake64
         env:
           KLOTHO_BUDGET_FAIL: "1"

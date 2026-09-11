@@ -1019,7 +1019,8 @@ pub fn default_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
-        .expect("crate lives under workspace/crates")
+        .and_then(Path::parent)
+        .expect("crate lives under repository/studio/crates")
         .to_path_buf()
 }
 

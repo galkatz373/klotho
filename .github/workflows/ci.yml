@@ -26,16 +26,28 @@ jobs:
           toolchain: 1.98.0
           components: rustfmt, clippy
       - name: rustfmt
-        run: cargo fmt --all -- --check
-      - name: clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
-      - name: test
-        run: cargo test --workspace
+        shell: bash
+        run: |
+          cargo fmt --manifest-path engine/Cargo.toml --all -- --check
+          cargo fmt --manifest-path studio/Cargo.toml --all -- --check
+      - name: engine clippy
+        run: cargo clippy --manifest-path engine/Cargo.toml --workspace --all-targets -- -D warnings
+      - name: studio clippy
+        run: cargo clippy --manifest-path studio/Cargo.toml --workspace --all-targets -- -D warnings
+      - name: engine test
+        run: cargo test --manifest-path engine/Cargo.toml --workspace
+      - name: studio test
+        run: cargo test --manifest-path studio/Cargo.toml --workspace
       - name: forbidden imports
         shell: bash
         run: bash scripts/ci/forbidden-imports.sh
       - name: KAI benchmark contract
-        run: cargo run -p klotho-kai-bench -- validate
+        run: cargo run --manifest-path studio/Cargo.toml -p klotho-kai-bench -- validate
+      - name: Workspace boundary and clean export
+        shell: bash
+        run: bash scripts/ci/workspace-boundary.sh
+      - name: Schema compatibility
+        run: cargo run --manifest-path studio/Cargo.toml -p klotho-schema -- check
 
   phys-golden:
     name: pinned Linux Phys golden
@@ -53,7 +65,7 @@ jobs:
         shell: bash
         run: test "$(uname -m)" = x86_64
       - name: Phys residual and long-run goldens
-        run: cargo test -p klotho-phys
+        run: cargo test --manifest-path engine/Cargo.toml -p klotho-phys
 
   jobs-unsafe:
     name: jobs Miri · Klotho
@@ -66,12 +78,12 @@ jobs:
       - name: Miri steal deque
         # The repository-level rust-toolchain.toml pins stable, so select the
         # nightly toolchain explicitly; Miri is not distributed for stable.
-        run: cargo +nightly miri test -p klotho-jobs --lib
+        run: cargo +nightly miri test --manifest-path engine/Cargo.toml -p klotho-jobs --lib
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.98.0
       - name: Loom owner/thief model
-        run: cargo test -p klotho-jobs --test loom_deque
+        run: cargo test --manifest-path engine/Cargo.toml -p klotho-jobs --test loom_deque
 
   runtime-profiles:
     name: AAA runtime profiles
@@ -82,11 +94,11 @@ jobs:
         with:
           toolchain: 1.98.0
       - name: Adventure profile
-        run: cargo test -p klotho-runtime --features aaa-adventure
+        run: cargo test --manifest-path engine/Cargo.toml -p klotho-runtime --features aaa-adventure
       - name: Shooter profile
-        run: cargo test -p klotho-runtime --features aaa-shooter
+        run: cargo test --manifest-path engine/Cargo.toml -p klotho-runtime --features aaa-shooter
       - name: Infer OS-process sidecar
-        run: cargo test -p klotho-infer -p klotho-runtime --features klotho-runtime/infer
+        run: cargo test --manifest-path engine/Cargo.toml -p klotho-infer -p klotho-runtime --features klotho-runtime/infer
 
   cook-farm:
     name: AAA cook farm gates

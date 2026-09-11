@@ -20,7 +20,6 @@ members = [
     "crates/klotho-infer",
     "crates/klotho-manifest",
     "crates/klotho-compile",
-    "crates/klotho-dcc",
     "crates/klotho-stream",
     "crates/klotho-save",
     "crates/klotho-platform",
@@ -29,12 +28,9 @@ members = [
     "crates/klotho-ui",
     "crates/klotho-vfx",
     "crates/klotho-cinematic",
-    "crates/klotho-author",
-    "crates/klotho-editor",
     "crates/klotho-debug",
     "crates/klotho-runtime",
     "crates/klotho-net",
-    "crates/klotho-kai-bench",
     "examples/hearth-slice",
     "examples/ash-slice",
     "examples/ember-slice",
@@ -72,7 +68,6 @@ klotho-mind = { path = "crates/klotho-mind" }
 klotho-infer = { path = "crates/klotho-infer" }
 klotho-manifest = { path = "crates/klotho-manifest" }
 klotho-compile = { path = "crates/klotho-compile" }
-klotho-dcc = { path = "crates/klotho-dcc" }
 klotho-stream = { path = "crates/klotho-stream" }
 klotho-save = { path = "crates/klotho-save" }
 klotho-platform = { path = "crates/klotho-platform" }
@@ -82,8 +77,6 @@ klotho-audio = { path = "crates/klotho-audio" }
 klotho-ui = { path = "crates/klotho-ui" }
 klotho-vfx = { path = "crates/klotho-vfx" }
 klotho-cinematic = { path = "crates/klotho-cinematic" }
-klotho-author = { path = "crates/klotho-author" }
-klotho-editor = { path = "crates/klotho-editor" }
 klotho-debug = { path = "crates/klotho-debug" }
 klotho-net = { path = "crates/klotho-net" }
 ron = "0.11.0"

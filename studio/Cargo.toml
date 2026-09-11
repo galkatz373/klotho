@@ -1,0 +1,52 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/klotho-schema",
+    "crates/klotho-author",
+    "crates/klotho-editor",
+    "crates/klotho-dcc",
+    "crates/klotho-kai-bench",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+authors = ["Gal Katz"]
+repository = "https://github.com/galkatz373/klotho"
+
+[workspace.dependencies]
+blake3 = "=1.8.7"
+klotho-core = { path = "../engine/crates/klotho-core" }
+klotho-prove = { path = "../engine/crates/klotho-prove" }
+klotho-ir = { path = "../engine/crates/klotho-ir" }
+klotho-canon = { path = "../engine/crates/klotho-canon" }
+klotho-trace = { path = "../engine/crates/klotho-trace" }
+klotho-world = { path = "../engine/crates/klotho-world" }
+klotho-commit = { path = "../engine/crates/klotho-commit" }
+klotho-manifest = { path = "../engine/crates/klotho-manifest" }
+klotho-compile = { path = "../engine/crates/klotho-compile" }
+klotho-render = { path = "../engine/crates/klotho-render" }
+klotho-ui = { path = "../engine/crates/klotho-ui" }
+klotho-schema = { path = "crates/klotho-schema" }
+klotho-author = { path = "crates/klotho-author" }
+ron = "0.11.0"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.151"
+sha2 = "=0.10.9"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+disallowed_methods = "deny"
+todo = "warn"
+unimplemented = "warn"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+panic = "abort"

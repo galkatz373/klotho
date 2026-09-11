@@ -5,7 +5,7 @@
 | Document | High-Level Design — AI-native production for Klotho's first AAA title |
 | Author | Gal Katz |
 | Date | 2026-09-11 |
-| Status | Active successor plan (KAI-00 landed; KAI-01–24 not landed) |
+| Status | Active successor plan (KAI-00–01 landed; KAI-02–24 not landed) |
 | Baseline | `docs/hld.md` rev 6; AAA-01–27 landed |
 | Audience | Engine, tools, gameplay, content, AI platform, build, QA, and production leads |
 | Language | Rust (edition 2024; 2021-compatible crates OK) |
@@ -1911,7 +1911,7 @@ managers.
 
 ## PR plan
 
-Landed baseline: AAA-01–27 and KAI-00 (2026-09-11). KAI-01–24 remain planned.
+Landed baseline: AAA-01–27 and KAI-00–01 (2026-09-11). KAI-02–24 remain planned.
 Each header gains `— landed` only with its implementation, tests, date bump, and
 this section's landed list update.
 
@@ -2004,7 +2004,7 @@ flowchart TB
   Foundation is funded with named owners and no role, farm, or review queue is
   modeled above available capacity.
 
-#### KAI-01 — Workspace separation and generated schema catalog
+#### KAI-01 — Workspace separation and generated schema catalog — **landed 2026-09-11**
 
 - **Files:** `engine/Cargo.toml`, `studio/Cargo.toml`, crate moves, lockfiles,
   clean-export packaging, new `studio/crates/klotho-schema/**`; derives/build

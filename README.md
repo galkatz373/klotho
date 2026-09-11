@@ -48,59 +48,67 @@ AAA-24 — incremental cook farm and 50 GB logical fixture.
 AAA-25 — live Canon epoch packs.
 AAA-26 — console platform/render HAL boundary.
 AAA-27 — first-title freeze: 30 Hz single-player action-adventure on desktop; shooter gates remain regressions.
+KAI-00 — locked AI-production benchmark, machine, model, farm, and capacity contract.
+KAI-01 — separate engine/studio workspaces and generated authoring schema catalog.
 
 ## Build
 
 Rust 1.85+ (edition 2024). `rustup` reads `rust-toolchain.toml`.
 
 ```bash
-cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
-cargo fmt --all -- --check
-cargo run -p hearth-slice --example pixels   # window: keys 1–4 switch scenes
+cargo test --manifest-path engine/Cargo.toml --workspace
+cargo test --manifest-path studio/Cargo.toml --workspace
+cargo clippy --manifest-path engine/Cargo.toml --workspace --all-targets -- -D warnings
+cargo clippy --manifest-path studio/Cargo.toml --workspace --all-targets -- -D warnings
+cargo fmt --manifest-path engine/Cargo.toml --all -- --check
+cargo fmt --manifest-path studio/Cargo.toml --all -- --check
+cargo run --manifest-path engine/Cargo.toml -p hearth-slice --example pixels
 ```
 
-Pixel goldens (open in Preview): `examples/hearth-slice/fixtures/pixels/*.bmp`.
+Pixel goldens (open in Preview): `engine/examples/hearth-slice/fixtures/pixels/*.bmp`.
 
 ## Layout
 
 ```
 klotho/
-  crates/klotho-core/     # Tick, Mm, VelFx, YawMd, Sigil, Budget, Hash, Rng
-  crates/klotho-prove/    # Provenance DAG, LicenseSpan, blake3 CAS
-  crates/klotho-ir/       # IntentDoc, PlayerIntent, MindIntent, InferIntent, RON
-  crates/klotho-canon/    # Laws, Affordances, Pred bytecode, Rite ISA, eval
-  crates/klotho-trace/    # TraceEvent, TraceLog prefix hash, TraceDelta
-  crates/klotho-world/    # Private World, Projection, space_ix, snapshot
-  crates/klotho-commit/   # CommitKernel, Proposal, AdmitBuf, rite VM
-  crates/klotho-sim/      # phase loop, budget timers, profile hook
-  crates/klotho-jobs/     # steal queues, island propose (K34)
-  crates/klotho-interest/ # SimLod from observer pose
-  crates/klotho-input/    # device sample → PlayerIntent
-  crates/klotho-space/    # 2.5D AABB / swept-capsule SyncProposer (non-Actor)
-  crates/klotho-phys/     # scalar XPBD island proposer
-  crates/klotho-motion/   # verb→clip + root-motion SyncProposer (Actors)
-  crates/klotho-mind/     # GOAP SyncProposer (MindIntent, no Agency)
-  crates/klotho-infer/    # Default-off OS sidecar; snapshot IPC → InferIntent only
-  crates/klotho-manifest/ # Visual/Sonic/Ui manifests; tables pub(crate)
-  crates/klotho-compile/  # kitbash retrieval cook → CAS → .warp / sharded catalog
-  crates/klotho-dcc/      # glTF 2.0 cook → quantized KLTH mesh/hull/clip
-  crates/klotho-stream/   # Place shard pager, KCAS volumes (mmap after header validate)
-  crates/klotho-save/     # epoch compaction, K19/K48 I/O
-  crates/klotho-platform/ # window, OS events, Look accum, audio device (no world mutation)
-  crates/klotho-render/   # wgpu clustered meshes, Presenter, render thread
-  crates/klotho-audio/    # grains from Trace, one bed, integer mix, device output
-  crates/klotho-ui/       # Knows-gated attention, production HUD skin, pause save
-  crates/klotho-cinematic/ # Beat-driven Observer tracks (presentation only)
-  crates/klotho-author/   # Distaff: RON/kdown, cook-time Pin, CLI cook/preview
-  crates/klotho-editor/   # Distaff viewport: Manifest, outliner, Pin, cook, play-in-editor
-  crates/klotho-debug/    # Trace player, reject inspector, 4 ms budget gate
-  crates/klotho-runtime/  # headless Intent-script / .warp player
-  crates/klotho-net/      # listen-server packets, ed25519, TraceDelta
-  examples/hearth-slice/  # Appendix A goldens (PR 07b)
-  examples/ash-slice/     # Appendix B goldens (PR 07c)
-  examples/chorus-slice/  # AAA-17: 2000 Far + 200 Full SimLod headless
-  data/kitbash/           # hashed, licensed, affordance-tagged library
+  engine/Cargo.toml       # Runtime/presenter/game-package workspace
+  engine/crates/klotho-core/ # Tick, Mm, VelFx, YawMd, Sigil, Budget, Hash, Rng
+  engine/crates/klotho-prove/ # Provenance DAG, LicenseSpan, blake3 CAS
+  engine/crates/klotho-ir/       # IntentDoc, PlayerIntent, MindIntent, InferIntent, RON
+  engine/crates/klotho-canon/    # Laws, Affordances, Pred bytecode, Rite ISA, eval
+  engine/crates/klotho-trace/    # TraceEvent, TraceLog prefix hash, TraceDelta
+  engine/crates/klotho-world/    # Private World, Projection, space_ix, snapshot
+  engine/crates/klotho-commit/   # CommitKernel, Proposal, AdmitBuf, rite VM
+  engine/crates/klotho-sim/      # phase loop, budget timers, profile hook
+  engine/crates/klotho-jobs/     # steal queues, island propose (K34)
+  engine/crates/klotho-interest/ # SimLod from observer pose
+  engine/crates/klotho-input/    # device sample → PlayerIntent
+  engine/crates/klotho-space/    # 2.5D AABB / swept-capsule SyncProposer (non-Actor)
+  engine/crates/klotho-phys/     # scalar XPBD island proposer
+  engine/crates/klotho-motion/   # verb→clip + root-motion SyncProposer (Actors)
+  engine/crates/klotho-mind/     # GOAP SyncProposer (MindIntent, no Agency)
+  engine/crates/klotho-infer/    # Default-off OS sidecar; snapshot IPC → InferIntent only
+  engine/crates/klotho-manifest/ # Visual/Sonic/Ui manifests; tables pub(crate)
+  engine/crates/klotho-compile/  # kitbash retrieval cook → CAS → .warp / sharded catalog
+  studio/Cargo.toml       # Distaff/Weaver/AI/evaluation workspace
+  studio/crates/klotho-schema/ # Generated machine-readable authoring catalog
+  studio/crates/klotho-dcc/ # glTF 2.0 cook → quantized KLTH mesh/hull/clip
+  engine/crates/klotho-stream/   # Place shard pager, KCAS volumes (mmap after header validate)
+  engine/crates/klotho-save/     # epoch compaction, K19/K48 I/O
+  engine/crates/klotho-platform/ # window, OS events, Look accum, audio device (no world mutation)
+  engine/crates/klotho-render/   # wgpu clustered meshes, Presenter, render thread
+  engine/crates/klotho-audio/    # grains from Trace, one bed, integer mix, device output
+  engine/crates/klotho-ui/       # Knows-gated attention, production HUD skin, pause save
+  engine/crates/klotho-cinematic/ # Beat-driven Observer tracks (presentation only)
+  studio/crates/klotho-author/ # Distaff: RON/kdown, cook-time Pin, CLI cook/preview
+  studio/crates/klotho-editor/ # Distaff viewport: Manifest, outliner, Pin, cook, play-in-editor
+  engine/crates/klotho-debug/    # Trace player, reject inspector, 4 ms budget gate
+  engine/crates/klotho-runtime/  # headless Intent-script / .warp player
+  engine/crates/klotho-net/      # listen-server packets, ed25519, TraceDelta
+  engine/examples/hearth-slice/ # Appendix A goldens (PR 07b)
+  engine/examples/ash-slice/ # Appendix B goldens (PR 07c)
+  engine/examples/chorus-slice/ # AAA-17: 2000 Far + 200 Full SimLod headless
+  engine/data/kitbash/    # hashed, licensed, affordance-tagged library
   docs/hld.md             # Current high-level design (rev 6, AAA-01–27)
   docs/hld-v1.md          # Preserved v1 high-level design (rev 5)
   docs/pred-lang.md       # Predicate / Rite RFC (PR 04a)

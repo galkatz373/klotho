@@ -188,3 +188,11 @@ fn ship_allowlist_accepts_runtime_paths() {
     check_ship_allowlist("engine/crates/klotho-runtime/src/lib.rs").unwrap();
     check_ship_allowlist("data/kitbash/hearth.ron").unwrap();
 }
+
+#[test]
+fn ship_allowlist_rejects_studio_and_weight_paths() {
+    // K70: the studio tree (authoring providers, indexes, transcripts) and
+    // model weights never ship. No studio crate is named (K83 firewall).
+    check_ship_allowlist("studio/crates/klotho-editor/src/lib.rs").expect_err("studio tree");
+    check_ship_allowlist("data/weights/critic.gguf").expect_err("weights");
+}

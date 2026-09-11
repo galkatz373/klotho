@@ -165,11 +165,14 @@ fn prove_message_to_diagnostic(native: &str, message: String) -> Diagnostic {
 }
 
 /// Reject authoring-only artifacts from the default ship package (K70).
+/// K83 firewall: engine source must not name studio crates, so the studio
+/// tree is excluded wholesale instead of matching any crate name.
 pub fn check_ship_allowlist(path: &str) -> Result<(), CompileError> {
     let normalized = path.replace('\\', "/");
     let banned = normalized.starts_with("models/")
         || normalized.contains("/models/")
-        || normalized.contains("klotho-ai")
+        || normalized.starts_with("studio/")
+        || normalized.contains("/studio/")
         || normalized.contains("transcript")
         || normalized.ends_with(".gguf");
     if banned {

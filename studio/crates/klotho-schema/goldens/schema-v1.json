@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "toolchain_hash": "cb12776107794a73c524b3232dc7d5f1f9cce9528f7049a16deb1a8ee26c0e77",
+  "toolchain_hash": "c1749950b4de77d38494af526536866fe73c33719b55fb859526e36c1392cc1f",
   "kinds": [
     {
       "id": "klotho_ir::IntentDoc",
@@ -1442,6 +1442,220 @@
       "variants": [],
       "positive_example": "(x:0,y:0,z:0,yaw:0,pitch:0,roll:0)",
       "negative_example": "(x:\"zero\",y:0,z:0,yaw:0,pitch:0,roll:0)"
+    },
+    {
+      "id": "klotho_ir::Diagnostic",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "code",
+          "ty": "DiagnosticCode",
+          "description": "stable namespaced code",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "class",
+          "ty": "FailureClass",
+          "description": "fault corpus class",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "severity",
+          "ty": "Severity",
+          "description": "error, warning, or advice",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "message",
+          "ty": "String",
+          "description": "concise human line",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "primary",
+          "ty": "AnchorId",
+          "description": "primary semantic identity",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "related",
+          "ty": "Vec<AnchorId>",
+          "description": "additional blamed objects",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "witness",
+          "ty": "Option<Counterexample>",
+          "description": "minimal counterexample",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "legal_repairs",
+          "ty": "Vec<RepairShape>",
+          "description": "legal repair operations",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "cost",
+          "ty": "Option<EstimatedCost>",
+          "description": "repair cost attribution",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(code:\"KAI-DIAG-CONTRADICTION\",class:contradiction,severity:Error,message:\"Contradiction(a|b)\",primary:\"00000000000000000000000000000000\",related:[],witness:None,legal_repairs:[],cost:None)",
+      "negative_example": "(code:\"\",class:unknown,severity:Error,message:\"\",primary:\"00\",related:[],witness:None,legal_repairs:[],cost:None)"
+    },
+    {
+      "id": "klotho_ir::RepairShape",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "op",
+          "ty": "String",
+          "description": "catalog operation id",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "note",
+          "ty": "String",
+          "description": "legal repair note",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(op:\"author.remove@1\",note:\"remove one scoped fact\")",
+      "negative_example": "(op:\"\",note:\"\")"
+    },
+    {
+      "id": "klotho_ir::EstimatedCost",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "units",
+          "ty": "u16",
+          "description": "catalog cost_units",
+          "min": 0,
+          "max": 65535
+        },
+        {
+          "name": "stage",
+          "ty": "String",
+          "description": "validate, cook, package, prove, eval",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(units:3,stage:\"cook\")",
+      "negative_example": "(units:\"x\",stage:\"\")"
+    },
+    {
+      "id": "klotho_ir::FailureClass",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "Contradiction",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "unsatisfiable Laws"
+        },
+        {
+          "name": "Cfg",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "Rite control-flow"
+        },
+        {
+          "name": "Cap",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "frozen pred/rite cap"
+        },
+        {
+          "name": "Agency",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "player-only Agency"
+        },
+        {
+          "name": "Provenance",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "license/CAS"
+        },
+        {
+          "name": "Package",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "ship allowlist/warp"
+        },
+        {
+          "name": "Journey",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "unreachable assertion"
+        },
+        {
+          "name": "Budget",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "budget miss"
+        },
+        {
+          "name": "Reproducibility",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "hash drift"
+        },
+        {
+          "name": "Schema",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "parse/module structure"
+        }
+      ],
+      "positive_example": "Contradiction",
+      "negative_example": "UnknownVariant"
+    },
+    {
+      "id": "klotho_ir::Severity",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "Error",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "gate failure"
+        },
+        {
+          "name": "Warning",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "non-blocking"
+        },
+        {
+          "name": "Advice",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "advisory critic"
+        }
+      ],
+      "positive_example": "Error",
+      "negative_example": "UnknownVariant"
     }
   ],
   "verbs": [
@@ -1794,179 +2008,463 @@
   "patterns": [],
   "diagnostics": [
     {
+      "code": "KAI-DIAG-CONTRADICTION",
+      "source": "klotho-canon",
+      "class": "contradiction",
+      "retryable": false,
+      "legal_repairs": [
+        "remove one scoped fact"
+      ]
+    },
+    {
+      "code": "KAI-DIAG-CFG-TARGET",
+      "source": "klotho-canon",
+      "class": "cfg",
+      "retryable": false,
+      "legal_repairs": [
+        "retarget within the owned Rite"
+      ]
+    },
+    {
+      "code": "KAI-DIAG-CAP",
+      "source": "klotho-compile",
+      "class": "cap",
+      "retryable": false,
+      "legal_repairs": [
+        "reduce or split authored flow without changing OutcomeId"
+      ]
+    },
+    {
+      "code": "KAI-DIAG-AGENCY",
+      "source": "klotho-ir",
+      "class": "agency",
+      "retryable": false,
+      "legal_repairs": [
+        "use public test-input adapter"
+      ]
+    },
+    {
+      "code": "KAI-DIAG-PROVENANCE",
+      "source": "klotho-prove",
+      "class": "provenance",
+      "retryable": false,
+      "legal_repairs": [
+        "bind approved license evidence or remove blob"
+      ]
+    },
+    {
+      "code": "KAI-DIAG-PACKAGE",
+      "source": "klotho-compile",
+      "class": "package",
+      "retryable": false,
+      "legal_repairs": [
+        "remove authoring artifact from package graph"
+      ]
+    },
+    {
+      "code": "KAI-DIAG-JOURNEY",
+      "source": "klotho-debug",
+      "class": "journey",
+      "retryable": false,
+      "legal_repairs": [
+        "repair owned semantic operation from minimized witness"
+      ]
+    },
+    {
+      "code": "KAI-DIAG-BUDGET",
+      "source": "klotho-debug",
+      "class": "budget",
+      "retryable": false,
+      "legal_repairs": [
+        "reduce scoped cost without weakening budget"
+      ]
+    },
+    {
+      "code": "KAI-DIAG-HASH-DRIFT",
+      "source": "klotho-ir",
+      "class": "reproducibility",
+      "retryable": false,
+      "legal_repairs": [
+        "reject candidate and isolate nondeterministic input"
+      ]
+    },
+    {
       "code": "IR.Parse",
       "source": "klotho-ir",
-      "retryable": false
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "IR.Ser",
       "source": "klotho-ir",
-      "retryable": false
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "IR.EmptyName",
       "source": "klotho-ir",
-      "retryable": false
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "IR.NestedQuantifier",
       "source": "klotho-ir",
-      "retryable": false
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "IR.InvalidRiteCap",
       "source": "klotho-ir",
-      "retryable": false
+      "class": "cap",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "IR.InvalidPhase",
       "source": "klotho-ir",
-      "retryable": false
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "IR.DuplicateChannel",
       "source": "klotho-ir",
-      "retryable": false
+      "class": "agency",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "IR.InvalidModuleVersion",
       "source": "klotho-ir",
-      "retryable": false
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "IR.ImportCycle",
       "source": "klotho-ir",
-      "retryable": false
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "IR.HashDrift",
       "source": "klotho-ir",
-      "retryable": false
+      "class": "reproducibility",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "IR.DuplicateModule",
       "source": "klotho-ir",
-      "retryable": false
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "IR.MissingModule",
       "source": "klotho-ir",
-      "retryable": false
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "IR.TombstoneReuse",
       "source": "klotho-ir",
-      "retryable": false
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "IR.AliasCollision",
       "source": "klotho-ir",
-      "retryable": false
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "IR.UnboundParameter",
       "source": "klotho-ir",
-      "retryable": false
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "IR.DuplicateAnchor",
       "source": "klotho-ir",
-      "retryable": false
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "IR.MissingAnchor",
       "source": "klotho-ir",
-      "retryable": false
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "IR.DuplicateObjectName",
       "source": "klotho-ir",
-      "retryable": false
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "IR.ExportUnknown",
       "source": "klotho-ir",
-      "retryable": false
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "IR.ParameterTypeMismatch",
       "source": "klotho-ir",
-      "retryable": false
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "CANON.MixedLabeling",
       "source": "klotho-canon",
-      "retryable": false
+      "class": "cfg",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "CANON.DuplicatePc",
       "source": "klotho-canon",
-      "retryable": false
+      "class": "cfg",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "CANON.MissingEntry",
       "source": "klotho-canon",
-      "retryable": false
+      "class": "cfg",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "CANON.MissingTarget",
       "source": "klotho-canon",
-      "retryable": false
+      "class": "cfg",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "CANON.Unreachable",
       "source": "klotho-canon",
-      "retryable": false
+      "class": "cfg",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "CANON.FallOff",
       "source": "klotho-canon",
-      "retryable": false
+      "class": "cfg",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "CANON.Cycle",
       "source": "klotho-canon",
-      "retryable": false
+      "class": "cfg",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "CANON.UnboundName",
       "source": "klotho-canon",
-      "retryable": false
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "CANON.InvalidDoc",
       "source": "klotho-canon",
-      "retryable": false
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "CANON.DuplicateId",
       "source": "klotho-canon",
-      "retryable": false
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "CANON.UnknownRetract",
       "source": "klotho-canon",
-      "retryable": false
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "CANON.PredTooLarge",
       "source": "klotho-canon",
-      "retryable": false
+      "class": "cap",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "CANON.TableFull",
       "source": "klotho-canon",
-      "retryable": false
+      "class": "cap",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "CANON.Contradiction",
       "source": "klotho-canon",
-      "retryable": false
+      "class": "contradiction",
+      "retryable": false,
+      "legal_repairs": []
     },
     {
       "code": "CANON.LockableNeedsKeyOrRite",
       "source": "klotho-canon",
-      "retryable": false
+      "class": "contradiction",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "PROVE.UnknownLicense",
+      "source": "klotho-prove",
+      "class": "provenance",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "PROVE.InvalidLicense",
+      "source": "klotho-prove",
+      "class": "provenance",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "PROVE.MissingParent",
+      "source": "klotho-prove",
+      "class": "provenance",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "PROVE.MissingBlob",
+      "source": "klotho-prove",
+      "class": "provenance",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "PROVE.BlobTooLarge",
+      "source": "klotho-prove",
+      "class": "provenance",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "PROVE.CasFull",
+      "source": "klotho-prove",
+      "class": "provenance",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "COMPILE.MissingTag",
+      "source": "klotho-compile",
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "COMPILE.LockMismatch",
+      "source": "klotho-compile",
+      "class": "reproducibility",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "COMPILE.MissingLockFile",
+      "source": "klotho-compile",
+      "class": "package",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "COMPILE.Catalog",
+      "source": "klotho-compile",
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "COMPILE.Header",
+      "source": "klotho-compile",
+      "class": "cap",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "COMPILE.QuantizeOverflow",
+      "source": "klotho-compile",
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "COMPILE.Io",
+      "source": "klotho-compile",
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "COMPILE.Warp",
+      "source": "klotho-compile",
+      "class": "package",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "COMPILE.Gltf",
+      "source": "klotho-compile",
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "COMPILE.EpochOverflow",
+      "source": "klotho-compile",
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "COMPILE.Flatten",
+      "source": "klotho-compile",
+      "class": "reproducibility",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "COMPILE.PackageAllowlist",
+      "source": "klotho-compile",
+      "class": "package",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "DEBUG.Budget",
+      "source": "klotho-debug",
+      "class": "budget",
+      "retryable": true,
+      "legal_repairs": []
     }
   ],
   "budgets": [

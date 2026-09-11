@@ -24,6 +24,9 @@ mod header;
 mod kit;
 mod warp;
 
+#[cfg(test)]
+mod kai04_corpus;
+
 pub use catalog::{
     CATALOG_FILE, CatalogManifest, IncrementalCatalog, LicenseCoverage, PlaceCatalogEntry,
     license_coverage, write_catalog, write_catalog_incremental,
@@ -36,7 +39,7 @@ pub use encode::{encode_clipset, encode_hull, encode_mesh_i16};
 pub use epoch::{
     COMPILER_EPOCH_PACK_VERSION, CanonEpochPack, cook_epoch_pack, cook_next_epoch_pack,
 };
-pub use error::CompileError;
+pub use error::{CompileError, check_ship_allowlist};
 pub use header::{
     ClipSetInfo, DecodedClip, DecodedGrain, DecodedMesh, DecodedSkinnedMesh, GRAIN_HZ, GrainInfo,
     MAGIC, MAX_CLIP_SAMPLES, MAX_CLIPS, MAX_RITE_STEPS, MAX_SKIN_BONES, MAX_SKIN_VERTS, MAX_TRIS,

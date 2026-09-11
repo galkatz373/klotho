@@ -139,8 +139,12 @@ pub struct DiagnosticSchema {
     pub code: String,
     /// Producing subsystem.
     pub source: String,
+    /// Fault class (`contradiction`, `cfg`, …).
+    pub class: String,
     /// Whether retrying identical input can succeed.
     pub retryable: bool,
+    /// Legal repair notes a bounded loop may attempt.
+    pub legal_repairs: Vec<String>,
 }
 
 /// Named deterministic budget profile.
@@ -598,6 +602,79 @@ fn type_schemas() -> Vec<TypeSchema> {
             "(x:0,y:0,z:0,yaw:0,pitch:0,roll:0)",
             "(x:\"zero\",y:0,z:0,yaw:0,pitch:0,roll:0)",
         ),
+        structure(
+            "klotho_ir::Diagnostic",
+            vec![
+                field("code", "DiagnosticCode", "stable namespaced code"),
+                field("class", "FailureClass", "fault corpus class"),
+                field("severity", "Severity", "error, warning, or advice"),
+                field("message", "String", "concise human line"),
+                field("primary", "AnchorId", "primary semantic identity"),
+                field("related", "Vec<AnchorId>", "additional blamed objects"),
+                field(
+                    "witness",
+                    "Option<Counterexample>",
+                    "minimal counterexample",
+                ),
+                field(
+                    "legal_repairs",
+                    "Vec<RepairShape>",
+                    "legal repair operations",
+                ),
+                field("cost", "Option<EstimatedCost>", "repair cost attribution"),
+            ],
+            "(code:\"KAI-DIAG-CONTRADICTION\",class:contradiction,severity:Error,message:\"Contradiction(a|b)\",primary:\"00000000000000000000000000000000\",related:[],witness:None,legal_repairs:[],cost:None)",
+            "(code:\"\",class:unknown,severity:Error,message:\"\",primary:\"00\",related:[],witness:None,legal_repairs:[],cost:None)",
+        ),
+        structure(
+            "klotho_ir::RepairShape",
+            vec![
+                field("op", "String", "catalog operation id"),
+                field("note", "String", "legal repair note"),
+            ],
+            "(op:\"author.remove@1\",note:\"remove one scoped fact\")",
+            "(op:\"\",note:\"\")",
+        ),
+        structure(
+            "klotho_ir::EstimatedCost",
+            vec![
+                bounded("units", "u16", "catalog cost_units", 0, 65535),
+                field("stage", "String", "validate, cook, package, prove, eval"),
+            ],
+            "(units:3,stage:\"cook\")",
+            "(units:\"x\",stage:\"\")",
+        ),
+        enumeration(
+            "klotho_ir::FailureClass",
+            [
+                ("Contradiction", "unsatisfiable Laws"),
+                ("Cfg", "Rite control-flow"),
+                ("Cap", "frozen pred/rite cap"),
+                ("Agency", "player-only Agency"),
+                ("Provenance", "license/CAS"),
+                ("Package", "ship allowlist/warp"),
+                ("Journey", "unreachable assertion"),
+                ("Budget", "budget miss"),
+                ("Reproducibility", "hash drift"),
+                ("Schema", "parse/module structure"),
+            ]
+            .into_iter()
+            .map(|(n, desc)| variant(n, None, "unit", desc))
+            .collect(),
+            "Contradiction",
+        ),
+        enumeration(
+            "klotho_ir::Severity",
+            [
+                ("Error", "gate failure"),
+                ("Warning", "non-blocking"),
+                ("Advice", "advisory critic"),
+            ]
+            .into_iter()
+            .map(|(n, desc)| variant(n, None, "unit", desc))
+            .collect(),
+            "Error",
+        ),
     ]
 }
 
@@ -772,56 +849,19 @@ fn rels() -> Vec<TagSchema> {
 }
 
 fn diagnostics() -> Vec<DiagnosticSchema> {
-    let ir = [
-        "Parse",
-        "Ser",
-        "EmptyName",
-        "NestedQuantifier",
-        "InvalidRiteCap",
-        "InvalidPhase",
-        "DuplicateChannel",
-        "InvalidModuleVersion",
-        "ImportCycle",
-        "HashDrift",
-        "DuplicateModule",
-        "MissingModule",
-        "TombstoneReuse",
-        "AliasCollision",
-        "UnboundParameter",
-        "DuplicateAnchor",
-        "MissingAnchor",
-        "DuplicateObjectName",
-        "ExportUnknown",
-        "ParameterTypeMismatch",
-    ];
-    let canon = [
-        "MixedLabeling",
-        "DuplicatePc",
-        "MissingEntry",
-        "MissingTarget",
-        "Unreachable",
-        "FallOff",
-        "Cycle",
-        "UnboundName",
-        "InvalidDoc",
-        "DuplicateId",
-        "UnknownRetract",
-        "PredTooLarge",
-        "TableFull",
-        "Contradiction",
-        "LockableNeedsKeyOrRite",
-    ];
-    ir.into_iter()
-        .map(|code| DiagnosticSchema {
-            code: format!("IR.{code}"),
-            source: "klotho-ir".to_owned(),
-            retryable: false,
+    klotho_ir::diagnostic_catalog()
+        .iter()
+        .map(|entry| DiagnosticSchema {
+            code: entry.code.to_owned(),
+            source: entry.source.to_owned(),
+            class: entry.class.as_str().to_owned(),
+            retryable: entry.retryable,
+            legal_repairs: entry
+                .legal_repairs
+                .iter()
+                .map(|note| (*note).to_owned())
+                .collect(),
         })
-        .chain(canon.into_iter().map(|code| DiagnosticSchema {
-            code: format!("CANON.{code}"),
-            source: "klotho-canon".to_owned(),
-            retryable: false,
-        }))
         .collect()
 }
 
@@ -1050,5 +1090,41 @@ mod tests {
         for (index, item) in locus_variants().iter().enumerate() {
             assert_eq!(usize::from(item.discriminant.expect("tag")), index + 1);
         }
+    }
+
+    #[test]
+    fn catalog_lists_every_seeded_diagnostic_code() {
+        let catalog = generate(&Canon::default());
+        let codes: Vec<_> = catalog
+            .diagnostics
+            .iter()
+            .map(|d| d.code.as_str())
+            .collect();
+        for needed in [
+            "KAI-DIAG-CONTRADICTION",
+            "KAI-DIAG-CFG-TARGET",
+            "KAI-DIAG-CAP",
+            "KAI-DIAG-AGENCY",
+            "KAI-DIAG-PROVENANCE",
+            "KAI-DIAG-PACKAGE",
+            "KAI-DIAG-JOURNEY",
+            "KAI-DIAG-BUDGET",
+            "KAI-DIAG-HASH-DRIFT",
+        ] {
+            assert!(codes.contains(&needed), "missing {needed}");
+        }
+        assert!(
+            catalog
+                .diagnostics
+                .iter()
+                .filter(|d| d.code.starts_with("KAI-DIAG-"))
+                .all(|d| !d.legal_repairs.is_empty())
+        );
+    }
+
+    #[test]
+    fn golden_matches_generated_catalog() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("goldens/schema-v1.json");
+        check_golden(&generate(&Canon::default()), &path).expect("schema golden");
     }
 }

@@ -17,6 +17,12 @@ pub fn inspect_event(ev: &DebugEvent) -> &[(ProposalKind, RejectReason)] {
     &ev.rejected
 }
 
+/// Agency rejects as the shared envelope. Other reasons stay native reject lines.
+#[must_use]
+pub fn diagnose_unclaimed_agency() -> klotho_ir::Diagnostic {
+    klotho_ir::diagnose_agency("infer", "any", "UnclaimedAgency")
+}
+
 /// One `Kind reason` line per reject, for humans and CI logs.
 #[must_use]
 pub fn format_rejects(rejects: &[(ProposalKind, RejectReason)]) -> String {
@@ -54,5 +60,13 @@ mod tests {
         let ev = DebugEvent::from_delta(delta, 0);
         assert_eq!(inspect_event(&ev).len(), 2);
         assert!(format_rejects(&[]).is_empty());
+    }
+
+    #[test]
+    fn unclaimed_agency_is_the_agency_envelope() {
+        let d = diagnose_unclaimed_agency();
+        assert_eq!(d.to_string(), "UnclaimedAgency");
+        assert_eq!(d.code.0, klotho_ir::DiagnosticCode::AGENCY);
+        assert!(d.points_to_anchor());
     }
 }

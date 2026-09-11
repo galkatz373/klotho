@@ -52,6 +52,7 @@ KAI-00 — locked AI-production benchmark, machine, model, farm, and capacity co
 KAI-01 — separate engine/studio workspaces and generated authoring schema catalog.
 KAI-02 — modular Intent, locks, and immutable semantic anchors.
 KAI-03 — authoring transactions, cell-level conflict matrix, and three-way semantic merge.
+KAI-04 — structured diagnostics: stable codes, anchors, minimal witnesses, legal repairs, cost.
 
 ## Build
 

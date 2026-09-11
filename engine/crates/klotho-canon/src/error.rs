@@ -2,6 +2,10 @@
 
 use core::fmt;
 
+use klotho_ir::{
+    Diagnostic, FailureClass, diagnose_cap, diagnose_cfg, diagnose_contradiction, diagnose_named,
+};
+
 /// Why a Canon document failed to cook.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CookError {
@@ -42,6 +46,50 @@ pub enum CookError {
     LockableNeedsKeyOrRite,
 }
 
+impl CookError {
+    /// Shared diagnostic envelope. [`Display`] of `self` is the message.
+    #[must_use]
+    pub fn to_diagnostic(&self) -> Diagnostic {
+        let message = self.to_string();
+        match self {
+            Self::Contradiction(s) => {
+                let laws: Vec<&str> = s.split('|').collect();
+                diagnose_contradiction(&laws, message)
+            }
+            Self::LockableNeedsKeyOrRite => diagnose_contradiction(&["Lockable"], message),
+            Self::MixedLabeling => diagnose_cfg("rite", 0, 0, message),
+            Self::DuplicatePc(pc) => diagnose_cfg("rite", *pc, *pc, message),
+            Self::MissingEntry(pc) => diagnose_cfg("rite", 0, *pc, message),
+            Self::MissingTarget { from, to } => diagnose_cfg("rite", *from, *to, message),
+            Self::Unreachable(pc) => diagnose_cfg("rite", 0, *pc, message),
+            Self::FallOff(pc) => diagnose_cfg("rite", *pc, *pc, message),
+            Self::Cycle => diagnose_cfg("rite", 0, 0, message),
+            Self::PredTooLarge => diagnose_cap("pred", 65, 64, message),
+            Self::TableFull => diagnose_cap("table", 65536, 65535, message),
+            Self::UnboundName(n) => diagnose_named(
+                "CANON.UnboundName",
+                FailureClass::Schema,
+                "name",
+                n,
+                message,
+            ),
+            Self::InvalidDoc(n) => {
+                diagnose_named("CANON.InvalidDoc", FailureClass::Schema, "doc", n, message)
+            }
+            Self::DuplicateId(n) => {
+                diagnose_named("CANON.DuplicateId", FailureClass::Schema, "id", n, message)
+            }
+            Self::UnknownRetract(n) => diagnose_named(
+                "CANON.UnknownRetract",
+                FailureClass::Schema,
+                "id",
+                n,
+                message,
+            ),
+        }
+    }
+}
+
 impl fmt::Display for CookError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -65,3 +113,37 @@ impl fmt::Display for CookError {
 }
 
 impl core::error::Error for CookError {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use klotho_ir::DiagnosticCode;
+
+    #[test]
+    fn contradiction_envelope_preserves_display() {
+        let err = CookError::Contradiction("alive|dead".into());
+        let d = err.to_diagnostic();
+        assert_eq!(d.to_string(), err.to_string());
+        assert_eq!(d.code.0, DiagnosticCode::CONTRADICTION);
+        assert!(d.points_to_anchor());
+        assert_eq!(d.related.len(), 1);
+    }
+
+    #[test]
+    fn missing_target_is_cfg() {
+        let err = CookError::MissingTarget { from: 0, to: 99 };
+        let d = err.to_diagnostic();
+        assert_eq!(d.to_string(), "MissingTarget(0->99)");
+        assert_eq!(d.code.0, DiagnosticCode::CFG_TARGET);
+        match d.witness {
+            Some(klotho_ir::Counterexample::Cfg {
+                last_reachable_pc,
+                blocked_pc,
+            }) => {
+                assert_eq!(last_reachable_pc, 0);
+                assert_eq!(blocked_pc, 99);
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+}

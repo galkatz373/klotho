@@ -25,6 +25,7 @@ mod agency;
 mod analog;
 mod anchor;
 mod decl;
+mod diag;
 mod doc;
 mod error;
 mod infer;
@@ -46,6 +47,12 @@ pub use analog::Analog;
 pub use anchor::AnchorId;
 pub use decl::{
     Affordance, Beat, BindSrc, CanonDiff, Cost, Law, LawBody, RiteGraph, RiteNode, RiteOp, Status,
+};
+pub use diag::{
+    Counterexample, Diagnostic, DiagnosticCatalogEntry, DiagnosticCode, EstimatedCost,
+    FailureClass, RepairShape, Severity, as_data, blame_anchor, diagnose_agency, diagnose_budget,
+    diagnose_cap, diagnose_cfg, diagnose_contradiction, diagnose_hash_drift, diagnose_journey,
+    diagnose_named, diagnose_package, diagnose_provenance, diagnostic_catalog, prove_to_diagnostic,
 };
 pub use doc::IntentDoc;
 pub use error::IrError;

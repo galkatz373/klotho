@@ -509,6 +509,12 @@ impl TransactionStore {
         self.workspace.get(tx.current_hash)
     }
 
+    /// Load the immutable base snapshot of one transaction.
+    pub fn transaction_base_snapshot(&self, id: TxId) -> Result<AuthoringSnapshot, AiError> {
+        let tx = self.txs.get(&id).ok_or(AiError::UnknownTx(id))?;
+        self.workspace.get(tx.base_hash)
+    }
+
     /// Load the immutable live-base snapshot used by new transactions.
     pub fn base_snapshot(&self) -> Result<AuthoringSnapshot, AiError> {
         self.workspace.get(self.base_hash)

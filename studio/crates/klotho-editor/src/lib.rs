@@ -8,6 +8,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod assistant;
 mod dashboard;
 mod error;
 mod inspector;
@@ -16,6 +17,10 @@ mod outliner;
 mod session;
 mod transaction;
 
+pub use assistant::{
+    AcceptanceEditor, Assumption, CaptureComparison, CostView, DistaffReview, PlanStep,
+    ProvenanceView, RequestDraft, ReviewGroup, ReviewState, conservative_risk_inputs,
+};
 pub use dashboard::CookDashboard;
 pub use error::EditorError;
 pub use inspector::InspectorView;
@@ -31,5 +36,7 @@ pub use klotho_ir::{Name, Rel, SeedFact};
 pub use klotho_render::{NullPresenter, Presenter, VisualManifest};
 pub use klotho_ui::Pause;
 
+#[cfg(test)]
+mod kai08_tests;
 #[cfg(test)]
 mod tests;

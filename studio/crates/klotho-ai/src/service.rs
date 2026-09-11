@@ -1,5 +1,6 @@
 //! Standard editor AI service tying indexing, models, tools, transactions, and evidence together.
 
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::time::Instant;
 
@@ -47,6 +48,7 @@ pub struct KlothoAi {
     pub transactions: TransactionStore,
     /// Trusted evidence broker.
     pub evaluation: EvaluationBroker,
+    evidence_by_change: BTreeMap<crate::ids::ChangeId, Vec<Hash>>,
     /// Human-approved persistent memory.
     pub memory: ProjectMemory,
     /// Host-owned credentials, inaccessible to tools/context.
@@ -79,6 +81,7 @@ impl KlothoAi {
             tools: ToolRegistry,
             transactions,
             evaluation: EvaluationBroker::default(),
+            evidence_by_change: BTreeMap::new(),
             memory,
             secrets: SecretStore::default(),
             policy: ExecutionPolicy::default(),
@@ -329,8 +332,57 @@ impl KlothoAi {
             .ok_or_else(|| AiError::RequestState("candidate has no transaction".into()))?;
         Ok(ReviewPackage {
             diff: self.transactions.diff(transaction)?,
-            evidence: Vec::new(),
+            evidence: self
+                .evidence_by_change
+                .get(&change)
+                .cloned()
+                .unwrap_or_default(),
         })
+    }
+
+    /// Attach trusted, sealed evidence to a candidate. Context mismatch is stale evidence.
+    pub fn attach_evidence(
+        &mut self,
+        change: crate::ids::ChangeId,
+        evidence: Hash,
+    ) -> Result<(), AiError> {
+        let review = self.review(change)?;
+        let record = self.evaluation.get(evidence)?;
+        let expected_change = klotho_prove::hash_bytes(&change.0);
+        if record.bundle.change != expected_change
+            || record.bundle.project_hash != review.diff.current_hash
+        {
+            return Err(AiError::Evidence("stale candidate context".into()));
+        }
+        if record.bundle.checks().is_empty()
+            || record.bundle.checks().iter().any(|check| !check.passed)
+        {
+            return Err(AiError::Evidence("candidate has failed checks".into()));
+        }
+        let hashes = self.evidence_by_change.entry(change).or_default();
+        if !hashes.contains(&evidence) {
+            hashes.push(evidence);
+            hashes.sort();
+        }
+        Ok(())
+    }
+
+    /// Load a candidate's immutable base and proposed authoring snapshots for Distaff.
+    pub fn candidate_snapshots(
+        &self,
+        change: crate::ids::ChangeId,
+    ) -> Result<(crate::AuthoringSnapshot, crate::AuthoringSnapshot), AiError> {
+        let row = self
+            .agents
+            .find_change(change)
+            .ok_or_else(|| AiError::RequestState("unknown candidate change".into()))?;
+        let transaction = row
+            .transaction
+            .ok_or_else(|| AiError::RequestState("candidate has no transaction".into()))?;
+        Ok((
+            self.transactions.transaction_base_snapshot(transaction)?,
+            self.transactions.snapshot(transaction)?,
+        ))
     }
 
     fn tool_env(&mut self) -> ToolEnvironment<'_> {

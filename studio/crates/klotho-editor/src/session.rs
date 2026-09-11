@@ -102,6 +102,28 @@ impl EditorSession {
         Ok(())
     }
 
+    /// Atomically install an evidence-approved AI document. The caller owns the
+    /// grouped review and evidence checks; Distaff still performs the Pin.
+    pub(crate) fn pin_ai_document(
+        &mut self,
+        doc: IntentDoc,
+        reason: String,
+    ) -> Result<(), EditorError> {
+        if reason.trim().is_empty() {
+            return Err(EditorError::Ai(klotho_ai::AiError::RequestState(
+                "Pin reason is empty".into(),
+            )));
+        }
+        let cooked = cook_validated(&doc)?;
+        let kernel = kernel_from_cooked(&cooked)?;
+        self.doc = doc;
+        self.cooked = Some(cooked);
+        self.kernel = Some(kernel);
+        self.overlay.clear();
+        self.playing = false;
+        Ok(())
+    }
+
     /// Unpinned gizmo overlay.
     #[must_use]
     pub fn overlay(&self) -> &BTreeMap<Name, PoseMm> {

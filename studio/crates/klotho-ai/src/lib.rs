@@ -26,6 +26,7 @@ mod merge;
 mod model;
 mod ops;
 mod policy;
+mod review;
 mod service;
 mod store;
 mod tools;
@@ -69,6 +70,10 @@ pub use ops::{
 pub use policy::{
     Capability, ContextClass, DisclosurePolicy, ExecutionPolicy, SecretStore, ToolProfile,
 };
+pub use review::{
+    ArtifactClass, BatchItem, FrozenBatch, OwnerBudget, OwnerQueues, R0Rule, RiskInput, RiskLevel,
+    RiskPolicy, SampleDisposition, SampleRecord, SamplingPolicy,
+};
 pub use service::{KlothoAi, ReviewPackage};
 pub use store::{AuthoringTransaction, TransactionStore, TxStatus};
 pub use tools::{ToolCall, ToolRegistry, ToolResult};
@@ -78,5 +83,7 @@ pub use klotho_author::{AnchoredSeedFact, SemanticEdit, apply_edit, bundle_conte
 
 #[cfg(test)]
 mod kai07_tests;
+#[cfg(test)]
+mod kai08_tests;
 #[cfg(test)]
 mod tests;

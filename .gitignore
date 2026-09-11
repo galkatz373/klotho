@@ -5,8 +5,8 @@
 .idea/
 .vscode/
 .claude/
-.cursor/
 .codex/
+.cursor/
 .factory/
 *.swp
 .env

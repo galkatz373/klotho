@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | High-Level Design — Klotho Engine Architecture |
-| Author | Grok (for Gal Katz) |
+| Author | Gal Katz |
 | Date | 2026-08-22 |
 | Status | Draft (rev 5 — commit algebra, honest v1 framing, Test B) |
 | Engine | **Klotho** |

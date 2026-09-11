@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | High-Level Design — Klotho at AAA production scale |
-| Author | Grok (for Gal Katz) |
+| Author | Gal Katz |
 | Date | 2026-09-05 |
 | Status | Current (rev 6 — AAA-01–27 landed; first-title profile frozen) |
 | Last verified | 2026-09-06 through AAA-27 |

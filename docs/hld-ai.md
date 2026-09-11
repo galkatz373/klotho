@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | High-Level Design — AI-native production for Klotho's first AAA title |
-| Author | OpenAI Codex (for Gal Katz) |
+| Author | Gal Katz |
 | Date | 2026-09-11 |
 | Status | Proposed successor plan (KAI-00–24 not landed) |
 | Baseline | `docs/hld.md` rev 6; AAA-01–27 landed |
@@ -684,7 +684,7 @@ The initial standard library is deliberately small and action-adventure-shaped:
 | Combat | light/heavy exchange, parry window, ranged hit, destructible assembly, encounter boundary |
 | AI | patrol/investigate, guard/chase/return, assist ally, flee hazard, conversation availability |
 | Quest | acquire/use, escort checkpoints, investigate clues, multi-step handoff, optional objective |
-| Narrative | conditional conversation, bark set, cinematic Beat, knowledge reveal, codex entry |
+| Narrative | conditional conversation, bark set, cinematic Beat, knowledge reveal, lore entry |
 | World | Place shell, traversal graph, encounter pocket, safe hub, dressing zone, audio zone |
 | UI/accessibility | Knows-gated prompt, remappable action, subtitle cue, hold/toggle alternative, contrast variant |
 | Production | save checkpoint, analytics marker, screenshot marker, journey fixture, performance encounter |

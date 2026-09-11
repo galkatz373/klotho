@@ -55,6 +55,7 @@ KAI-03 — authoring transactions, cell-level conflict matrix, and three-way sem
 KAI-04 — structured diagnostics: stable codes, anchors, minimal witnesses, legal repairs, cost.
 KAI-05 — pattern compiler and standard library v1.
 KAI-06 — journeys, public-input execution, trusted evidence, affected-test selection.
+KAI-07 — built-in Klotho AI service, semantic context/index, model fabric, typed tools, budgets, policy, and approved memory.
 
 ## Build
 
@@ -97,7 +98,7 @@ klotho/
   engine/crates/klotho-compile/  # kitbash retrieval cook → CAS → .warp / sharded catalog
   studio/Cargo.toml       # Distaff/Weaver/AI/evaluation workspace
   studio/crates/klotho-schema/ # Generated machine-readable authoring catalog
-  studio/crates/klotho-ai/    # Isolated authoring transactions, semantic merge, leases, audit
+  studio/crates/klotho-ai/    # Built-in authoring AI, model fabric, typed tools, transactions, evidence broker
   studio/crates/klotho-eval/  # Journeys, evidence bundles, affected-test selection
   studio/crates/klotho-pattern/ # Deterministic pattern expansion and standard library v1
   studio/crates/klotho-dcc/ # glTF 2.0 cook → quantized KLTH mesh/hull/clip

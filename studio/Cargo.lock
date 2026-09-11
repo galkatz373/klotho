@@ -824,9 +824,13 @@ name = "klotho-ai"
 version = "0.1.0"
 dependencies = [
  "klotho-author",
+ "klotho-canon",
  "klotho-core",
+ "klotho-eval",
  "klotho-ir",
+ "klotho-pattern",
  "klotho-prove",
+ "klotho-schema",
  "ron",
  "serde",
 ]

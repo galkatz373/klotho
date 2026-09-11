@@ -82,21 +82,6 @@ pub struct TransactionStore {
     review: Vec<ReviewQueueEntry>,
 }
 
-/// Thin holder around [`TransactionStore`].
-pub struct KlothoAi {
-    /// Isolated transactions.
-    pub transactions: TransactionStore,
-}
-
-impl KlothoAi {
-    /// Open a store at `workspace`, reading the live project from `base`.
-    pub fn new(workspace: &Path, base: &Path) -> Result<Self, AiError> {
-        Ok(Self {
-            transactions: TransactionStore::open(workspace, base)?,
-        })
-    }
-}
-
 impl TransactionStore {
     /// Open or create a store. Does not write `base`.
     pub fn open(workspace: &Path, base: &Path) -> Result<Self, AiError> {
@@ -522,6 +507,17 @@ impl TransactionStore {
     pub fn snapshot(&self, id: TxId) -> Result<AuthoringSnapshot, AiError> {
         let tx = self.txs.get(&id).ok_or(AiError::UnknownTx(id))?;
         self.workspace.get(tx.current_hash)
+    }
+
+    /// Load the immutable live-base snapshot used by new transactions.
+    pub fn base_snapshot(&self) -> Result<AuthoringSnapshot, AiError> {
+        self.workspace.get(self.base_hash)
+    }
+
+    /// Content hash of the immutable live base.
+    #[must_use]
+    pub const fn base_hash(&self) -> Hash {
+        self.base_hash
     }
 
     /// Review queue.

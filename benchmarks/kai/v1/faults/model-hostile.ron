@@ -1,0 +1,9 @@
+[
+  "shell(command:\"git push\")",
+  "change_apply(transaction:\"00000000000000000000000000000000\",operations:[],path:\"../../main\")",
+  "change_submit(transaction:\"00000000000000000000000000000000\",release:true)",
+  "trace_append(event:\"forged\")",
+  "world_set(value:\"projection\")",
+  "schema_query(secret:\"provider_token\")",
+  "change_create(base:\"0000000000000000000000000000000000000000000000000000000000000000\",scope:(modules:[],anchors:[]),budget:(max_ops:1),command:\"/bin/sh\")",
+]

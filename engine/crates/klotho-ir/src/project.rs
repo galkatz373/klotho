@@ -39,6 +39,8 @@ pub enum AnchorKind {
     Beat = 5,
     /// Mind spec (actor locus).
     Mind = 6,
+    /// Pattern instance. Expanded before flatten; never present at runtime.
+    Pattern = 7,
 }
 
 impl AnchorKind {
@@ -57,6 +59,7 @@ impl AnchorKind {
             Self::Rite => "rite",
             Self::Beat => "beat",
             Self::Mind => "mind",
+            Self::Pattern => "pattern",
         }
     }
 }
@@ -79,6 +82,8 @@ pub enum SpanKind {
     Import,
     /// One export name.
     Export,
+    /// One [`PatternInstance`].
+    Pattern,
 }
 
 /// Stable span back to a module item. Offsets are over a per-kind canonical stream.
@@ -173,6 +178,34 @@ pub struct ParameterDecl {
     pub default: Option<ParameterValue>,
 }
 
+/// Bound argument on a [`PatternInstance`].
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PatternArg {
+    /// Parameter name.
+    pub key: Name,
+    /// Bound value.
+    pub value: ParameterValue,
+}
+
+/// Parameterized pattern instance. Authoring source; expansion is derived.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PatternInstance {
+    /// Frozen instance identity.
+    pub anchor: AnchorId,
+    /// Owning module identity.
+    pub module: AnchorId,
+    /// Authoring name. Not identity.
+    pub instance: Name,
+    /// Standard-library pattern id (`traversal.door_key`).
+    pub pattern: Name,
+    /// Pattern version. Child anchors mix this in.
+    pub version: u32,
+    /// Bound arguments. Unknown keys fail closed at expansion.
+    pub args: Vec<PatternArg>,
+}
+
 /// Import of another module, locked by content hash.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -235,6 +268,9 @@ pub struct IntentModule {
     pub tombstones: Vec<Tombstone>,
     /// Frozen identities for live named objects.
     pub object_anchors: Vec<ObjectAnchor>,
+    /// Pattern instances. Flatten fails until they are expanded.
+    #[serde(default)]
+    pub patterns: Vec<PatternInstance>,
     /// Ordinary Intent body. Flatten concatenates these.
     pub body: IntentDoc,
 }
@@ -325,6 +361,30 @@ impl IntentModule {
                 return Err(IrError::DuplicateObjectName(param.name.0.clone()));
             }
         }
+        let mut seen_patterns = BTreeSet::new();
+        for instance in &self.patterns {
+            instance.instance.check()?;
+            instance.pattern.check()?;
+            if instance.version == 0 {
+                return Err(IrError::InvalidModuleVersion);
+            }
+            if instance.module != AnchorId::ZERO && instance.module != self.anchor {
+                return Err(IrError::MissingAnchor(instance.instance.0.clone()));
+            }
+            if !seen_patterns.insert(instance.instance.as_str()) {
+                return Err(IrError::DuplicateObjectName(instance.instance.0.clone()));
+            }
+            let mut keys = BTreeSet::new();
+            for arg in &instance.args {
+                arg.key.check()?;
+                if !keys.insert(arg.key.as_str()) {
+                    return Err(IrError::DuplicateObjectName(arg.key.0.clone()));
+                }
+                if let ParameterValue::Name(n) = &arg.value {
+                    n.check()?;
+                }
+            }
+        }
         validate_identities(self, &live, &live_names)?;
         Ok(())
     }
@@ -370,6 +430,7 @@ pub fn migrate_doc(
         aliases: Vec::new(),
         tombstones: Vec::new(),
         object_anchors,
+        patterns: Vec::new(),
         body: doc,
     };
     module.validate_local()?;
@@ -425,6 +486,9 @@ fn flatten_project(
     for (id, module_ref) in &refs {
         let module = loaded[id];
         module.validate_local()?;
+        if let Some(instance) = module.patterns.first() {
+            return Err(IrError::UnexpandedPattern(instance.pattern.0.clone()));
+        }
         let actual = module.content_hash()?;
         if actual != module_ref.hash {
             return Err(hash_drift(id, module_ref.hash, actual));
@@ -666,7 +730,7 @@ fn push_kind_spans<T: Serialize>(
 
 fn live_objects(module: &IntentModule) -> Result<BTreeSet<(AnchorKind, Name)>, IrError> {
     let mut names = BTreeSet::new();
-    for (kind, name) in named_objects(&module.body) {
+    for (kind, name) in named_objects_with_patterns(module) {
         if !names.insert((kind, name.clone())) {
             return Err(IrError::DuplicateObjectName(name.0));
         }
@@ -693,6 +757,14 @@ fn named_objects(doc: &IntentDoc) -> Vec<(AnchorKind, Name)> {
     }
     for mind in &doc.minds {
         out.push((AnchorKind::Mind, mind.locus.clone()));
+    }
+    out
+}
+
+fn named_objects_with_patterns(module: &IntentModule) -> Vec<(AnchorKind, Name)> {
+    let mut out = named_objects(&module.body);
+    for instance in &module.patterns {
+        out.push((AnchorKind::Pattern, instance.instance.clone()));
     }
     out
 }
@@ -1058,6 +1130,42 @@ mod tests {
         let module_text = to_ron(&bundle.modules[0]).unwrap();
         let module: IntentModule = from_ron(&module_text).unwrap();
         assert_eq!(bundle.modules[0], module);
+    }
+
+    #[test]
+    fn unexpanded_pattern_fails_flatten() {
+        let mut bundle =
+            migrate_doc(name("p"), name("main"), doc_with(vec![locus("oak_door")])).unwrap();
+        let instance = PatternInstance {
+            anchor: bundle.modules[0].anchor.child(b"pattern:gate"),
+            module: bundle.modules[0].anchor,
+            instance: name("gate"),
+            pattern: name("traversal.door_key"),
+            version: 1,
+            args: Vec::new(),
+        };
+        bundle.modules[0].object_anchors.push(ObjectAnchor {
+            kind: AnchorKind::Pattern,
+            name: name("gate"),
+            anchor: instance.anchor,
+        });
+        bundle.modules[0].patterns.push(instance);
+        let err = bundle.project.flatten(&bundle.modules).unwrap_err();
+        match err {
+            IrError::UnexpandedPattern(id) => assert_eq!(id, "traversal.door_key"),
+            other => panic!("{other}"),
+        }
+    }
+
+    #[test]
+    fn missing_patterns_field_deserializes_empty() {
+        let bundle =
+            migrate_doc(name("hearth"), name("main"), doc_with(vec![locus("chair")])).unwrap();
+        let mut text = to_ron(&bundle.modules[0]).unwrap();
+        text = text.replace("patterns:[],", "");
+        let module: IntentModule = from_ron(&text).unwrap();
+        assert!(module.patterns.is_empty());
+        assert_eq!(module.body, bundle.modules[0].body);
     }
 
     #[test]

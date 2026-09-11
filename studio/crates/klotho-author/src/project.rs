@@ -45,11 +45,12 @@ pub fn load_any(path: &Path) -> Result<Loaded, AuthorError> {
     }
 }
 
-/// Flatten a loaded bundle.
+/// Flatten a loaded bundle, expanding pattern instances first.
 pub fn flatten_bundle(bundle: &ProjectBundle) -> Result<Flattened, AuthorError> {
-    bundle
+    let expanded = klotho_pattern::expand_bundle(bundle)?;
+    expanded
         .project
-        .flatten(&bundle.modules)
+        .flatten(&expanded.modules)
         .map_err(AuthorError::from)
 }
 

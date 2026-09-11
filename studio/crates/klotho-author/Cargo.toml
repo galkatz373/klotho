@@ -18,6 +18,7 @@ klotho-commit.workspace = true
 klotho-compile.workspace = true
 klotho-core.workspace = true
 klotho-ir.workspace = true
+klotho-pattern.workspace = true
 klotho-prove.workspace = true
 serde.workspace = true
 

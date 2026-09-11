@@ -121,7 +121,7 @@ pub struct AffordanceSchema {
     pub conflicts: Vec<u16>,
 }
 
-/// Registered reusable pattern. Populated by KAI-05.
+/// Registered reusable pattern.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PatternSchema {
@@ -129,6 +129,22 @@ pub struct PatternSchema {
     pub id: String,
     /// Append-only pattern version.
     pub version: u32,
+    /// Standard-library family.
+    pub family: String,
+    /// Parameter names.
+    pub parameters: Vec<String>,
+    /// `param:cap` requires.
+    pub requires: Vec<String>,
+    /// `param:cap` grants.
+    pub grants: Vec<String>,
+    /// `param:cap` conflicts.
+    pub conflicts: Vec<String>,
+    /// Predicate-node budget.
+    pub predicates: u32,
+    /// Rite-instruction budget.
+    pub rite_steps: u32,
+    /// Per-tick writer budget.
+    pub per_tick: u32,
 }
 
 /// Stable diagnostic discovery entry.
@@ -205,7 +221,7 @@ pub fn generate(canon: &Canon) -> SchemaCatalog {
                 conflicts: a.conflicts.iter().map(|id| id.0).collect(),
             })
             .collect(),
-        patterns: Vec::new(),
+        patterns: pattern_schemas(),
         diagnostics: diagnostics(),
         budgets: budgets(),
         operations: operations(),
@@ -335,10 +351,15 @@ fn type_schemas() -> Vec<TypeSchema> {
                 field("aliases", "Vec<NameAlias>", "former names"),
                 field("tombstones", "Vec<Tombstone>", "removed objects"),
                 field("object_anchors", "Vec<ObjectAnchor>", "frozen identities"),
+                field(
+                    "patterns",
+                    "Vec<PatternInstance>",
+                    "unexpanded pattern instances",
+                ),
                 field("body", "IntentDoc", "ordinary Intent body"),
             ],
-            "(anchor:\"00000000000000000000000000000000\",id:\"main\",version:1,imports:[],exports:[],parameters:[],aliases:[],tombstones:[],object_anchors:[],body:(style:(notes:\"\",palettes:[],kitbash_tags:[]),canon_diffs:[],seed:[],minds:[],provenance:\"0000000000000000000000000000000000000000000000000000000000000000\"))",
-            "(anchor:\"00\",id:\"\",version:0,imports:[],exports:[],parameters:[],aliases:[],tombstones:[],object_anchors:[],body:())",
+            "(anchor:\"00000000000000000000000000000000\",id:\"main\",version:1,imports:[],exports:[],parameters:[],aliases:[],tombstones:[],object_anchors:[],patterns:[],body:(style:(notes:\"\",palettes:[],kitbash_tags:[]),canon_diffs:[],seed:[],minds:[],provenance:\"0000000000000000000000000000000000000000000000000000000000000000\"))",
+            "(anchor:\"00\",id:\"\",version:0,imports:[],exports:[],parameters:[],aliases:[],tombstones:[],object_anchors:[],patterns:[],body:())",
         ),
         structure(
             "klotho_ir::IntentModuleRef",
@@ -376,6 +397,28 @@ fn type_schemas() -> Vec<TypeSchema> {
             "(name:\"\",ty:I32,default:None)",
         ),
         structure(
+            "klotho_ir::PatternArg",
+            vec![
+                field("key", "Name", "parameter name"),
+                field("value", "ParameterValue", "bound value"),
+            ],
+            "(key:\"passage\",value:Name(\"oak_door\"))",
+            "(key:\"\",value:Name(\"\"))",
+        ),
+        structure(
+            "klotho_ir::PatternInstance",
+            vec![
+                field("anchor", "AnchorId", "frozen instance identity"),
+                field("module", "AnchorId", "owning module"),
+                field("instance", "Name", "authoring name"),
+                field("pattern", "Name", "standard-library id"),
+                field("version", "u32", "pattern version"),
+                field("args", "Vec<PatternArg>", "bound arguments"),
+            ],
+            "(anchor:\"00000000000000000000000000000000\",module:\"00000000000000000000000000000000\",instance:\"gate\",pattern:\"traversal.door_key\",version:1,args:[])",
+            "(anchor:\"00\",module:\"00\",instance:\"\",pattern:\"\",version:0,args:[])",
+        ),
+        structure(
             "klotho_ir::ObjectAnchor",
             vec![
                 field("kind", "AnchorKind", "object family"),
@@ -407,6 +450,7 @@ fn type_schemas() -> Vec<TypeSchema> {
                 ("Rite", 4, "rite id"),
                 ("Beat", 5, "beat id"),
                 ("Mind", 6, "mind spec"),
+                ("Pattern", 7, "pattern instance"),
             ]
             .into_iter()
             .map(|(n, d, desc)| variant(n, Some(d), "unit", desc))
@@ -848,6 +892,24 @@ fn rels() -> Vec<TagSchema> {
         .collect()
 }
 
+fn pattern_schemas() -> Vec<PatternSchema> {
+    klotho_pattern::catalog_rows()
+        .into_iter()
+        .map(|row| PatternSchema {
+            id: row.id,
+            version: row.version,
+            family: row.family,
+            parameters: row.parameters,
+            requires: row.requires,
+            grants: row.grants,
+            conflicts: row.conflicts,
+            predicates: row.predicates,
+            rite_steps: row.rite_steps,
+            per_tick: row.per_tick,
+        })
+        .collect()
+}
+
 fn diagnostics() -> Vec<DiagnosticSchema> {
     klotho_ir::diagnostic_catalog()
         .iter()
@@ -997,6 +1059,13 @@ mod tests {
         assert_eq!(catalog.rels.len(), 13);
         assert_eq!(catalog.predicates.len(), 25);
         assert_eq!(catalog.rite_ops.len(), 14);
+        assert_eq!(catalog.patterns.len(), 42);
+        assert!(
+            catalog
+                .patterns
+                .iter()
+                .any(|p| p.id == "traversal.door_key" && p.version == 2)
+        );
         assert!(
             catalog
                 .kinds

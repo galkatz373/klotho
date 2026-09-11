@@ -849,6 +849,7 @@ dependencies = [
  "klotho-compile",
  "klotho-core",
  "klotho-ir",
+ "klotho-pattern",
  "klotho-prove",
  "serde",
 ]
@@ -957,6 +958,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "klotho-pattern"
+version = "0.1.0"
+dependencies = [
+ "klotho-canon",
+ "klotho-core",
+ "klotho-ir",
+ "klotho-prove",
+ "ron",
+ "serde",
+]
+
+[[package]]
 name = "klotho-platform"
 version = "0.1.0"
 dependencies = [
@@ -1009,6 +1022,7 @@ dependencies = [
  "klotho-canon",
  "klotho-core",
  "klotho-ir",
+ "klotho-pattern",
  "klotho-prove",
  "ron",
  "serde",

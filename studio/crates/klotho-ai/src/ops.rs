@@ -6,7 +6,9 @@ use serde::{Deserialize, Serialize};
 
 use klotho_author::AnchoredSeedFact;
 use klotho_core::{Hash, LocusKind};
-use klotho_ir::{AnchorId, CanonDiff, IntentModule, Name, ParameterValue};
+use klotho_ir::{AnchorId, CanonDiff, IntentModule, Name};
+
+pub use klotho_ir::{PatternArg, PatternInstance};
 
 use crate::ids::{AssetRequestId, ChangeId, ReferenceId};
 
@@ -70,32 +72,6 @@ pub struct AuthoringProvenance {
     pub request: Hash,
     /// Parent change, if this is a repair.
     pub parent: Option<ChangeId>,
-}
-
-/// Pattern argument stub.
-#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct PatternArg {
-    /// Parameter name.
-    pub key: Name,
-    /// Bound value.
-    pub value: ParameterValue,
-}
-
-/// Pattern instance stub.
-#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct PatternInstance {
-    /// Instance identity.
-    pub anchor: AnchorId,
-    /// Authoring name.
-    pub instance: Name,
-    /// Pattern id.
-    pub pattern: Name,
-    /// Pattern version.
-    pub version: u32,
-    /// Arguments.
-    pub args: Vec<PatternArg>,
 }
 
 /// Journey stub.

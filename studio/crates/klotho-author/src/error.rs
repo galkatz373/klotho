@@ -4,6 +4,7 @@ use core::fmt;
 
 use klotho_compile::CompileError;
 use klotho_ir::IrError;
+use klotho_pattern::PatternError;
 
 /// Load / Pin / cook failure.
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -30,6 +31,8 @@ pub enum AuthorError {
     AliasCollision(String),
     /// No module with this identity is loaded.
     ModuleNotFound(String),
+    /// Pattern expansion failed.
+    Pattern(String),
 }
 
 impl fmt::Display for AuthorError {
@@ -46,6 +49,7 @@ impl fmt::Display for AuthorError {
             Self::TombstoneReuse(name) => write!(f, "tombstone reuse {name}"),
             Self::AliasCollision(name) => write!(f, "alias collision {name}"),
             Self::ModuleNotFound(id) => write!(f, "module not found {id}"),
+            Self::Pattern(s) => write!(f, "{s}"),
         }
     }
 }
@@ -61,5 +65,11 @@ impl From<IrError> for AuthorError {
 impl From<CompileError> for AuthorError {
     fn from(e: CompileError) -> Self {
         Self::Cook(e)
+    }
+}
+
+impl From<PatternError> for AuthorError {
+    fn from(e: PatternError) -> Self {
+        Self::Pattern(e.to_string())
     }
 }

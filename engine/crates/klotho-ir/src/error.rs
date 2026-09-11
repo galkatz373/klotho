@@ -52,6 +52,8 @@ pub enum IrError {
     ExportUnknown(String),
     /// A parameter default does not match its declared type.
     ParameterTypeMismatch(String),
+    /// A pattern instance is still present at flatten time.
+    UnexpandedPattern(String),
 }
 
 impl fmt::Display for IrError {
@@ -81,6 +83,7 @@ impl fmt::Display for IrError {
             Self::DuplicateObjectName(name) => write!(f, "DuplicateObjectName({name})"),
             Self::ExportUnknown(name) => write!(f, "ExportUnknown({name})"),
             Self::ParameterTypeMismatch(name) => write!(f, "ParameterTypeMismatch({name})"),
+            Self::UnexpandedPattern(id) => write!(f, "UnexpandedPattern({id})"),
         }
     }
 }

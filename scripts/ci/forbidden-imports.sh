@@ -35,6 +35,7 @@ check_gameplay_tables studio/crates/klotho-author
 check_gameplay_tables studio/crates/klotho-editor
 check_gameplay_tables studio/crates/klotho-ai
 check_gameplay_tables studio/crates/klotho-dcc
+check_gameplay_tables studio/crates/klotho-pattern
 
 # klotho-interest may not import commit (K49).
 if command -v rg >/dev/null 2>&1; then
@@ -257,11 +258,45 @@ if [[ -d engine/crates ]]; then
       echo "engine must not import klotho-ai" >&2
       fail=1
     fi
+    if rg -n --glob '!target/**' 'klotho_pattern::' engine; then
+      echo "engine must not import klotho-pattern" >&2
+      fail=1
+    fi
+    if rg -n --glob 'Cargo.toml' 'klotho-pattern' engine; then
+      echo "engine Cargo.toml must not depend on klotho-pattern" >&2
+      fail=1
+    fi
   else
     if grep -RIn -E 'klotho_ai::|klotho-ai' engine >/dev/null 2>&1; then
       echo "engine must not import klotho-ai" >&2
       fail=1
     fi
+    if grep -RIn -E 'klotho_pattern::' engine >/dev/null 2>&1; then
+      echo "engine must not import klotho-pattern" >&2
+      fail=1
+    fi
+    if grep -RIn -E 'klotho-pattern' engine --include='Cargo.toml' >/dev/null 2>&1; then
+      echo "engine Cargo.toml must not depend on klotho-pattern" >&2
+      fail=1
+    fi
+  fi
+fi
+
+if [[ -d studio/crates/klotho-pattern ]]; then
+  if command -v rg >/dev/null 2>&1; then
+    if rg -n --glob '!target/**' 'klotho_commit::|klotho-commit|klotho_world::|klotho-world|klotho_sim::|klotho-sim|klotho_runtime::|klotho-runtime|klotho_infer::|klotho-infer' studio/crates/klotho-pattern; then
+      echo "klotho-pattern must not import commit/world/sim/runtime/infer" >&2
+      fail=1
+    fi
+  else
+    if grep -RIn -E 'klotho_commit::|klotho-commit|klotho_world::|klotho-world|klotho_sim::|klotho-sim|klotho_runtime::|klotho-runtime|klotho_infer::|klotho-infer' studio/crates/klotho-pattern >/dev/null 2>&1; then
+      echo "klotho-pattern must not import commit/world/sim/runtime/infer" >&2
+      fail=1
+    fi
+  fi
+  if grep -E 'klotho-commit|klotho-world|klotho-sim|klotho-runtime|klotho-infer' studio/crates/klotho-pattern/Cargo.toml >/dev/null 2>&1; then
+    echo "klotho-pattern Cargo.toml must not depend on commit/world/sim/runtime/infer" >&2
+    fail=1
   fi
 fi
 

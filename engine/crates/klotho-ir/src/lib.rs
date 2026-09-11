@@ -66,8 +66,9 @@ pub use player::PlayerIntent;
 pub use pred::{Cmp, Pred, SourceKind};
 pub use project::{
     AnchorKind, Flattened, IntentModule, IntentModuleRef, IntentProject, LockEntry, ModuleImport,
-    ModuleLock, NameAlias, ObjectAnchor, ParameterDecl, ParameterType, ParameterValue,
-    ProjectBundle, SourceSpan, SpanKind, Tombstone, migrate_doc, module_content_hash,
+    ModuleLock, NameAlias, ObjectAnchor, ParameterDecl, ParameterType, ParameterValue, PatternArg,
+    PatternInstance, ProjectBundle, SourceSpan, SpanKind, Tombstone, migrate_doc,
+    module_content_hash,
 };
 pub use rel::Rel;
 pub use seed::SeedFact;

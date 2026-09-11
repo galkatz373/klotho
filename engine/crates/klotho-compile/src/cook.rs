@@ -626,6 +626,38 @@ mod tests {
     }
 
     #[test]
+    fn unexpanded_pattern_fails_cook_project() {
+        let doc = empty_doc(&[]);
+        let mut bundle = klotho_ir::migrate_doc(
+            klotho_ir::Name::from("spin"),
+            klotho_ir::Name::from("main"),
+            doc,
+        )
+        .unwrap();
+        let instance = klotho_ir::PatternInstance {
+            anchor: bundle.modules[0].anchor.child(b"pattern:gate"),
+            module: bundle.modules[0].anchor,
+            instance: Name::from("gate"),
+            pattern: Name::from("traversal.door_key"),
+            version: 1,
+            args: Vec::new(),
+        };
+        bundle.modules[0]
+            .object_anchors
+            .push(klotho_ir::ObjectAnchor {
+                kind: klotho_ir::AnchorKind::Pattern,
+                name: Name::from("gate"),
+                anchor: instance.anchor,
+            });
+        bundle.modules[0].patterns.push(instance);
+        let err = cook_project(&bundle.project, &bundle.modules).unwrap_err();
+        match err {
+            CompileError::Flatten(s) => assert!(s.contains("UnexpandedPattern"), "{s}"),
+            other => panic!("{other}"),
+        }
+    }
+
+    #[test]
     fn cook_doc_does_not_need_dcc() {
         let cooked = cook_doc(&empty_doc(&Kitbash::HEARTH_TAGS)).unwrap();
         assert!(cooked.dag.exportable().is_ok());

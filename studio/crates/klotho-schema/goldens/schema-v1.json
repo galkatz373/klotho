@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "toolchain_hash": "c1749950b4de77d38494af526536866fe73c33719b55fb859526e36c1392cc1f",
+  "toolchain_hash": "cf2654a3d6e5119989f4f37add7dc3c55f7c6cd7a0fb2b5c1c1632d7ed4d0239",
   "kinds": [
     {
       "id": "klotho_ir::IntentDoc",
@@ -144,6 +144,13 @@
           "max": null
         },
         {
+          "name": "patterns",
+          "ty": "Vec<PatternInstance>",
+          "description": "unexpanded pattern instances",
+          "min": null,
+          "max": null
+        },
+        {
           "name": "body",
           "ty": "IntentDoc",
           "description": "ordinary Intent body",
@@ -152,8 +159,8 @@
         }
       ],
       "variants": [],
-      "positive_example": "(anchor:\"00000000000000000000000000000000\",id:\"main\",version:1,imports:[],exports:[],parameters:[],aliases:[],tombstones:[],object_anchors:[],body:(style:(notes:\"\",palettes:[],kitbash_tags:[]),canon_diffs:[],seed:[],minds:[],provenance:\"0000000000000000000000000000000000000000000000000000000000000000\"))",
-      "negative_example": "(anchor:\"00\",id:\"\",version:0,imports:[],exports:[],parameters:[],aliases:[],tombstones:[],object_anchors:[],body:())"
+      "positive_example": "(anchor:\"00000000000000000000000000000000\",id:\"main\",version:1,imports:[],exports:[],parameters:[],aliases:[],tombstones:[],object_anchors:[],patterns:[],body:(style:(notes:\"\",palettes:[],kitbash_tags:[]),canon_diffs:[],seed:[],minds:[],provenance:\"0000000000000000000000000000000000000000000000000000000000000000\"))",
+      "negative_example": "(anchor:\"00\",id:\"\",version:0,imports:[],exports:[],parameters:[],aliases:[],tombstones:[],object_anchors:[],patterns:[],body:())"
     },
     {
       "id": "klotho_ir::IntentModuleRef",
@@ -253,6 +260,80 @@
       "variants": [],
       "positive_example": "(name:\"scale\",ty:I32,default:Some(I32(1)))",
       "negative_example": "(name:\"\",ty:I32,default:None)"
+    },
+    {
+      "id": "klotho_ir::PatternArg",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "key",
+          "ty": "Name",
+          "description": "parameter name",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "value",
+          "ty": "ParameterValue",
+          "description": "bound value",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(key:\"passage\",value:Name(\"oak_door\"))",
+      "negative_example": "(key:\"\",value:Name(\"\"))"
+    },
+    {
+      "id": "klotho_ir::PatternInstance",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "anchor",
+          "ty": "AnchorId",
+          "description": "frozen instance identity",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "module",
+          "ty": "AnchorId",
+          "description": "owning module",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "instance",
+          "ty": "Name",
+          "description": "authoring name",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "pattern",
+          "ty": "Name",
+          "description": "standard-library id",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "version",
+          "ty": "u32",
+          "description": "pattern version",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "args",
+          "ty": "Vec<PatternArg>",
+          "description": "bound arguments",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(anchor:\"00000000000000000000000000000000\",module:\"00000000000000000000000000000000\",instance:\"gate\",pattern:\"traversal.door_key\",version:1,args:[])",
+      "negative_example": "(anchor:\"00\",module:\"00\",instance:\"\",pattern:\"\",version:0,args:[])"
     },
     {
       "id": "klotho_ir::ObjectAnchor",
@@ -374,6 +455,12 @@
           "discriminant": 6,
           "payload": "unit",
           "description": "mind spec"
+        },
+        {
+          "name": "Pattern",
+          "discriminant": 7,
+          "payload": "unit",
+          "description": "pattern instance"
         }
       ],
       "positive_example": "Locus",
@@ -2005,7 +2092,834 @@
     }
   ],
   "affordances": [],
-  "patterns": [],
+  "patterns": [
+    {
+      "id": "ai.assist_ally",
+      "version": 1,
+      "family": "ai",
+      "parameters": [
+        "actor"
+      ],
+      "requires": [
+        "actor:Minded"
+      ],
+      "grants": [
+        "actor:Assist"
+      ],
+      "conflicts": [],
+      "predicates": 4,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "ai.conversation_availability",
+      "version": 1,
+      "family": "ai",
+      "parameters": [
+        "actor"
+      ],
+      "requires": [
+        "actor:Minded"
+      ],
+      "grants": [
+        "actor:Talkable"
+      ],
+      "conflicts": [],
+      "predicates": 4,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "ai.flee_hazard",
+      "version": 1,
+      "family": "ai",
+      "parameters": [
+        "actor"
+      ],
+      "requires": [
+        "actor:Minded"
+      ],
+      "grants": [
+        "actor:Flee"
+      ],
+      "conflicts": [],
+      "predicates": 4,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "ai.guard_chase_return",
+      "version": 1,
+      "family": "ai",
+      "parameters": [
+        "actor"
+      ],
+      "requires": [
+        "actor:Minded"
+      ],
+      "grants": [
+        "actor:Guard"
+      ],
+      "conflicts": [],
+      "predicates": 4,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "ai.patrol_investigate",
+      "version": 1,
+      "family": "ai",
+      "parameters": [
+        "actor"
+      ],
+      "requires": [
+        "actor:Minded"
+      ],
+      "grants": [
+        "actor:Patrol"
+      ],
+      "conflicts": [],
+      "predicates": 4,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "combat.destructible",
+      "version": 1,
+      "family": "combat",
+      "parameters": [
+        "assembly",
+        "hits"
+      ],
+      "requires": [
+        "assembly:Hittable"
+      ],
+      "grants": [
+        "assembly:Destructible"
+      ],
+      "conflicts": [],
+      "predicates": 8,
+      "rite_steps": 6,
+      "per_tick": 0
+    },
+    {
+      "id": "combat.encounter_boundary",
+      "version": 1,
+      "family": "combat",
+      "parameters": [
+        "place",
+        "envelope"
+      ],
+      "requires": [
+        "place:Placeable"
+      ],
+      "grants": [
+        "place:Encounter"
+      ],
+      "conflicts": [
+        "place:SafeHub"
+      ],
+      "predicates": 6,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "combat.light_heavy",
+      "version": 1,
+      "family": "combat",
+      "parameters": [
+        "actor",
+        "target",
+        "window_ticks"
+      ],
+      "requires": [
+        "actor:Armed",
+        "target:Hittable"
+      ],
+      "grants": [
+        "actor:Melee"
+      ],
+      "conflicts": [],
+      "predicates": 8,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "combat.parry_window",
+      "version": 1,
+      "family": "combat",
+      "parameters": [
+        "actor",
+        "target",
+        "window_ticks"
+      ],
+      "requires": [
+        "actor:Armed",
+        "target:Hittable"
+      ],
+      "grants": [
+        "actor:Parry"
+      ],
+      "conflicts": [],
+      "predicates": 8,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "combat.ranged_hit",
+      "version": 1,
+      "family": "combat",
+      "parameters": [
+        "actor",
+        "target",
+        "window_ticks"
+      ],
+      "requires": [
+        "actor:Armed",
+        "target:Hittable"
+      ],
+      "grants": [
+        "actor:Ranged"
+      ],
+      "conflicts": [],
+      "predicates": 8,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "narrative.bark_set",
+      "version": 1,
+      "family": "narrative",
+      "parameters": [
+        "actor",
+        "topic"
+      ],
+      "requires": [
+        "actor:Talkable"
+      ],
+      "grants": [
+        "actor:Bark"
+      ],
+      "conflicts": [],
+      "predicates": 6,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "narrative.cinematic_beat",
+      "version": 1,
+      "family": "narrative",
+      "parameters": [
+        "actor",
+        "topic"
+      ],
+      "requires": [
+        "actor:Placeable"
+      ],
+      "grants": [
+        "topic:Cinematic"
+      ],
+      "conflicts": [],
+      "predicates": 6,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "narrative.conditional_conversation",
+      "version": 1,
+      "family": "narrative",
+      "parameters": [
+        "actor",
+        "topic"
+      ],
+      "requires": [
+        "actor:Talkable"
+      ],
+      "grants": [
+        "actor:Dialogue"
+      ],
+      "conflicts": [],
+      "predicates": 6,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "narrative.knowledge_reveal",
+      "version": 1,
+      "family": "narrative",
+      "parameters": [
+        "actor",
+        "topic"
+      ],
+      "requires": [
+        "actor:Minded"
+      ],
+      "grants": [
+        "topic:Known"
+      ],
+      "conflicts": [],
+      "predicates": 6,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "narrative.lore_entry",
+      "version": 1,
+      "family": "narrative",
+      "parameters": [
+        "actor",
+        "topic"
+      ],
+      "requires": [
+        "topic:Placeable"
+      ],
+      "grants": [
+        "topic:Lore"
+      ],
+      "conflicts": [],
+      "predicates": 6,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "production.analytics_marker",
+      "version": 1,
+      "family": "production",
+      "parameters": [
+        "target",
+        "label"
+      ],
+      "requires": [
+        "target:Placeable"
+      ],
+      "grants": [
+        "target:Analytics"
+      ],
+      "conflicts": [],
+      "predicates": 4,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "production.journey_fixture",
+      "version": 1,
+      "family": "production",
+      "parameters": [
+        "target",
+        "label"
+      ],
+      "requires": [
+        "target:Placeable"
+      ],
+      "grants": [
+        "target:Journey"
+      ],
+      "conflicts": [],
+      "predicates": 4,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "production.performance_encounter",
+      "version": 1,
+      "family": "production",
+      "parameters": [
+        "place",
+        "budget_ms"
+      ],
+      "requires": [
+        "place:Placeable"
+      ],
+      "grants": [
+        "place:PerfProbe"
+      ],
+      "conflicts": [],
+      "predicates": 8,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "production.save_checkpoint",
+      "version": 1,
+      "family": "production",
+      "parameters": [
+        "target",
+        "label"
+      ],
+      "requires": [
+        "target:Placeable"
+      ],
+      "grants": [
+        "target:Save"
+      ],
+      "conflicts": [],
+      "predicates": 4,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "production.screenshot_marker",
+      "version": 1,
+      "family": "production",
+      "parameters": [
+        "target",
+        "label"
+      ],
+      "requires": [
+        "target:Placeable"
+      ],
+      "grants": [
+        "target:Capture"
+      ],
+      "conflicts": [],
+      "predicates": 4,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "quest.acquire_use",
+      "version": 1,
+      "family": "quest",
+      "parameters": [
+        "actor",
+        "item"
+      ],
+      "requires": [
+        "actor:Minded",
+        "item:Carryable"
+      ],
+      "grants": [
+        "item:Objective"
+      ],
+      "conflicts": [],
+      "predicates": 6,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "quest.escort_checkpoints",
+      "version": 1,
+      "family": "quest",
+      "parameters": [
+        "actor",
+        "item"
+      ],
+      "requires": [
+        "actor:Minded"
+      ],
+      "grants": [
+        "actor:Escort"
+      ],
+      "conflicts": [],
+      "predicates": 6,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "quest.handoff",
+      "version": 1,
+      "family": "quest",
+      "parameters": [
+        "actor",
+        "item"
+      ],
+      "requires": [
+        "actor:Minded",
+        "item:Carryable"
+      ],
+      "grants": [
+        "item:Handoff"
+      ],
+      "conflicts": [],
+      "predicates": 6,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "quest.investigate_clues",
+      "version": 1,
+      "family": "quest",
+      "parameters": [
+        "actor",
+        "item"
+      ],
+      "requires": [
+        "actor:Minded"
+      ],
+      "grants": [
+        "item:Clue"
+      ],
+      "conflicts": [],
+      "predicates": 6,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "quest.optional_objective",
+      "version": 1,
+      "family": "quest",
+      "parameters": [
+        "actor",
+        "item"
+      ],
+      "requires": [
+        "actor:Minded"
+      ],
+      "grants": [
+        "item:Optional"
+      ],
+      "conflicts": [],
+      "predicates": 6,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "traversal.checkpoint",
+      "version": 1,
+      "family": "traversal",
+      "parameters": [
+        "target",
+        "label"
+      ],
+      "requires": [
+        "target:Placeable"
+      ],
+      "grants": [
+        "target:Checkpoint"
+      ],
+      "conflicts": [],
+      "predicates": 4,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "traversal.door_key",
+      "version": 1,
+      "family": "traversal",
+      "parameters": [
+        "passage",
+        "key",
+        "locked_at_start",
+        "denied_bark"
+      ],
+      "requires": [
+        "passage:Openable",
+        "key:Carryable"
+      ],
+      "grants": [
+        "passage:Lockable"
+      ],
+      "conflicts": [
+        "passage:Driveable"
+      ],
+      "predicates": 16,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "traversal.door_key",
+      "version": 2,
+      "family": "traversal",
+      "parameters": [
+        "passage",
+        "key",
+        "locked_at_start",
+        "consume_key",
+        "denied_bark"
+      ],
+      "requires": [
+        "passage:Openable",
+        "key:Carryable"
+      ],
+      "grants": [
+        "passage:Lockable"
+      ],
+      "conflicts": [
+        "passage:Driveable"
+      ],
+      "predicates": 16,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "traversal.ladder_ledge",
+      "version": 1,
+      "family": "traversal",
+      "parameters": [
+        "actor",
+        "fixture",
+        "ticks"
+      ],
+      "requires": [
+        "actor:Mobile",
+        "fixture:Climbable"
+      ],
+      "grants": [
+        "fixture:Ledge"
+      ],
+      "conflicts": [
+        "fixture:Driveable"
+      ],
+      "predicates": 8,
+      "rite_steps": 6,
+      "per_tick": 0
+    },
+    {
+      "id": "traversal.lever_gate",
+      "version": 1,
+      "family": "traversal",
+      "parameters": [
+        "passage",
+        "lever",
+        "locked_at_start",
+        "denied_bark"
+      ],
+      "requires": [
+        "passage:Openable",
+        "lever:Usable"
+      ],
+      "grants": [
+        "passage:Lockable"
+      ],
+      "conflicts": [
+        "passage:Driveable"
+      ],
+      "predicates": 16,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "traversal.streaming_threshold",
+      "version": 1,
+      "family": "traversal",
+      "parameters": [
+        "actor",
+        "fixture",
+        "ticks"
+      ],
+      "requires": [
+        "actor:Mobile",
+        "fixture:Placeable"
+      ],
+      "grants": [
+        "fixture:StreamGate"
+      ],
+      "conflicts": [],
+      "predicates": 8,
+      "rite_steps": 6,
+      "per_tick": 0
+    },
+    {
+      "id": "ui.contrast_variant",
+      "version": 1,
+      "family": "ui",
+      "parameters": [
+        "actor",
+        "action"
+      ],
+      "requires": [
+        "actor:Minded"
+      ],
+      "grants": [
+        "action:Contrast"
+      ],
+      "conflicts": [],
+      "predicates": 6,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "ui.hold_toggle",
+      "version": 1,
+      "family": "ui",
+      "parameters": [
+        "actor",
+        "action"
+      ],
+      "requires": [
+        "actor:Minded"
+      ],
+      "grants": [
+        "action:HoldToggle"
+      ],
+      "conflicts": [],
+      "predicates": 6,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "ui.knows_gated_prompt",
+      "version": 1,
+      "family": "ui",
+      "parameters": [
+        "actor",
+        "action"
+      ],
+      "requires": [
+        "actor:Minded"
+      ],
+      "grants": [
+        "action:Prompt"
+      ],
+      "conflicts": [],
+      "predicates": 6,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "ui.remappable_action",
+      "version": 1,
+      "family": "ui",
+      "parameters": [
+        "actor",
+        "action"
+      ],
+      "requires": [
+        "actor:Minded"
+      ],
+      "grants": [
+        "action:Remap"
+      ],
+      "conflicts": [],
+      "predicates": 6,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "ui.subtitle_cue",
+      "version": 1,
+      "family": "ui",
+      "parameters": [
+        "actor",
+        "action"
+      ],
+      "requires": [
+        "actor:Talkable"
+      ],
+      "grants": [
+        "action:Subtitle"
+      ],
+      "conflicts": [],
+      "predicates": 6,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "world.audio_zone",
+      "version": 1,
+      "family": "world",
+      "parameters": [
+        "place",
+        "tag"
+      ],
+      "requires": [
+        "place:Placeable"
+      ],
+      "grants": [
+        "place:AudioZone"
+      ],
+      "conflicts": [],
+      "predicates": 4,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "world.dressing_zone",
+      "version": 1,
+      "family": "world",
+      "parameters": [
+        "place",
+        "tag"
+      ],
+      "requires": [
+        "place:Placeable"
+      ],
+      "grants": [
+        "place:Dressing"
+      ],
+      "conflicts": [],
+      "predicates": 4,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "world.encounter_pocket",
+      "version": 1,
+      "family": "world",
+      "parameters": [
+        "place",
+        "envelope"
+      ],
+      "requires": [
+        "place:Placeable"
+      ],
+      "grants": [
+        "place:Pocket"
+      ],
+      "conflicts": [
+        "place:SafeHub"
+      ],
+      "predicates": 6,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "world.place_shell",
+      "version": 1,
+      "family": "world",
+      "parameters": [
+        "place"
+      ],
+      "requires": [],
+      "grants": [
+        "place:Placeable"
+      ],
+      "conflicts": [],
+      "predicates": 4,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "world.safe_hub",
+      "version": 1,
+      "family": "world",
+      "parameters": [
+        "place",
+        "tag"
+      ],
+      "requires": [
+        "place:Placeable"
+      ],
+      "grants": [
+        "place:SafeHub"
+      ],
+      "conflicts": [
+        "place:Encounter"
+      ],
+      "predicates": 4,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "world.traversal_graph",
+      "version": 1,
+      "family": "world",
+      "parameters": [
+        "place",
+        "tag"
+      ],
+      "requires": [
+        "place:Placeable"
+      ],
+      "grants": [
+        "place:Graph"
+      ],
+      "conflicts": [],
+      "predicates": 4,
+      "rite_steps": 8,
+      "per_tick": 0
+    }
+  ],
   "diagnostics": [
     {
       "code": "KAI-DIAG-CONTRADICTION",
@@ -2223,6 +3137,13 @@
     },
     {
       "code": "IR.ParameterTypeMismatch",
+      "source": "klotho-ir",
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "IR.UnexpandedPattern",
       "source": "klotho-ir",
       "class": "schema",
       "retryable": false,
@@ -2456,6 +3377,48 @@
       "code": "COMPILE.PackageAllowlist",
       "source": "klotho-compile",
       "class": "package",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "PATTERN.Unknown",
+      "source": "klotho-pattern",
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "PATTERN.Version",
+      "source": "klotho-pattern",
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "PATTERN.Arg",
+      "source": "klotho-pattern",
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "PATTERN.Capability",
+      "source": "klotho-pattern",
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "PATTERN.Conflict",
+      "source": "klotho-pattern",
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "PATTERN.Budget",
+      "source": "klotho-pattern",
+      "class": "budget",
       "retryable": false,
       "legal_repairs": []
     },

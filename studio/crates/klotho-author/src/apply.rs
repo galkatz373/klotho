@@ -5,7 +5,8 @@ use std::collections::BTreeMap;
 use klotho_core::{Hash, LocusKind, PoseMm};
 use klotho_ir::{
     AnchorId, AnchorKind, CanonDiff, IntentModule, IntentModuleRef, LockEntry, ModuleLock, Name,
-    NameAlias, ObjectAnchor, ProjectBundle, Rel, SeedFact, Tombstone, module_content_hash, to_ron,
+    NameAlias, ObjectAnchor, PatternArg, PatternInstance, ProjectBundle, Rel, SeedFact, Tombstone,
+    module_content_hash, to_ron,
 };
 use klotho_prove::hash_bytes;
 use serde::{Deserialize, Serialize};
@@ -92,6 +93,20 @@ pub enum SemanticEdit {
         /// Replacement name.
         to: Name,
     },
+    /// Record a pattern instance. Expansion happens at flatten.
+    Instantiate {
+        /// Instance payload, including owning module.
+        instance: PatternInstance,
+    },
+    /// Overwrite or insert one pattern argument.
+    SetArgument {
+        /// Instance identity.
+        instance: AnchorId,
+        /// Argument name.
+        key: Name,
+        /// Bound argument.
+        value: PatternArg,
+    },
 }
 
 /// Result of a successful edit.
@@ -142,6 +157,12 @@ pub fn apply_edit_unlocked(
         SemanticEdit::AddCanonDiff { module, diff } => add_canon_diff(bundle, module, diff)?,
         SemanticEdit::Remove { target, reason } => remove_object(bundle, target, reason)?,
         SemanticEdit::Rename { target, to } => rename_object(bundle, target, to)?,
+        SemanticEdit::Instantiate { instance } => instantiate(bundle, instance)?,
+        SemanticEdit::SetArgument {
+            instance,
+            key,
+            value,
+        } => set_argument(bundle, instance, key, value)?,
     };
     Ok(outcome)
 }
@@ -327,6 +348,63 @@ fn add_fact(
     })
 }
 
+fn instantiate(
+    bundle: &mut ProjectBundle,
+    instance: PatternInstance,
+) -> Result<ApplyOutcome, AuthorError> {
+    name_checked(&instance.instance)?;
+    name_checked(&instance.pattern)?;
+    if instance.version == 0 {
+        return Err(AuthorError::Pattern(
+            "pattern version must be non-zero".into(),
+        ));
+    }
+    if occupied_anchors(bundle).contains(&instance.anchor) {
+        return Err(AuthorError::DuplicateAnchor(instance.anchor.to_string()));
+    }
+    let idx = module_index(bundle, instance.module)?;
+    let module = &mut bundle.modules[idx];
+    reject_name(module, &instance.instance)?;
+    module.object_anchors.push(ObjectAnchor {
+        kind: AnchorKind::Pattern,
+        name: instance.instance.clone(),
+        anchor: instance.anchor,
+    });
+    module.patterns.push(instance);
+    canonicalize_module(module);
+    module.validate_local()?;
+    Ok(ApplyOutcome::default())
+}
+
+fn set_argument(
+    bundle: &mut ProjectBundle,
+    instance: AnchorId,
+    key: Name,
+    value: PatternArg,
+) -> Result<ApplyOutcome, AuthorError> {
+    name_checked(&key)?;
+    if value.key != key {
+        return Err(AuthorError::Pattern(
+            "SetArgument key must match PatternArg.key".into(),
+        ));
+    }
+    let idx = owning_module_index(bundle, instance)?;
+    let module = &mut bundle.modules[idx];
+    let slot = module
+        .patterns
+        .iter_mut()
+        .find(|p| p.anchor == instance)
+        .ok_or_else(|| AuthorError::MissingAnchor(instance.to_string()))?;
+    if let Some(existing) = slot.args.iter_mut().find(|a| a.key == key) {
+        *existing = value;
+    } else {
+        slot.args.push(value);
+    }
+    canonicalize_module(module);
+    module.validate_local()?;
+    Ok(ApplyOutcome::default())
+}
+
 fn add_canon_diff(
     bundle: &mut ProjectBundle,
     module_id: AnchorId,
@@ -432,6 +510,7 @@ fn strip_object(module: &mut IntentModule, object: &ObjectAnchor) {
         Some((kind, n)) => !(kind == object.kind && n == *name),
         None => true,
     });
+    module.patterns.retain(|p| p.anchor != object.anchor);
     module.object_anchors.retain(|o| o.anchor != object.anchor);
     module.exports.retain(|e| e != name);
 }
@@ -467,6 +546,13 @@ fn rewrite_names(module: &mut IntentModule, kind: AnchorKind, from: &Name, to: &
         AnchorKind::Law | AnchorKind::Affordance | AnchorKind::Rite | AnchorKind::Beat => {
             for diff in &mut module.body.canon_diffs {
                 rewrite_canon_name(diff, from, to);
+            }
+        }
+        AnchorKind::Pattern => {
+            for instance in &mut module.patterns {
+                if instance.instance == *from {
+                    instance.instance = to.clone();
+                }
             }
         }
         AnchorKind::Module => {}
@@ -640,6 +726,9 @@ fn canonicalize_module(module: &mut IntentModule) {
     module
         .tombstones
         .sort_by(|a, b| a.anchor.cmp(&b.anchor).then(a.name.cmp(&b.name)));
+    module
+        .patterns
+        .sort_by(|a, b| a.instance.cmp(&b.instance).then(a.anchor.cmp(&b.anchor)));
     module.exports.sort();
     module.exports.dedup();
 }
@@ -711,6 +800,7 @@ fn kind_prefix(kind: AnchorKind) -> &'static str {
         AnchorKind::Rite => "rite",
         AnchorKind::Beat => "beat",
         AnchorKind::Mind => "mind",
+        AnchorKind::Pattern => "pattern",
     }
 }
 

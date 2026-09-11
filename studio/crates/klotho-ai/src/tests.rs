@@ -175,9 +175,10 @@ fn sample_op(kind: OpKind, slot: u8, w: &World) -> AuthorOp {
         OpKind::Instantiate => AuthorOp::Instantiate {
             instance: PatternInstance {
                 anchor: derive_op_anchor(&name("hearth"), c, b"inst"),
+                module: w.module,
                 instance: name(&format!("inst{slot}")),
-                pattern: name("door"),
-                version: u32::from(slot),
+                pattern: name("traversal.door_key"),
+                version: 1,
                 args: Vec::new(),
             },
         },
@@ -878,19 +879,25 @@ fn submit_does_not_write_live_project() {
 }
 
 #[test]
-fn instantiate_and_journey_fail_closed() {
-    let mut snap = world().snap;
-    let err = apply_ops(
+fn instantiate_records_pattern_and_journey_stays_fail_closed() {
+    let w = world();
+    let mut snap = w.snap.clone();
+    apply_ops(
         &mut snap,
         change("p"),
-        &[sample_op(OpKind::Instantiate, 0, &world())],
+        &[sample_op(OpKind::Instantiate, 0, &w)],
     )
-    .unwrap_err();
-    assert!(matches!(err, AiError::FailClosed(OpKind::Instantiate)));
+    .unwrap();
+    assert!(
+        snap.modules[0]
+            .patterns
+            .iter()
+            .any(|p| p.pattern.as_str() == "traversal.door_key")
+    );
     let err = apply_ops(
         &mut snap,
         change("j"),
-        &[sample_op(OpKind::AddJourney, 0, &world())],
+        &[sample_op(OpKind::AddJourney, 0, &w)],
     )
     .unwrap_err();
     assert!(matches!(err, AiError::FailClosed(OpKind::AddJourney)));

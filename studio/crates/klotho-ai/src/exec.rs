@@ -180,9 +180,7 @@ fn writes_identical(snap: &AuthoringSnapshot, op: &AuthorOp, cell: crate::ids::C
 
 fn fail_closed(op: &AuthorOp) -> Result<(), AiError> {
     match op.kind() {
-        OpKind::Instantiate | OpKind::SetArgument | OpKind::AddJourney => {
-            Err(AiError::FailClosed(op.kind()))
-        }
+        OpKind::AddJourney => Err(AiError::FailClosed(op.kind())),
         _ => Ok(()),
     }
 }
@@ -219,10 +217,20 @@ fn to_edit(op: &AuthorOp) -> Option<SemanticEdit> {
             target: *target,
             to: to.clone(),
         }),
+        AuthorOp::Instantiate { instance } => Some(SemanticEdit::Instantiate {
+            instance: instance.clone(),
+        }),
+        AuthorOp::SetArgument {
+            instance,
+            key,
+            value,
+        } => Some(SemanticEdit::SetArgument {
+            instance: *instance,
+            key: key.clone(),
+            value: value.clone(),
+        }),
         AuthorOp::BindAsset { .. }
         | AuthorOp::AddReference { .. }
-        | AuthorOp::Instantiate { .. }
-        | AuthorOp::SetArgument { .. }
         | AuthorOp::AddJourney { .. } => None,
     }
 }

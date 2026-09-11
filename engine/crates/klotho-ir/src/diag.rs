@@ -281,6 +281,15 @@ pub fn diagnostic_catalog() -> &'static [DiagnosticCatalogEntry] {
         "IR.DuplicateObjectName",
         "IR.ExportUnknown",
         "IR.ParameterTypeMismatch",
+        "IR.UnexpandedPattern",
+    ];
+    const PATTERN: &[&str] = &[
+        "PATTERN.Unknown",
+        "PATTERN.Version",
+        "PATTERN.Arg",
+        "PATTERN.Capability",
+        "PATTERN.Conflict",
+        "PATTERN.Budget",
     ];
     const CANON: &[&str] = &[
         "CANON.MixedLabeling",
@@ -430,6 +439,15 @@ pub fn diagnostic_catalog() -> &'static [DiagnosticCatalogEntry] {
                 legal_repairs: NONE,
             });
         }
+        for code in PATTERN {
+            out.push(DiagnosticCatalogEntry {
+                code,
+                source: "klotho-pattern",
+                class: class_for_detail(code),
+                retryable: false,
+                legal_repairs: NONE,
+            });
+        }
         out.push(DiagnosticCatalogEntry {
             code: "DEBUG.Budget",
             source: "klotho-debug",
@@ -458,6 +476,7 @@ fn class_for_detail(code: &str) -> FailureClass {
         | "CANON.FallOff"
         | "CANON.Cycle" => FailureClass::Cfg,
         "CANON.Contradiction" | "CANON.LockableNeedsKeyOrRite" => FailureClass::Contradiction,
+        "PATTERN.Budget" => FailureClass::Budget,
         "COMPILE.Warp" | "COMPILE.PackageAllowlist" | "COMPILE.MissingLockFile" => {
             FailureClass::Package
         }
@@ -836,6 +855,7 @@ impl IrError {
             Self::ParameterTypeMismatch(name) => {
                 schema_diag("IR.ParameterTypeMismatch", name, message)
             }
+            Self::UnexpandedPattern(id) => schema_diag("IR.UnexpandedPattern", id, message),
         }
     }
 }

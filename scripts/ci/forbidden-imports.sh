@@ -33,6 +33,7 @@ check_gameplay_tables engine/examples/chorus-slice
 check_gameplay_tables engine/examples/netlock-slice
 check_gameplay_tables studio/crates/klotho-author
 check_gameplay_tables studio/crates/klotho-editor
+check_gameplay_tables studio/crates/klotho-ai
 check_gameplay_tables studio/crates/klotho-dcc
 
 # klotho-interest may not import commit (K49).
@@ -74,6 +75,7 @@ check_gameplay_jobs engine/examples/chorus-slice
 check_gameplay_jobs engine/examples/netlock-slice
 check_gameplay_jobs studio/crates/klotho-author
 check_gameplay_jobs studio/crates/klotho-editor
+check_gameplay_jobs studio/crates/klotho-ai
 
 # Gameplay and authoring must not import cook-time DCC.
 check_no_dcc() {
@@ -101,6 +103,7 @@ check_no_dcc engine/examples/chorus-slice
 check_no_dcc engine/examples/netlock-slice
 check_no_dcc studio/crates/klotho-author
 check_no_dcc studio/crates/klotho-editor
+check_no_dcc studio/crates/klotho-ai
 check_no_dcc engine/crates/klotho-sim
 check_no_dcc engine/crates/klotho-commit
 
@@ -130,6 +133,7 @@ check_no_phys engine/examples/chorus-slice
 check_no_phys engine/examples/netlock-slice
 check_no_phys studio/crates/klotho-author
 check_no_phys studio/crates/klotho-editor
+check_no_phys studio/crates/klotho-ai
 check_no_phys engine/crates/klotho-motion
 check_no_phys engine/crates/klotho-sim
 check_no_phys engine/crates/klotho-commit
@@ -161,6 +165,7 @@ check_no_stream engine/examples/chorus-slice
 check_no_stream engine/examples/netlock-slice
 check_no_stream studio/crates/klotho-author
 check_no_stream studio/crates/klotho-editor
+check_no_stream studio/crates/klotho-ai
 check_no_stream engine/crates/klotho-sim
 check_no_stream engine/crates/klotho-commit
 

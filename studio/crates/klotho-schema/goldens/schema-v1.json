@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "toolchain_hash": "b08c120f57563478c5821fde77aff258a665b1499188d6fcad6d6960eb97bdcb",
+  "toolchain_hash": "cb12776107794a73c524b3232dc7d5f1f9cce9528f7049a16deb1a8ee26c0e77",
   "kinds": [
     {
       "id": "klotho_ir::IntentDoc",
@@ -2098,6 +2098,80 @@
         "body"
       ],
       "cost_units": 3
+    },
+    {
+      "id": "author.instantiate@1",
+      "input": "PatternInstance",
+      "writes": [
+        "body"
+      ],
+      "cost_units": 4
+    },
+    {
+      "id": "author.set_argument@1",
+      "input": "{instance:AnchorId,key:Name,value:PatternArg}",
+      "writes": [
+        "parameters"
+      ],
+      "cost_units": 1
+    },
+    {
+      "id": "author.add_locus@1",
+      "input": "{module:AnchorId,anchor:AnchorId,name:Name,kind:LocusKind}",
+      "writes": [
+        "seed",
+        "object_anchors"
+      ],
+      "cost_units": 1
+    },
+    {
+      "id": "author.add_fact@1",
+      "input": "{module:AnchorId,fact:AnchoredSeedFact}",
+      "writes": [
+        "seed"
+      ],
+      "cost_units": 1
+    },
+    {
+      "id": "author.bind_asset@1",
+      "input": "{locus:AnchorId,request:AssetRequestId}",
+      "writes": [
+        "bindings"
+      ],
+      "cost_units": 1
+    },
+    {
+      "id": "author.add_journey@1",
+      "input": "JourneySpec",
+      "writes": [
+        "journeys"
+      ],
+      "cost_units": 3
+    },
+    {
+      "id": "author.add_reference@1",
+      "input": "{target:AnchorId,reference:ReferenceId}",
+      "writes": [
+        "references"
+      ],
+      "cost_units": 1
+    },
+    {
+      "id": "author.remove@1",
+      "input": "{target:AnchorId,reason:String}",
+      "writes": [
+        "tombstones",
+        "body"
+      ],
+      "cost_units": 3
+    },
+    {
+      "id": "author.transaction.submit@1",
+      "input": "ChangeId",
+      "writes": [
+        "review"
+      ],
+      "cost_units": 1
     }
   ]
 }

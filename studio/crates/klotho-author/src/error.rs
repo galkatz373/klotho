@@ -16,6 +16,20 @@ pub enum AuthorError {
     Io(String),
     /// Pin requires a non-empty reason.
     EmptyPinReason,
+    /// Remove / alias reason was empty.
+    EmptyReason,
+    /// No live object or module has this identity.
+    MissingAnchor(String),
+    /// An identity is already assigned.
+    DuplicateAnchor(String),
+    /// A live object already uses this name.
+    NameInUse(String),
+    /// A tombstoned name cannot be reused.
+    TombstoneReuse(String),
+    /// An alias collides with a live or reserved name.
+    AliasCollision(String),
+    /// No module with this identity is loaded.
+    ModuleNotFound(String),
 }
 
 impl fmt::Display for AuthorError {
@@ -25,6 +39,13 @@ impl fmt::Display for AuthorError {
             Self::Cook(e) => write!(f, "{e}"),
             Self::Io(s) => write!(f, "{s}"),
             Self::EmptyPinReason => write!(f, "pin reason must be non-empty"),
+            Self::EmptyReason => write!(f, "reason must be non-empty"),
+            Self::MissingAnchor(id) => write!(f, "missing anchor {id}"),
+            Self::DuplicateAnchor(id) => write!(f, "duplicate anchor {id}"),
+            Self::NameInUse(name) => write!(f, "name in use {name}"),
+            Self::TombstoneReuse(name) => write!(f, "tombstone reuse {name}"),
+            Self::AliasCollision(name) => write!(f, "alias collision {name}"),
+            Self::ModuleNotFound(id) => write!(f, "module not found {id}"),
         }
     }
 }

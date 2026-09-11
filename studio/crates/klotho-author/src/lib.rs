@@ -13,12 +13,17 @@
 // HLD crate graph: Distaff → klotho-commit. Pin is cook-time and does not construct a kernel.
 use klotho_commit as _;
 
+mod apply;
 mod error;
 mod parse;
 mod pin;
 mod preview;
 mod project;
 
+pub use apply::{
+    AnchoredSeedFact, ApplyOutcome, SemanticEdit, apply_edit, apply_edit_unlocked, apply_edits,
+    bundle_content_hash, dependents_of, lookup_module, lookup_object, refresh_locks,
+};
 pub use error::AuthorError;
 pub use parse::{load_doc_file, parse_kdown, parse_ron};
 pub use pin::{Pin, apply_pin};

@@ -6,6 +6,7 @@ members = [
     "crates/klotho-editor",
     "crates/klotho-dcc",
     "crates/klotho-kai-bench",
+    "crates/klotho-ai",
 ]
 
 [workspace.package]
@@ -31,6 +32,7 @@ klotho-render = { path = "../engine/crates/klotho-render" }
 klotho-ui = { path = "../engine/crates/klotho-ui" }
 klotho-schema = { path = "crates/klotho-schema" }
 klotho-author = { path = "crates/klotho-author" }
+klotho-ai = { path = "crates/klotho-ai" }
 ron = "0.11.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.151"

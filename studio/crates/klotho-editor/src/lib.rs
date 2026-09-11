@@ -14,12 +14,14 @@ mod inspector;
 mod kernel;
 mod outliner;
 mod session;
+mod transaction;
 
 pub use dashboard::CookDashboard;
 pub use error::EditorError;
 pub use inspector::InspectorView;
 pub use outliner::{LocusEntry, Outliner, PlaceGroup};
 pub use session::EditorSession;
+pub use transaction::EditorTransaction;
 
 pub use klotho_author::{
     AuthorError, Cooked, IntentDoc, Pin, apply_pin, cook_validated, load_file,

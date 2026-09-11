@@ -1,5 +1,8 @@
 //! Headless Distaff session tests.
 
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use klotho_ai::{AuthorOp, derive_op_anchor};
 use klotho_author::AuthorError;
 use klotho_core::{Hash, LocusKind, Mm, PoseMm, Tick, YawMd};
 use klotho_ir::{IntentDoc, Name, ProvenanceId, Rel, SeedFact, StyleIntent};
@@ -287,4 +290,34 @@ fn pin_pose_without_overlay_is_no_overlay() {
     assert_eq!(err, EditorError::NoOverlay(chair()));
     assert_eq!(err.to_string(), "no overlay pose chair");
     assert_eq!(session.seed_pose(&chair()), Some(origin()));
+}
+
+fn scratch(tag: &str) -> std::path::PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_nanos();
+    let dir = std::env::temp_dir().join(format!("klotho-kai03-ed-{tag}-{nanos}"));
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+#[test]
+fn editor_cancel_drops_transaction_changes() {
+    let session = EditorSession::new(stool_chair());
+    let original = session.doc().clone();
+    let dir = scratch("tx");
+    let mut tx = session.open_transaction(&dir).unwrap();
+    let module = klotho_ir::AnchorId::derive(b"session", b"module:main");
+    let change = klotho_ai::ChangeId::derive(b"ed");
+    tx.apply(vec![AuthorOp::AddLocus {
+        module,
+        anchor: derive_op_anchor(&Name::from("session"), change, b"stool"),
+        name: Name::from("stool"),
+        kind: LocusKind::Relic,
+    }])
+    .unwrap();
+    tx.cancel().unwrap();
+    assert_eq!(session.doc(), &original);
+    let _ = std::fs::remove_dir_all(&dir);
 }

@@ -1,24 +1,20 @@
 [package]
-name = "klotho-author"
+name = "klotho-ai"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Distaff: RON/kdown authoring, modular Intent migrate/flatten, cook-time Pin, CLI cook/preview"
+description = "Isolated authoring transactions, semantic merge, leases, audit"
 readme = false
 publish = false
 
-[[bin]]
-name = "distaff"
-path = "src/main.rs"
-
 [dependencies]
-klotho-commit.workspace = true
-klotho-compile.workspace = true
+klotho-author.workspace = true
 klotho-core.workspace = true
 klotho-ir.workspace = true
 klotho-prove.workspace = true
+ron.workspace = true
 serde.workspace = true
 
 [lints]

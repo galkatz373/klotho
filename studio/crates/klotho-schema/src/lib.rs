@@ -878,6 +878,45 @@ fn operations() -> Vec<OperationSchema> {
             &["tombstones", "body"],
             3,
         ),
+        ("author.instantiate@1", "PatternInstance", &["body"], 4),
+        (
+            "author.set_argument@1",
+            "{instance:AnchorId,key:Name,value:PatternArg}",
+            &["parameters"],
+            1,
+        ),
+        (
+            "author.add_locus@1",
+            "{module:AnchorId,anchor:AnchorId,name:Name,kind:LocusKind}",
+            &["seed", "object_anchors"],
+            1,
+        ),
+        (
+            "author.add_fact@1",
+            "{module:AnchorId,fact:AnchoredSeedFact}",
+            &["seed"],
+            1,
+        ),
+        (
+            "author.bind_asset@1",
+            "{locus:AnchorId,request:AssetRequestId}",
+            &["bindings"],
+            1,
+        ),
+        ("author.add_journey@1", "JourneySpec", &["journeys"], 3),
+        (
+            "author.add_reference@1",
+            "{target:AnchorId,reference:ReferenceId}",
+            &["references"],
+            1,
+        ),
+        (
+            "author.remove@1",
+            "{target:AnchorId,reason:String}",
+            &["tombstones", "body"],
+            3,
+        ),
+        ("author.transaction.submit@1", "ChangeId", &["review"], 1),
     ]
     .into_iter()
     .map(|(id, input, writes, cost_units)| OperationSchema {

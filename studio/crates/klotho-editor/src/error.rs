@@ -2,6 +2,7 @@
 
 use core::fmt;
 
+use klotho_ai::AiError;
 use klotho_author::AuthorError;
 use klotho_core::KernelFault;
 use klotho_ir::Name;
@@ -11,6 +12,8 @@ use klotho_ir::Name;
 pub enum EditorError {
     /// Parse, Pin, or cook from `klotho-author`.
     Author(AuthorError),
+    /// Isolated authoring transaction.
+    Ai(AiError),
     /// Seed apply or kernel boot from cooked Canon.
     Boot(String),
     /// Viewport / play / dashboard needs a successful cook.
@@ -27,6 +30,7 @@ impl fmt::Display for EditorError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Author(e) => write!(f, "{e}"),
+            Self::Ai(e) => write!(f, "{e}"),
             Self::Boot(s) => write!(f, "{s}"),
             Self::NoCook => write!(f, "no cook"),
             Self::UnknownLocus(n) => write!(f, "unknown locus {n}"),
@@ -41,6 +45,18 @@ impl core::error::Error for EditorError {}
 impl From<AuthorError> for EditorError {
     fn from(e: AuthorError) -> Self {
         Self::Author(e)
+    }
+}
+
+impl From<AiError> for EditorError {
+    fn from(e: AiError) -> Self {
+        Self::Ai(e)
+    }
+}
+
+impl From<klotho_ir::IrError> for EditorError {
+    fn from(e: klotho_ir::IrError) -> Self {
+        Self::Author(AuthorError::from(e))
     }
 }
 

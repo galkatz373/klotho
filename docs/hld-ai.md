@@ -5,7 +5,7 @@
 | Document | High-Level Design — AI-native production for Klotho's first AAA title |
 | Author | Gal Katz |
 | Date | 2026-09-11 |
-| Status | Active successor plan (KAI-00–02 landed; KAI-03–24 not landed) |
+| Status | Active successor plan (KAI-00–03 landed; KAI-04–24 not landed) |
 | Baseline | `docs/hld.md` rev 6; AAA-01–27 landed |
 | Audience | Engine, tools, gameplay, content, AI platform, build, QA, and production leads |
 | Language | Rust (edition 2024; 2021-compatible crates OK) |
@@ -1911,7 +1911,7 @@ managers.
 
 ## PR plan
 
-Landed baseline: AAA-01–27 and KAI-00–02 (2026-09-11). KAI-03–24 remain planned.
+Landed baseline: AAA-01–27 and KAI-00–03 (2026-09-11). KAI-04–24 remain planned.
 Each header gains `— landed` only with its implementation, tests, date bump, and
 this section's landed list update.
 
@@ -2027,7 +2027,7 @@ flowchart TB
 - **Gate:** flattening a migrated existing slice yields the same Canon and Trace;
   module reorder has no effect; import cycles and hash drift fail closed.
 
-#### KAI-03 — Authoring transactions and three-way semantic merge
+#### KAI-03 — Authoring transactions and three-way semantic merge — **landed 2026-09-11**
 
 - **Files:** new `klotho-ai`, `klotho-author`, editor transaction model.
 - **Depends on:** KAI-02.

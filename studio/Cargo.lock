@@ -820,6 +820,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
+name = "klotho-ai"
+version = "0.1.0"
+dependencies = [
+ "klotho-author",
+ "klotho-core",
+ "klotho-ir",
+ "klotho-prove",
+ "ron",
+ "serde",
+]
+
+[[package]]
 name = "klotho-anim"
 version = "0.1.0"
 dependencies = [
@@ -837,6 +849,7 @@ dependencies = [
  "klotho-compile",
  "klotho-core",
  "klotho-ir",
+ "klotho-prove",
  "serde",
 ]
 
@@ -896,6 +909,7 @@ dependencies = [
 name = "klotho-editor"
 version = "0.1.0"
 dependencies = [
+ "klotho-ai",
  "klotho-author",
  "klotho-commit",
  "klotho-core",

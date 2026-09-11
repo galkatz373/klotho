@@ -234,6 +234,12 @@ impl WorldView<'_> {
     pub fn rite(&self, actor: Sigil, rite: RiteId) -> Option<crate::RiteMachine> {
         self.proj.rite(actor, rite)
     }
+
+    /// Knows bit. Missing mind or fact is `false`.
+    #[must_use]
+    pub fn knows(&self, mind: Sigil, fact: u16) -> bool {
+        self.proj.knows(mind, fact)
+    }
 }
 
 impl PredStore for WorldView<'_> {

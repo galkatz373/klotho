@@ -907,6 +907,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "klotho-debug"
+version = "0.1.0"
+dependencies = [
+ "klotho-canon",
+ "klotho-commit",
+ "klotho-core",
+ "klotho-input",
+ "klotho-ir",
+ "klotho-trace",
+ "klotho-ui",
+ "klotho-world",
+]
+
+[[package]]
 name = "klotho-editor"
 version = "0.1.0"
 dependencies = [
@@ -922,11 +936,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "klotho-eval"
+version = "0.1.0"
+dependencies = [
+ "klotho-core",
+ "klotho-debug",
+ "klotho-input",
+ "klotho-ir",
+ "klotho-prove",
+ "ron",
+ "serde",
+]
+
+[[package]]
 name = "klotho-input"
 version = "0.1.0"
 dependencies = [
  "klotho-core",
  "klotho-ir",
+ "serde",
 ]
 
 [[package]]

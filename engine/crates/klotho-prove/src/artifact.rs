@@ -25,6 +25,8 @@ pub enum ArtifactKind {
     Embedding = 7,
     /// Skinned mesh: `i16` verts + 4-bone joints/weights + `u32` indices.
     SkinnedMesh = 8,
+    /// Sealed evaluation evidence bundle (KAI-06).
+    Evidence = 9,
 }
 
 impl ArtifactKind {
@@ -41,6 +43,7 @@ impl ArtifactKind {
             6 => Some(Self::AffordanceGraph),
             7 => Some(Self::Embedding),
             8 => Some(Self::SkinnedMesh),
+            9 => Some(Self::Evidence),
             _ => None,
         }
     }
@@ -59,8 +62,10 @@ mod tests {
         assert_eq!(ArtifactKind::ClusteredMesh as u8, 0);
         assert_eq!(ArtifactKind::Embedding as u8, 7);
         assert_eq!(ArtifactKind::SkinnedMesh as u8, 8);
+        assert_eq!(ArtifactKind::Evidence as u8, 9);
         assert_eq!(ArtifactKind::from_u8(3), Some(ArtifactKind::Grain));
         assert_eq!(ArtifactKind::from_u8(8), Some(ArtifactKind::SkinnedMesh));
-        assert_eq!(ArtifactKind::from_u8(9), None);
+        assert_eq!(ArtifactKind::from_u8(9), Some(ArtifactKind::Evidence));
+        assert_eq!(ArtifactKind::from_u8(10), None);
     }
 }

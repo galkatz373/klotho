@@ -14,12 +14,14 @@
 mod budget;
 mod diag;
 mod event;
+mod journey;
 mod player;
 mod reject;
 
 pub use budget::BudgetMode;
 pub use diag::{diagnose_budget_miss, diagnose_unreachable_journey};
 pub use event::{BudgetUsed, DebugEvent};
+pub use journey::{CaptureMark, JourneyKernel};
 pub use player::{Played, TracePlayer, prefix_of_events};
 pub use reject::{diagnose_unclaimed_agency, format_rejects, inspect_event, inspect_rejects};
 

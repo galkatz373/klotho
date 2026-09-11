@@ -329,6 +329,7 @@ fn decode_kind(rest: &mut &[u8]) -> Result<ProvenanceKind, CompileError> {
                 0 => Activity::Cook,
                 1 => Activity::Pin,
                 2 => Activity::Commit,
+                3 => Activity::Eval,
                 _ => return Err(warp_err(format!("activity {a}"))),
             };
             Ok(ProvenanceKind::Activity { activity })

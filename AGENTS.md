@@ -22,6 +22,7 @@ Greenfield Rust engine. The programming model is **Canon + Intent + Trace + Proj
 - Runtime (not stream) builds `Proposal::Residency`. Stream returns `Arc<PlaceSnap>` after header-validate + mmap.
 - `InferHost::{new,submit,poll}` may appear only in `engine/crates/klotho-runtime/**` and `engine/crates/klotho-infer/**` (CI allowlist).
 - Gameplay (`engine/examples/hearth-slice`, `engine/examples/ash-slice`, ember, drift, `klotho-author`, `klotho-editor`) may not import `klotho-manifest::tables` or `klotho-stream`.
+- `klotho-eval` may depend on public debug/runtime test interfaces but may not enable `klotho-world/mutate`, append Trace, or mint player Agency. Engine never depends on `klotho-eval`.
 
 ## PR plan (merge order)
 

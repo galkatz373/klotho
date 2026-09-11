@@ -76,6 +76,8 @@ pub enum Activity {
     Pin = 1,
     /// `CommitKernel` append to Trace.
     Commit = 2,
+    /// Trusted evaluation / evidence seal (KAI-06). Not a runtime commit.
+    Eval = 3,
 }
 
 /// Who participated. `Model` may appear on a proposal's provenance; it cannot
@@ -349,6 +351,30 @@ mod tests {
             .unwrap();
         assert_eq!(dag.node(child).unwrap().license, LicenseSpan::Unknown);
         assert_eq!(dag.exportable(), Err(ProveError::UnknownLicense));
+    }
+
+    #[test]
+    fn eval_activity_is_append_only() {
+        assert_eq!(Activity::Cook as u8, 0);
+        assert_eq!(Activity::Pin as u8, 1);
+        assert_eq!(Activity::Commit as u8, 2);
+        assert_eq!(Activity::Eval as u8, 3);
+        let mut dag = ProvenanceDag::new();
+        let id = dag
+            .insert(
+                ProvenanceKind::Activity {
+                    activity: Activity::Eval,
+                },
+                mit(),
+                &[],
+            )
+            .unwrap();
+        assert_eq!(
+            dag.node(id).unwrap().kind,
+            ProvenanceKind::Activity {
+                activity: Activity::Eval
+            }
+        );
     }
 
     #[test]

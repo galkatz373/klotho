@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "toolchain_hash": "cf2654a3d6e5119989f4f37add7dc3c55f7c6cd7a0fb2b5c1c1632d7ed4d0239",
+  "toolchain_hash": "cba1ad4a6121fe69ea646edd3ddc14d3d5e3bb3abc9800f457f4ed2f0a51c1b3",
   "kinds": [
     {
       "id": "klotho_ir::IntentDoc",
@@ -1743,6 +1743,305 @@
       ],
       "positive_example": "Error",
       "negative_example": "UnknownVariant"
+    },
+    {
+      "id": "klotho_eval::JourneySpec",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "id",
+          "ty": "JourneyId",
+          "description": "stable journey identity",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "start",
+          "ty": "StartStateRef",
+          "description": "named start fixture",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "steps",
+          "ty": "Vec<JourneyStep>",
+          "description": "public-input steps",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "assertions",
+          "ty": "Vec<JourneyAssertion>",
+          "description": "semantic facts",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "capture_points",
+          "ty": "Vec<CapturePoint>",
+          "description": "capture markers",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "max_ticks",
+          "ty": "u32",
+          "description": "hard tick cap",
+          "min": 0,
+          "max": 1000000
+        },
+        {
+          "name": "depends_on",
+          "ty": "Vec<JourneyId>",
+          "description": "prerequisites",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "anchors",
+          "ty": "Vec<AnchorId>",
+          "description": "covered anchors",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "modules",
+          "ty": "Vec<AnchorId>",
+          "description": "covered modules",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(id:\"unlock\",start:(name:\"default\"),steps:[],assertions:[],capture_points:[],max_ticks:16,depends_on:[],anchors:[],modules:[])",
+      "negative_example": "(id:\"\",start:(),steps:[])"
+    },
+    {
+      "id": "klotho_eval::JourneyStep",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "Device",
+          "discriminant": null,
+          "payload": "payload",
+          "description": "device sample; no Agency"
+        },
+        {
+          "name": "Fixture",
+          "discriminant": null,
+          "payload": "payload",
+          "description": "verb fixture; adapter stamps Agency"
+        },
+        {
+          "name": "Wait",
+          "discriminant": null,
+          "payload": "payload",
+          "description": "ticks with no player packet"
+        },
+        {
+          "name": "Camera",
+          "discriminant": null,
+          "payload": "payload",
+          "description": "presentation-only camera move"
+        },
+        {
+          "name": "Save",
+          "discriminant": null,
+          "payload": "payload",
+          "description": "save slot"
+        },
+        {
+          "name": "Load",
+          "discriminant": null,
+          "payload": "payload",
+          "description": "load slot"
+        }
+      ],
+      "positive_example": "Wait(ticks:1)",
+      "negative_example": "UnknownVariant"
+    },
+    {
+      "id": "klotho_eval::JourneyAssertion",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "Trace",
+          "discriminant": null,
+          "payload": "payload",
+          "description": "admitted Trace body token"
+        },
+        {
+          "name": "Qty",
+          "discriminant": null,
+          "payload": "payload",
+          "description": "quantity comparison"
+        },
+        {
+          "name": "Rel",
+          "discriminant": null,
+          "payload": "payload",
+          "description": "relation triple"
+        },
+        {
+          "name": "Knows",
+          "discriminant": null,
+          "payload": "payload",
+          "description": "mind fact"
+        },
+        {
+          "name": "Place",
+          "discriminant": null,
+          "payload": "payload",
+          "description": "Rel::In residency"
+        },
+        {
+          "name": "Capture",
+          "discriminant": null,
+          "payload": "payload",
+          "description": "named capture was recorded"
+        }
+      ],
+      "positive_example": "Place(locus:\"player\",place:\"hall\")",
+      "negative_example": "UnknownVariant"
+    },
+    {
+      "id": "klotho_eval::EvidenceBundle",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "change",
+          "ty": "Hash",
+          "description": "change identity",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "project_hash",
+          "ty": "Hash",
+          "description": "authoring project",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "toolchain_hash",
+          "ty": "Hash",
+          "description": "toolchain lock",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "expanded_ir_hash",
+          "ty": "Hash",
+          "description": "expanded IR",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "canon_hash",
+          "ty": "Hash",
+          "description": "cooked Canon",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "cas_root",
+          "ty": "Hash",
+          "description": "CAS root",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "checks",
+          "ty": "Vec<CheckEvidence>",
+          "description": "trusted checks",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "captures",
+          "ty": "Vec<ArtifactRef>",
+          "description": "captures",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "approvals",
+          "ty": "Vec<ApprovalRef>",
+          "description": "human approvals",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "signature",
+          "ty": "Hash",
+          "description": "evidence_signature of payload",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(change:\"0000000000000000000000000000000000000000000000000000000000000000\",project_hash:\"0000000000000000000000000000000000000000000000000000000000000000\",toolchain_hash:\"0000000000000000000000000000000000000000000000000000000000000000\",expanded_ir_hash:\"0000000000000000000000000000000000000000000000000000000000000000\",canon_hash:\"0000000000000000000000000000000000000000000000000000000000000000\",cas_root:\"0000000000000000000000000000000000000000000000000000000000000000\",checks:[],captures:[],approvals:[],signature:\"0000000000000000000000000000000000000000000000000000000000000000\")",
+      "negative_example": "(change:\"00\")"
+    },
+    {
+      "id": "klotho_eval::AcceptanceContract",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "claims",
+          "ty": "Vec<SemanticClaim>",
+          "description": "semantic claims",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "journeys",
+          "ty": "Vec<JourneyId>",
+          "description": "required journeys",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "invariants",
+          "ty": "Vec<InvariantRef>",
+          "description": "catalog invariants",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "quality",
+          "ty": "Vec<QualityTarget>",
+          "description": "quality targets",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "budgets",
+          "ty": "Vec<BudgetTarget>",
+          "description": "budget targets",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "non_regression",
+          "ty": "Vec<JourneyId>",
+          "description": "must not regress",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "allowed_scope",
+          "ty": "ChangeScope",
+          "description": "write scope",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(claims:[],journeys:[],invariants:[],quality:[],budgets:[],non_regression:[],allowed_scope:(modules:[],anchors:[]))",
+      "negative_example": "(claims:())"
     }
   ],
   "verbs": [
@@ -3419,6 +3718,41 @@
       "code": "PATTERN.Budget",
       "source": "klotho-pattern",
       "class": "budget",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "EVAL.Stale",
+      "source": "klotho-eval",
+      "class": "reproducibility",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "EVAL.Select",
+      "source": "klotho-eval",
+      "class": "journey",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "EVAL.Projection",
+      "source": "klotho-eval",
+      "class": "agency",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "EVAL.Agency",
+      "source": "klotho-eval",
+      "class": "agency",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "EVAL.Replay",
+      "source": "klotho-eval",
+      "class": "journey",
       "retryable": false,
       "legal_repairs": []
     },

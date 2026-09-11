@@ -50,7 +50,7 @@ pub const SNAPSHOT_CAP: usize = 16 * 1024 * 1024;
 mod tests {
     use std::sync::Arc;
 
-    use klotho_canon::{PredStore, cook_diffs};
+    use klotho_canon::cook_diffs;
     use klotho_core::{
         AabbMm, AffordanceId, BlobId, Hash, IVec3, LocusKind, Mm, PackedIx, PhysRequest, PoseMm,
         ResourceId, Sigil, SimLod, Tick, Vel3, VelFx, YawMd,

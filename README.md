@@ -53,6 +53,8 @@ KAI-01 — separate engine/studio workspaces and generated authoring schema cata
 KAI-02 — modular Intent, locks, and immutable semantic anchors.
 KAI-03 — authoring transactions, cell-level conflict matrix, and three-way semantic merge.
 KAI-04 — structured diagnostics: stable codes, anchors, minimal witnesses, legal repairs, cost.
+KAI-05 — pattern compiler and standard library v1.
+KAI-06 — journeys, public-input execution, trusted evidence, affected-test selection.
 
 ## Build
 
@@ -96,6 +98,8 @@ klotho/
   studio/Cargo.toml       # Distaff/Weaver/AI/evaluation workspace
   studio/crates/klotho-schema/ # Generated machine-readable authoring catalog
   studio/crates/klotho-ai/    # Isolated authoring transactions, semantic merge, leases, audit
+  studio/crates/klotho-eval/  # Journeys, evidence bundles, affected-test selection
+  studio/crates/klotho-pattern/ # Deterministic pattern expansion and standard library v1
   studio/crates/klotho-dcc/ # glTF 2.0 cook → quantized KLTH mesh/hull/clip
   engine/crates/klotho-stream/   # Place shard pager, KCAS volumes (mmap after header validate)
   engine/crates/klotho-save/     # epoch compaction, K19/K48 I/O

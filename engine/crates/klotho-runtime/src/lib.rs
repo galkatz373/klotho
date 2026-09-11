@@ -6,6 +6,7 @@
 #[cfg(all(feature = "aaa-adventure", feature = "aaa-shooter"))]
 compile_error!("aaa-adventure and aaa-shooter are mutually exclusive runtime profiles");
 
+mod capture;
 mod epoch;
 mod interest;
 mod jobs;
@@ -14,6 +15,7 @@ mod residency;
 mod stream;
 mod warp;
 
+pub use capture::{CaptureKind, CaptureLog, CaptureRecord};
 pub use epoch::{HaltedEpoch, halt_for_epoch};
 #[cfg(any(feature = "net", feature = "net-listen", feature = "net-dedicated"))]
 pub use epoch::{HaltedServerEpoch, ServerEpochApplyError, halt_server_for_epoch};

@@ -10,11 +10,13 @@
 
 use std::collections::BTreeSet;
 
+use serde::{Deserialize, Serialize};
+
 use klotho_core::{PlayerId, Tick, YawMd};
 use klotho_ir::{Agency, Analog, Channel, IntentTarget, PlayerIntent, Verb};
 
 /// One digital control a bind table can name.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Serialize, Deserialize)]
 pub enum Button {
     /// Keyboard E — Hearth Use.
     KeyE,
@@ -253,6 +255,71 @@ impl InputMapper {
     }
 }
 
+/// Trusted test-input adapter (K74). Agency comes only from the bind table.
+pub struct TestInputAdapter {
+    mapper: InputMapper,
+}
+
+impl TestInputAdapter {
+    /// Adapter wrapping `mapper`.
+    #[must_use]
+    pub fn new(mapper: InputMapper) -> Self {
+        Self { mapper }
+    }
+
+    /// Hearth bind table.
+    #[must_use]
+    pub fn hearth() -> Self {
+        Self::new(InputMapper::hearth())
+    }
+
+    /// Bind table in use.
+    #[must_use]
+    pub fn mapper(&self) -> &InputMapper {
+        &self.mapper
+    }
+
+    /// Map a public device sample. Agency is stamped from the table, never the caller.
+    #[must_use]
+    pub fn map(&self, sample: &DeviceSample) -> PlayerIntent {
+        self.mapper.map(sample)
+    }
+
+    /// Stamp a verb/target/analog fixture. No [`Agency`] field is accepted.
+    #[must_use]
+    pub fn stamp(
+        &self,
+        player: PlayerId,
+        tick: Tick,
+        verb: Verb,
+        target: IntentTarget,
+        analog: Analog,
+    ) -> PlayerIntent {
+        let mut claimed = Vec::new();
+        for b in self.mapper.table().bindings() {
+            if b.verb == verb {
+                if let Some(ch) = b.channel {
+                    if !claimed.contains(&ch) {
+                        claimed.push(ch);
+                    }
+                }
+                break;
+            }
+        }
+        PlayerIntent {
+            player,
+            at: tick,
+            verb,
+            target,
+            analog,
+            agency: Agency {
+                claimed,
+                assist: Default::default(),
+            },
+        }
+    }
+}
+
 fn verb_rank(v: Verb) -> u8 {
     match v {
         Verb::Time => 0,
@@ -348,5 +415,36 @@ mod tests {
         // future "convenience" Infer path cannot sneak in without failing CI.
         let p = InputMapper::hearth().map(&DeviceSample::new(PlayerId(0), Tick(0)));
         let _: PlayerIntent = p;
+    }
+
+    #[test]
+    fn adapter_stamps_agency_from_the_table() {
+        let adapter = TestInputAdapter::hearth();
+        let mut sample = DeviceSample::new(PlayerId(0), Tick(0));
+        sample.buttons.insert(Button::KeySpace);
+        let from_device = adapter.map(&sample);
+        let from_fixture = adapter.stamp(
+            PlayerId(0),
+            Tick(0),
+            Verb::Time,
+            IntentTarget::None,
+            Analog::default(),
+        );
+        assert_eq!(from_device.agency.claimed, vec![Channel::Timing]);
+        assert_eq!(from_fixture.agency.claimed, vec![Channel::Timing]);
+        assert_eq!(from_device.verb, from_fixture.verb);
+    }
+
+    #[test]
+    fn adapter_use_has_empty_agency() {
+        let p = TestInputAdapter::hearth().stamp(
+            PlayerId(0),
+            Tick(1),
+            Verb::Use,
+            IntentTarget::None,
+            Analog::default(),
+        );
+        assert!(p.agency.claimed.is_empty());
+        p.validate().unwrap();
     }
 }

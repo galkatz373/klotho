@@ -71,6 +71,11 @@ pub fn validate_blob(bytes: &[u8]) -> Result<(), CompileError> {
             validate_skinned_mesh(bytes)?;
         }
         ArtifactKind::Texture | ArtifactKind::AffordanceGraph | ArtifactKind::Embedding => {}
+        ArtifactKind::Evidence => {
+            return Err(CompileError::Header(
+                "evidence bundle is not a cooked blob".into(),
+            ));
+        }
     }
     Ok(())
 }

@@ -37,7 +37,7 @@ pub struct SchemaCatalog {
     pub rite_ops: Vec<VariantSchema>,
     /// Project-specific affordances read from cooked Canon.
     pub affordances: Vec<AffordanceSchema>,
-    /// Pattern versions. Empty until KAI-05.
+    /// Pattern versions from `klotho-pattern`.
     pub patterns: Vec<PatternSchema>,
     /// Stable validator and cook diagnostic codes.
     pub diagnostics: Vec<DiagnosticSchema>,
@@ -718,6 +718,83 @@ fn type_schemas() -> Vec<TypeSchema> {
             .map(|(n, desc)| variant(n, None, "unit", desc))
             .collect(),
             "Error",
+        ),
+        structure(
+            "klotho_eval::JourneySpec",
+            vec![
+                field("id", "JourneyId", "stable journey identity"),
+                field("start", "StartStateRef", "named start fixture"),
+                field("steps", "Vec<JourneyStep>", "public-input steps"),
+                field("assertions", "Vec<JourneyAssertion>", "semantic facts"),
+                field("capture_points", "Vec<CapturePoint>", "capture markers"),
+                bounded("max_ticks", "u32", "hard tick cap", 0, 1_000_000),
+                field("depends_on", "Vec<JourneyId>", "prerequisites"),
+                field("anchors", "Vec<AnchorId>", "covered anchors"),
+                field("modules", "Vec<AnchorId>", "covered modules"),
+            ],
+            "(id:\"unlock\",start:(name:\"default\"),steps:[],assertions:[],capture_points:[],max_ticks:16,depends_on:[],anchors:[],modules:[])",
+            "(id:\"\",start:(),steps:[])",
+        ),
+        enumeration(
+            "klotho_eval::JourneyStep",
+            [
+                ("Device", "device sample; no Agency"),
+                ("Fixture", "verb fixture; adapter stamps Agency"),
+                ("Wait", "ticks with no player packet"),
+                ("Camera", "presentation-only camera move"),
+                ("Save", "save slot"),
+                ("Load", "load slot"),
+            ]
+            .into_iter()
+            .map(|(n, desc)| variant(n, None, "payload", desc))
+            .collect(),
+            "Wait(ticks:1)",
+        ),
+        enumeration(
+            "klotho_eval::JourneyAssertion",
+            [
+                ("Trace", "admitted Trace body token"),
+                ("Qty", "quantity comparison"),
+                ("Rel", "relation triple"),
+                ("Knows", "mind fact"),
+                ("Place", "Rel::In residency"),
+                ("Capture", "named capture was recorded"),
+            ]
+            .into_iter()
+            .map(|(n, desc)| variant(n, None, "payload", desc))
+            .collect(),
+            "Place(locus:\"player\",place:\"hall\")",
+        ),
+        structure(
+            "klotho_eval::EvidenceBundle",
+            vec![
+                field("change", "Hash", "change identity"),
+                field("project_hash", "Hash", "authoring project"),
+                field("toolchain_hash", "Hash", "toolchain lock"),
+                field("expanded_ir_hash", "Hash", "expanded IR"),
+                field("canon_hash", "Hash", "cooked Canon"),
+                field("cas_root", "Hash", "CAS root"),
+                field("checks", "Vec<CheckEvidence>", "trusted checks"),
+                field("captures", "Vec<ArtifactRef>", "captures"),
+                field("approvals", "Vec<ApprovalRef>", "human approvals"),
+                field("signature", "Hash", "evidence_signature of payload"),
+            ],
+            "(change:\"0000000000000000000000000000000000000000000000000000000000000000\",project_hash:\"0000000000000000000000000000000000000000000000000000000000000000\",toolchain_hash:\"0000000000000000000000000000000000000000000000000000000000000000\",expanded_ir_hash:\"0000000000000000000000000000000000000000000000000000000000000000\",canon_hash:\"0000000000000000000000000000000000000000000000000000000000000000\",cas_root:\"0000000000000000000000000000000000000000000000000000000000000000\",checks:[],captures:[],approvals:[],signature:\"0000000000000000000000000000000000000000000000000000000000000000\")",
+            "(change:\"00\")",
+        ),
+        structure(
+            "klotho_eval::AcceptanceContract",
+            vec![
+                field("claims", "Vec<SemanticClaim>", "semantic claims"),
+                field("journeys", "Vec<JourneyId>", "required journeys"),
+                field("invariants", "Vec<InvariantRef>", "catalog invariants"),
+                field("quality", "Vec<QualityTarget>", "quality targets"),
+                field("budgets", "Vec<BudgetTarget>", "budget targets"),
+                field("non_regression", "Vec<JourneyId>", "must not regress"),
+                field("allowed_scope", "ChangeScope", "write scope"),
+            ],
+            "(claims:[],journeys:[],invariants:[],quality:[],budgets:[],non_regression:[],allowed_scope:(modules:[],anchors:[]))",
+            "(claims:())",
         ),
     ]
 }

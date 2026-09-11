@@ -1,6 +1,6 @@
 //! Snapshot + observer mind + Canon → [`UiManifest`].
 
-use klotho_canon::{Canon, PredStore};
+use klotho_canon::Canon;
 use klotho_core::Sigil;
 use klotho_ir::Rel;
 use klotho_manifest::{UiManifest, Widget, WidgetKind};

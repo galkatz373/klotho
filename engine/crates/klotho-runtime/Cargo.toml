@@ -62,5 +62,6 @@ klotho-phys.workspace = true
 workspace = true
 
 [dev-dependencies]
+klotho-canon.workspace = true
 klotho-save.workspace = true
 klotho-trace.workspace = true

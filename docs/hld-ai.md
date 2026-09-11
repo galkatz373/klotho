@@ -5,7 +5,7 @@
 | Document | High-Level Design — AI-native production for Klotho's first AAA title |
 | Author | Gal Katz |
 | Date | 2026-09-11 |
-| Status | Active successor plan (KAI-00–05 landed; KAI-06–24 not landed) |
+| Status | Active successor plan (KAI-00–06 landed; KAI-07–24 not landed) |
 | Baseline | `docs/hld.md` rev 6; AAA-01–27 landed |
 | Audience | Engine, tools, gameplay, content, AI platform, build, QA, and production leads |
 | Language | Rust (edition 2024; 2021-compatible crates OK) |
@@ -1911,7 +1911,7 @@ managers.
 
 ## PR plan
 
-Landed baseline: AAA-01–27 and KAI-00–05 (2026-09-11). KAI-06–24 remain planned.
+Landed baseline: AAA-01–27 and KAI-00–06 (2026-09-11). KAI-07–24 remain planned.
 Each header gains `— landed` only with its implementation, tests, date bump, and
 this section's landed list update.
 
@@ -2058,7 +2058,7 @@ flowchart TB
 - **Gate:** expansion deterministic on three OSes; every pattern has positive,
   negative, migration, cost, and journey fixtures; no runtime pattern type.
 
-#### KAI-06 — Journeys and trusted evidence
+#### KAI-06 — Journeys and trusted evidence — **landed 2026-09-11**
 
 - **Files:** new `klotho-eval`; debug/runtime test hooks; evidence in prove.
 - **Depends on:** KAI-03, KAI-04.

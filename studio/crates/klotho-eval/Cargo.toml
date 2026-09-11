@@ -1,17 +1,21 @@
 [package]
-name = "klotho-input"
+name = "klotho-eval"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Klotho input: device sample → PlayerIntent via a bind table"
+description = "Journeys, public-input execution, evidence bundles, affected-test selection"
 readme = false
 publish = false
 
 [dependencies]
 klotho-core.workspace = true
+klotho-debug.workspace = true
+klotho-input.workspace = true
 klotho-ir.workspace = true
+klotho-prove.workspace = true
+ron.workspace = true
 serde.workspace = true
 
 [lints]

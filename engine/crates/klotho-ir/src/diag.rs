@@ -291,6 +291,13 @@ pub fn diagnostic_catalog() -> &'static [DiagnosticCatalogEntry] {
         "PATTERN.Conflict",
         "PATTERN.Budget",
     ];
+    const EVAL: &[&str] = &[
+        "EVAL.Stale",
+        "EVAL.Select",
+        "EVAL.Projection",
+        "EVAL.Agency",
+        "EVAL.Replay",
+    ];
     const CANON: &[&str] = &[
         "CANON.MixedLabeling",
         "CANON.DuplicatePc",
@@ -448,6 +455,15 @@ pub fn diagnostic_catalog() -> &'static [DiagnosticCatalogEntry] {
                 legal_repairs: NONE,
             });
         }
+        for code in EVAL {
+            out.push(DiagnosticCatalogEntry {
+                code,
+                source: "klotho-eval",
+                class: class_for_detail(code),
+                retryable: false,
+                legal_repairs: NONE,
+            });
+        }
         out.push(DiagnosticCatalogEntry {
             code: "DEBUG.Budget",
             source: "klotho-debug",
@@ -477,6 +493,9 @@ fn class_for_detail(code: &str) -> FailureClass {
         | "CANON.Cycle" => FailureClass::Cfg,
         "CANON.Contradiction" | "CANON.LockableNeedsKeyOrRite" => FailureClass::Contradiction,
         "PATTERN.Budget" => FailureClass::Budget,
+        "EVAL.Stale" => FailureClass::Reproducibility,
+        "EVAL.Select" | "EVAL.Replay" => FailureClass::Journey,
+        "EVAL.Projection" | "EVAL.Agency" => FailureClass::Agency,
         "COMPILE.Warp" | "COMPILE.PackageAllowlist" | "COMPILE.MissingLockFile" => {
             FailureClass::Package
         }

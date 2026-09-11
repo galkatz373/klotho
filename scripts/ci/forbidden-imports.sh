@@ -36,6 +36,7 @@ check_gameplay_tables studio/crates/klotho-editor
 check_gameplay_tables studio/crates/klotho-ai
 check_gameplay_tables studio/crates/klotho-dcc
 check_gameplay_tables studio/crates/klotho-pattern
+check_gameplay_tables studio/crates/klotho-eval
 
 # klotho-interest may not import commit (K49).
 if command -v rg >/dev/null 2>&1; then
@@ -77,6 +78,7 @@ check_gameplay_jobs engine/examples/netlock-slice
 check_gameplay_jobs studio/crates/klotho-author
 check_gameplay_jobs studio/crates/klotho-editor
 check_gameplay_jobs studio/crates/klotho-ai
+check_gameplay_jobs studio/crates/klotho-eval
 
 # Gameplay and authoring must not import cook-time DCC.
 check_no_dcc() {
@@ -105,6 +107,7 @@ check_no_dcc engine/examples/netlock-slice
 check_no_dcc studio/crates/klotho-author
 check_no_dcc studio/crates/klotho-editor
 check_no_dcc studio/crates/klotho-ai
+check_no_dcc studio/crates/klotho-eval
 check_no_dcc engine/crates/klotho-sim
 check_no_dcc engine/crates/klotho-commit
 
@@ -135,6 +138,7 @@ check_no_phys engine/examples/netlock-slice
 check_no_phys studio/crates/klotho-author
 check_no_phys studio/crates/klotho-editor
 check_no_phys studio/crates/klotho-ai
+check_no_phys studio/crates/klotho-eval
 check_no_phys engine/crates/klotho-motion
 check_no_phys engine/crates/klotho-sim
 check_no_phys engine/crates/klotho-commit
@@ -167,6 +171,7 @@ check_no_stream engine/examples/netlock-slice
 check_no_stream studio/crates/klotho-author
 check_no_stream studio/crates/klotho-editor
 check_no_stream studio/crates/klotho-ai
+check_no_stream studio/crates/klotho-eval
 check_no_stream engine/crates/klotho-sim
 check_no_stream engine/crates/klotho-commit
 
@@ -266,6 +271,14 @@ if [[ -d engine/crates ]]; then
       echo "engine Cargo.toml must not depend on klotho-pattern" >&2
       fail=1
     fi
+    if rg -n --glob '!target/**' 'klotho_eval::' engine; then
+      echo "engine must not import klotho-eval" >&2
+      fail=1
+    fi
+    if rg -n --glob 'Cargo.toml' 'klotho-eval' engine; then
+      echo "engine Cargo.toml must not depend on klotho-eval" >&2
+      fail=1
+    fi
   else
     if grep -RIn -E 'klotho_ai::|klotho-ai' engine >/dev/null 2>&1; then
       echo "engine must not import klotho-ai" >&2
@@ -277,6 +290,14 @@ if [[ -d engine/crates ]]; then
     fi
     if grep -RIn -E 'klotho-pattern' engine --include='Cargo.toml' >/dev/null 2>&1; then
       echo "engine Cargo.toml must not depend on klotho-pattern" >&2
+      fail=1
+    fi
+    if grep -RIn -E 'klotho_eval::' engine >/dev/null 2>&1; then
+      echo "engine must not import klotho-eval" >&2
+      fail=1
+    fi
+    if grep -RIn -E 'klotho-eval' engine --include='Cargo.toml' >/dev/null 2>&1; then
+      echo "engine Cargo.toml must not depend on klotho-eval" >&2
       fail=1
     fi
   fi
@@ -315,6 +336,32 @@ if [[ -d studio/crates/klotho-ai ]]; then
   if grep -E 'klotho-commit|klotho-world|klotho-sim|klotho-runtime|klotho-infer' studio/crates/klotho-ai/Cargo.toml >/dev/null 2>&1; then
     echo "klotho-ai Cargo.toml must not depend on commit/world/sim/runtime/infer" >&2
     fail=1
+  fi
+fi
+
+if [[ -d studio/crates/klotho-eval ]]; then
+  if grep -E 'mutate' studio/crates/klotho-eval/Cargo.toml >/dev/null 2>&1; then
+    echo "klotho-eval must not enable klotho-world/mutate" >&2
+    fail=1
+  fi
+  if command -v rg >/dev/null 2>&1; then
+    if rg -n --glob '!target/**' 'world_mut|WorldMut|klotho_world::mutate' studio/crates/klotho-eval; then
+      echo "klotho-eval must not mutate World/Projection" >&2
+      fail=1
+    fi
+    if rg -n --glob '!target/**' 'klotho_infer::|klotho-infer' studio/crates/klotho-eval; then
+      echo "klotho-eval must not import infer" >&2
+      fail=1
+    fi
+  else
+    if grep -RIn -E 'world_mut|WorldMut|klotho_world::mutate' studio/crates/klotho-eval >/dev/null 2>&1; then
+      echo "klotho-eval must not mutate World/Projection" >&2
+      fail=1
+    fi
+    if grep -RIn -E 'klotho_infer::|klotho-infer' studio/crates/klotho-eval >/dev/null 2>&1; then
+      echo "klotho-eval must not import infer" >&2
+      fail=1
+    fi
   fi
 fi
 

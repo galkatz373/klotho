@@ -19,6 +19,39 @@ pub enum IrError {
     InvalidPhase(u16),
     /// Duplicate entry in `Agency.claimed`.
     DuplicateChannel,
+    /// Module `version` was zero.
+    InvalidModuleVersion,
+    /// Module import graph contains a cycle. Names are sorted.
+    ImportCycle(Vec<String>),
+    /// Locked or imported content hash does not match module bytes.
+    HashDrift {
+        /// Module id.
+        id: String,
+        /// Hash recorded in the lock or import.
+        expected: String,
+        /// Hash of the loaded module.
+        actual: String,
+    },
+    /// Two modules share an id.
+    DuplicateModule(String),
+    /// An import or lock entry names a module that is not loaded.
+    MissingModule(String),
+    /// A live object reuses a tombstoned name.
+    TombstoneReuse(String),
+    /// An alias collides with a live primary name.
+    AliasCollision(String),
+    /// A module parameter has no default and was not bound.
+    UnboundParameter(String),
+    /// Two objects were assigned the same [`crate::AnchorId`].
+    DuplicateAnchor(String),
+    /// A named live object has no immutable anchor.
+    MissingAnchor(String),
+    /// Two live objects in the flattened project share a name.
+    DuplicateObjectName(String),
+    /// An export names an object the module does not define.
+    ExportUnknown(String),
+    /// A parameter default does not match its declared type.
+    ParameterTypeMismatch(String),
 }
 
 impl fmt::Display for IrError {
@@ -31,6 +64,23 @@ impl fmt::Display for IrError {
             Self::InvalidRiteCap => write!(f, "InvalidRiteCap"),
             Self::InvalidPhase(p) => write!(f, "InvalidPhase({p})"),
             Self::DuplicateChannel => write!(f, "DuplicateChannel"),
+            Self::InvalidModuleVersion => write!(f, "InvalidModuleVersion"),
+            Self::ImportCycle(ids) => write!(f, "ImportCycle({})", ids.join(",")),
+            Self::HashDrift {
+                id,
+                expected,
+                actual,
+            } => write!(f, "HashDrift({id}: expected {expected}, got {actual})"),
+            Self::DuplicateModule(id) => write!(f, "DuplicateModule({id})"),
+            Self::MissingModule(id) => write!(f, "MissingModule({id})"),
+            Self::TombstoneReuse(name) => write!(f, "TombstoneReuse({name})"),
+            Self::AliasCollision(name) => write!(f, "AliasCollision({name})"),
+            Self::UnboundParameter(name) => write!(f, "UnboundParameter({name})"),
+            Self::DuplicateAnchor(id) => write!(f, "DuplicateAnchor({id})"),
+            Self::MissingAnchor(name) => write!(f, "MissingAnchor({name})"),
+            Self::DuplicateObjectName(name) => write!(f, "DuplicateObjectName({name})"),
+            Self::ExportUnknown(name) => write!(f, "ExportUnknown({name})"),
+            Self::ParameterTypeMismatch(name) => write!(f, "ParameterTypeMismatch({name})"),
         }
     }
 }

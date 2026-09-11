@@ -1,4 +1,4 @@
-//! Cook: IntentDoc + closed kitbash → Canon + CAS.
+//! Cook: IntentDoc or flattened IntentProject + closed kitbash → Canon + CAS.
 //!
 //! v1 Weaver is **retrieval**. Missing tags are cook errors, not synthesis
 //! (K6 / Q4). Every blob carries a [`LicenseSpan`]. Quantized little-endian
@@ -29,8 +29,8 @@ pub use catalog::{
     license_coverage, write_catalog, write_catalog_incremental,
 };
 pub use cook::{
-    Binding, COMPILER_VERSION, Cooked, DccArtifact, blob_of, cook_doc, cook_with, cook_with_dcc,
-    digest_of,
+    Binding, COMPILER_VERSION, Cooked, DccArtifact, blob_of, cook_doc, cook_project, cook_with,
+    cook_with_dcc, digest_of,
 };
 pub use encode::{encode_clipset, encode_hull, encode_mesh_i16};
 pub use epoch::{

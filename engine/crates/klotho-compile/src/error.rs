@@ -39,6 +39,8 @@ pub enum CompileError {
     Gltf(String),
     /// The current epoch is `u64::MAX` and cannot advance.
     EpochOverflow,
+    /// Modular Intent failed to flatten (cycle, hash drift, missing module).
+    Flatten(String),
 }
 
 impl CompileError {
@@ -70,6 +72,7 @@ impl fmt::Display for CompileError {
             Self::Warp(s) => write!(f, "Warp({s})"),
             Self::Gltf(s) => write!(f, "Gltf({s})"),
             Self::EpochOverflow => write!(f, "EpochOverflow"),
+            Self::Flatten(s) => write!(f, "Flatten({s})"),
         }
     }
 }

@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Distaff: RON/kdown authoring, cook-time Pin, CLI cook/preview"
+description = "Distaff: RON/kdown authoring, modular Intent migrate/flatten, cook-time Pin, CLI cook/preview"
 readme = false
 publish = false
 

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "toolchain_hash": "03e56198089aee7605e606a51c82d6bd63bf64c2d2f0a9b11017db37c28e0135",
+  "toolchain_hash": "b08c120f57563478c5821fde77aff258a665b1499188d6fcad6d6960eb97bdcb",
   "kinds": [
     {
       "id": "klotho_ir::IntentDoc",
@@ -45,6 +45,372 @@
       "variants": [],
       "positive_example": "(style:(notes:\"\",palettes:[],kitbash_tags:[]),canon_diffs:[],seed:[],minds:[],provenance:\"0000000000000000000000000000000000000000000000000000000000000000\")",
       "negative_example": "(style:())"
+    },
+    {
+      "id": "klotho_ir::IntentProject",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "project",
+          "ty": "Name",
+          "description": "project namespace",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "modules",
+          "ty": "Vec<IntentModuleRef>",
+          "description": "module refs; flatten sorts by id",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "lock",
+          "ty": "ModuleLock",
+          "description": "content-hash lock",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(project:\"hearth\",modules:[],lock:(entries:[]))",
+      "negative_example": "(project:\"\",modules:[],lock:(entries:[]))"
+    },
+    {
+      "id": "klotho_ir::IntentModule",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "anchor",
+          "ty": "AnchorId",
+          "description": "immutable module identity",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "id",
+          "ty": "Name",
+          "description": "authoring id",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "version",
+          "ty": "u32",
+          "description": "module format version",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "imports",
+          "ty": "Vec<ModuleImport>",
+          "description": "hash-locked imports",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "exports",
+          "ty": "Vec<Name>",
+          "description": "exported names",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "parameters",
+          "ty": "Vec<ParameterDecl>",
+          "description": "module parameters",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "aliases",
+          "ty": "Vec<NameAlias>",
+          "description": "former names",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "tombstones",
+          "ty": "Vec<Tombstone>",
+          "description": "removed objects",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "object_anchors",
+          "ty": "Vec<ObjectAnchor>",
+          "description": "frozen identities",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "body",
+          "ty": "IntentDoc",
+          "description": "ordinary Intent body",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(anchor:\"00000000000000000000000000000000\",id:\"main\",version:1,imports:[],exports:[],parameters:[],aliases:[],tombstones:[],object_anchors:[],body:(style:(notes:\"\",palettes:[],kitbash_tags:[]),canon_diffs:[],seed:[],minds:[],provenance:\"0000000000000000000000000000000000000000000000000000000000000000\"))",
+      "negative_example": "(anchor:\"00\",id:\"\",version:0,imports:[],exports:[],parameters:[],aliases:[],tombstones:[],object_anchors:[],body:())"
+    },
+    {
+      "id": "klotho_ir::IntentModuleRef",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "id",
+          "ty": "Name",
+          "description": "module id",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "path",
+          "ty": "String",
+          "description": "path relative to the project file",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "hash",
+          "ty": "Hash",
+          "description": "content hash",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(id:\"main\",path:\"modules/main.ron\",hash:\"0000000000000000000000000000000000000000000000000000000000000000\")",
+      "negative_example": "(id:\"\",path:\"\",hash:\"00\")"
+    },
+    {
+      "id": "klotho_ir::ModuleLock",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "entries",
+          "ty": "Vec<LockEntry>",
+          "description": "sorted id/hash pairs",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(entries:[])",
+      "negative_example": "(entries:())"
+    },
+    {
+      "id": "klotho_ir::ModuleImport",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "id",
+          "ty": "Name",
+          "description": "imported module id",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "hash",
+          "ty": "Hash",
+          "description": "expected content hash",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(id:\"core\",hash:\"0000000000000000000000000000000000000000000000000000000000000000\")",
+      "negative_example": "(id:\"\",hash:\"00\")"
+    },
+    {
+      "id": "klotho_ir::ParameterDecl",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "name",
+          "ty": "Name",
+          "description": "parameter name",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "ty",
+          "ty": "ParameterType",
+          "description": "value type",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "default",
+          "ty": "Option<ParameterValue>",
+          "description": "flatten default",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(name:\"scale\",ty:I32,default:Some(I32(1)))",
+      "negative_example": "(name:\"\",ty:I32,default:None)"
+    },
+    {
+      "id": "klotho_ir::ObjectAnchor",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "kind",
+          "ty": "AnchorKind",
+          "description": "object family",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "name",
+          "ty": "Name",
+          "description": "current name",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "anchor",
+          "ty": "AnchorId",
+          "description": "frozen identity",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(kind:Locus,name:\"oak_door\",anchor:\"00000000000000000000000000000000\")",
+      "negative_example": "(kind:Locus,name:\"\",anchor:\"00\")"
+    },
+    {
+      "id": "klotho_ir::SourceSpan",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "module",
+          "ty": "AnchorId",
+          "description": "originating module",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "kind",
+          "ty": "SpanKind",
+          "description": "item family",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "index",
+          "ty": "u32",
+          "description": "index within the family",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "start",
+          "ty": "u32",
+          "description": "canonical stream start",
+          "min": 0,
+          "max": 4294967295
+        },
+        {
+          "name": "end",
+          "ty": "u32",
+          "description": "canonical stream end",
+          "min": 0,
+          "max": 4294967295
+        }
+      ],
+      "variants": [],
+      "positive_example": "(module:\"00000000000000000000000000000000\",kind:Seed,index:0,start:0,end:0)",
+      "negative_example": "(module:\"00\",kind:Seed,index:0,start:0,end:0)"
+    },
+    {
+      "id": "klotho_ir::AnchorKind",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "Module",
+          "discriminant": 0,
+          "payload": "unit",
+          "description": "module identity"
+        },
+        {
+          "name": "Locus",
+          "discriminant": 1,
+          "payload": "unit",
+          "description": "seed locus"
+        },
+        {
+          "name": "Law",
+          "discriminant": 2,
+          "payload": "unit",
+          "description": "law id"
+        },
+        {
+          "name": "Affordance",
+          "discriminant": 3,
+          "payload": "unit",
+          "description": "affordance id"
+        },
+        {
+          "name": "Rite",
+          "discriminant": 4,
+          "payload": "unit",
+          "description": "rite id"
+        },
+        {
+          "name": "Beat",
+          "discriminant": 5,
+          "payload": "unit",
+          "description": "beat id"
+        },
+        {
+          "name": "Mind",
+          "discriminant": 6,
+          "payload": "unit",
+          "description": "mind spec"
+        }
+      ],
+      "positive_example": "Locus",
+      "negative_example": "UnknownVariant"
+    },
+    {
+      "id": "klotho_ir::ParameterType",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "Name",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "module parameter type"
+        },
+        {
+          "name": "I32",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "module parameter type"
+        },
+        {
+          "name": "Bool",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "module parameter type"
+        },
+        {
+          "name": "Anchor",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "module parameter type"
+        }
+      ],
+      "positive_example": "I32",
+      "negative_example": "UnknownVariant"
     },
     {
       "id": "klotho_ir::StyleIntent",
@@ -1463,6 +1829,71 @@
       "retryable": false
     },
     {
+      "code": "IR.InvalidModuleVersion",
+      "source": "klotho-ir",
+      "retryable": false
+    },
+    {
+      "code": "IR.ImportCycle",
+      "source": "klotho-ir",
+      "retryable": false
+    },
+    {
+      "code": "IR.HashDrift",
+      "source": "klotho-ir",
+      "retryable": false
+    },
+    {
+      "code": "IR.DuplicateModule",
+      "source": "klotho-ir",
+      "retryable": false
+    },
+    {
+      "code": "IR.MissingModule",
+      "source": "klotho-ir",
+      "retryable": false
+    },
+    {
+      "code": "IR.TombstoneReuse",
+      "source": "klotho-ir",
+      "retryable": false
+    },
+    {
+      "code": "IR.AliasCollision",
+      "source": "klotho-ir",
+      "retryable": false
+    },
+    {
+      "code": "IR.UnboundParameter",
+      "source": "klotho-ir",
+      "retryable": false
+    },
+    {
+      "code": "IR.DuplicateAnchor",
+      "source": "klotho-ir",
+      "retryable": false
+    },
+    {
+      "code": "IR.MissingAnchor",
+      "source": "klotho-ir",
+      "retryable": false
+    },
+    {
+      "code": "IR.DuplicateObjectName",
+      "source": "klotho-ir",
+      "retryable": false
+    },
+    {
+      "code": "IR.ExportUnknown",
+      "source": "klotho-ir",
+      "retryable": false
+    },
+    {
+      "code": "IR.ParameterTypeMismatch",
+      "source": "klotho-ir",
+      "retryable": false
+    },
+    {
       "code": "CANON.MixedLabeling",
       "source": "klotho-canon",
       "retryable": false
@@ -1631,6 +2062,42 @@
         "provenance"
       ],
       "cost_units": 2
+    },
+    {
+      "id": "module.add@1",
+      "input": "IntentModule",
+      "writes": [
+        "modules",
+        "lock"
+      ],
+      "cost_units": 3
+    },
+    {
+      "id": "module.import@1",
+      "input": "ModuleImport",
+      "writes": [
+        "imports",
+        "lock"
+      ],
+      "cost_units": 2
+    },
+    {
+      "id": "anchor.rename@1",
+      "input": "{target:AnchorId,to:Name}",
+      "writes": [
+        "body",
+        "aliases"
+      ],
+      "cost_units": 2
+    },
+    {
+      "id": "object.tombstone@1",
+      "input": "Tombstone",
+      "writes": [
+        "tombstones",
+        "body"
+      ],
+      "cost_units": 3
     }
   ]
 }

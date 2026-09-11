@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use klotho_canon::{Canon, cook as cook_canon};
 use klotho_core::Hash;
-use klotho_ir::{IntentDoc, Name, SeedFact, to_ron};
+use klotho_ir::{IntentDoc, IntentModule, IntentProject, Name, SeedFact, to_ron};
 use klotho_manifest::MaterialTag;
 use klotho_prove::{
     Activity, Agent, ArtifactKind, Cas, LicenseSpan, ProveError, ProvenanceDag, ProvenanceKind,
@@ -87,6 +87,17 @@ pub struct DccArtifact {
 /// Cook `doc` against the workspace kitbash.
 pub fn cook_doc(doc: &IntentDoc) -> Result<Cooked, CompileError> {
     cook_with(doc, &Kitbash::load_default()?)
+}
+
+/// Flatten a locked project, then cook the resulting [`IntentDoc`].
+pub fn cook_project(
+    project: &IntentProject,
+    modules: &[IntentModule],
+) -> Result<Cooked, CompileError> {
+    let flat = project
+        .flatten(modules)
+        .map_err(|e| CompileError::Flatten(e.to_string()))?;
+    cook_doc(&flat.doc)
 }
 
 /// Cook `doc` against an already-loaded library.
@@ -593,6 +604,25 @@ mod tests {
                 .any(|b| b.locus.as_str() == "fathers_hammer")
         );
         assert_eq!(cooked.cook_hash, cook_doc(&doc).unwrap().cook_hash);
+    }
+
+    #[test]
+    fn migrated_hearth_flattens_to_same_cook() {
+        let doc = hearth_slice::hearth_doc();
+        let bundle = klotho_ir::migrate_doc(
+            klotho_ir::Name::from("hearth"),
+            klotho_ir::Name::from("main"),
+            doc.clone(),
+        )
+        .unwrap();
+        let flat = bundle.project.flatten(&bundle.modules).unwrap();
+        assert_eq!(flat.doc, doc);
+        let direct = cook_doc(&doc).unwrap();
+        let via_project = cook_project(&bundle.project, &bundle.modules).unwrap();
+        assert_eq!(direct.cook_hash, via_project.cook_hash);
+        assert_eq!(direct.canon.laws.len(), via_project.canon.laws.len());
+        assert_eq!(direct.canon.rites.len(), via_project.canon.rites.len());
+        assert_eq!(direct.canon.pin_names, via_project.canon.pin_names);
     }
 
     #[test]

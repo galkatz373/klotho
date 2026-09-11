@@ -3,6 +3,9 @@
 //! v1 canonical syntax is **RON**. kdown sugar (same AST) is owned by Distaff
 //! (`klotho-author`). There is no natural-language compiler in v1 (Q3).
 //!
+//! [`IntentProject`] is the modular authoring form. Flattening is a pure
+//! function of locked module bytes and yields a current [`IntentDoc`].
+//!
 //! [`from_ron`] is the canonical parser. Distaff desugars `*.kdown` into this AST.
 //!
 //! This crate does **not** execute Laws or Rites. Cook/eval lives in
@@ -20,6 +23,7 @@
 
 mod agency;
 mod analog;
+mod anchor;
 mod decl;
 mod doc;
 mod error;
@@ -29,6 +33,7 @@ mod name;
 mod parse;
 mod player;
 mod pred;
+mod project;
 mod rel;
 mod seed;
 mod style;
@@ -38,6 +43,7 @@ mod verb;
 
 pub use agency::{Agency, AssistLevel, Channel};
 pub use analog::Analog;
+pub use anchor::AnchorId;
 pub use decl::{
     Affordance, Beat, BindSrc, CanonDiff, Cost, Law, LawBody, RiteGraph, RiteNode, RiteOp, Status,
 };
@@ -51,6 +57,11 @@ pub use name::Name;
 pub use parse::{from_ron, to_ron};
 pub use player::PlayerIntent;
 pub use pred::{Cmp, Pred, SourceKind};
+pub use project::{
+    AnchorKind, Flattened, IntentModule, IntentModuleRef, IntentProject, LockEntry, ModuleImport,
+    ModuleLock, NameAlias, ObjectAnchor, ParameterDecl, ParameterType, ParameterValue,
+    ProjectBundle, SourceSpan, SpanKind, Tombstone, migrate_doc, module_content_hash,
+};
 pub use rel::Rel;
 pub use seed::SeedFact;
 pub use style::StyleIntent;

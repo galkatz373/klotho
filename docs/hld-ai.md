@@ -5,7 +5,7 @@
 | Document | High-Level Design — AI-native production for Klotho's first AAA title |
 | Author | Gal Katz |
 | Date | 2026-09-11 |
-| Status | Active successor plan (KAI-00–01 landed; KAI-02–24 not landed) |
+| Status | Active successor plan (KAI-00–02 landed; KAI-03–24 not landed) |
 | Baseline | `docs/hld.md` rev 6; AAA-01–27 landed |
 | Audience | Engine, tools, gameplay, content, AI platform, build, QA, and production leads |
 | Language | Rust (edition 2024; 2021-compatible crates OK) |
@@ -1911,7 +1911,7 @@ managers.
 
 ## PR plan
 
-Landed baseline: AAA-01–27 and KAI-00–01 (2026-09-11). KAI-02–24 remain planned.
+Landed baseline: AAA-01–27 and KAI-00–02 (2026-09-11). KAI-03–24 remain planned.
 Each header gains `— landed` only with its implementation, tests, date bump, and
 this section's landed list update.
 
@@ -2017,7 +2017,7 @@ flowchart TB
   undocumented authorable field fails CI; clean engine export builds/tests with
   the `studio/` tree absent and has no reverse dependency.
 
-#### KAI-02 — Modular Intent, locks, and immutable semantic anchors
+#### KAI-02 — Modular Intent, locks, and immutable semantic anchors — **landed 2026-09-11**
 
 - **Files:** `klotho-ir`, `klotho-author`, `klotho-compile`, migration tool.
 - **Depends on:** KAI-01.

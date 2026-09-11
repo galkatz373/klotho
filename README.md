@@ -74,7 +74,7 @@ klotho/
   engine/Cargo.toml       # Runtime/presenter/game-package workspace
   engine/crates/klotho-core/ # Tick, Mm, VelFx, YawMd, Sigil, Budget, Hash, Rng
   engine/crates/klotho-prove/ # Provenance DAG, LicenseSpan, blake3 CAS
-  engine/crates/klotho-ir/       # IntentDoc, PlayerIntent, MindIntent, InferIntent, RON
+  engine/crates/klotho-ir/       # IntentDoc, IntentProject, PlayerIntent, MindIntent, InferIntent, RON
   engine/crates/klotho-canon/    # Laws, Affordances, Pred bytecode, Rite ISA, eval
   engine/crates/klotho-trace/    # TraceEvent, TraceLog prefix hash, TraceDelta
   engine/crates/klotho-world/    # Private World, Projection, space_ix, snapshot

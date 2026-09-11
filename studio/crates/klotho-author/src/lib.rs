@@ -17,11 +17,13 @@ mod error;
 mod parse;
 mod pin;
 mod preview;
+mod project;
 
 pub use error::AuthorError;
-pub use parse::{load_file, parse_kdown, parse_ron};
+pub use parse::{load_doc_file, parse_kdown, parse_ron};
 pub use pin::{Pin, apply_pin};
 pub use preview::{cook_summary, cook_validated, preview_summary};
+pub use project::{Loaded, flatten_bundle, load_any, load_file, migrate_to_dir, write_bundle};
 
-pub use klotho_compile::{Cooked, cook_doc};
-pub use klotho_ir::{IntentDoc, from_ron, to_ron, validate_doc};
+pub use klotho_compile::{Cooked, cook_doc, cook_project};
+pub use klotho_ir::{IntentDoc, IntentProject, from_ron, to_ron, validate_doc};

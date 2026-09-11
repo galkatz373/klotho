@@ -306,6 +306,120 @@ fn type_schemas() -> Vec<TypeSchema> {
             "(style:())",
         ),
         structure(
+            "klotho_ir::IntentProject",
+            vec![
+                field("project", "Name", "project namespace"),
+                field(
+                    "modules",
+                    "Vec<IntentModuleRef>",
+                    "module refs; flatten sorts by id",
+                ),
+                field("lock", "ModuleLock", "content-hash lock"),
+            ],
+            "(project:\"hearth\",modules:[],lock:(entries:[]))",
+            "(project:\"\",modules:[],lock:(entries:[]))",
+        ),
+        structure(
+            "klotho_ir::IntentModule",
+            vec![
+                field("anchor", "AnchorId", "immutable module identity"),
+                field("id", "Name", "authoring id"),
+                field("version", "u32", "module format version"),
+                field("imports", "Vec<ModuleImport>", "hash-locked imports"),
+                field("exports", "Vec<Name>", "exported names"),
+                field("parameters", "Vec<ParameterDecl>", "module parameters"),
+                field("aliases", "Vec<NameAlias>", "former names"),
+                field("tombstones", "Vec<Tombstone>", "removed objects"),
+                field("object_anchors", "Vec<ObjectAnchor>", "frozen identities"),
+                field("body", "IntentDoc", "ordinary Intent body"),
+            ],
+            "(anchor:\"00000000000000000000000000000000\",id:\"main\",version:1,imports:[],exports:[],parameters:[],aliases:[],tombstones:[],object_anchors:[],body:(style:(notes:\"\",palettes:[],kitbash_tags:[]),canon_diffs:[],seed:[],minds:[],provenance:\"0000000000000000000000000000000000000000000000000000000000000000\"))",
+            "(anchor:\"00\",id:\"\",version:0,imports:[],exports:[],parameters:[],aliases:[],tombstones:[],object_anchors:[],body:())",
+        ),
+        structure(
+            "klotho_ir::IntentModuleRef",
+            vec![
+                field("id", "Name", "module id"),
+                field("path", "String", "path relative to the project file"),
+                field("hash", "Hash", "content hash"),
+            ],
+            "(id:\"main\",path:\"modules/main.ron\",hash:\"0000000000000000000000000000000000000000000000000000000000000000\")",
+            "(id:\"\",path:\"\",hash:\"00\")",
+        ),
+        structure(
+            "klotho_ir::ModuleLock",
+            vec![field("entries", "Vec<LockEntry>", "sorted id/hash pairs")],
+            "(entries:[])",
+            "(entries:())",
+        ),
+        structure(
+            "klotho_ir::ModuleImport",
+            vec![
+                field("id", "Name", "imported module id"),
+                field("hash", "Hash", "expected content hash"),
+            ],
+            "(id:\"core\",hash:\"0000000000000000000000000000000000000000000000000000000000000000\")",
+            "(id:\"\",hash:\"00\")",
+        ),
+        structure(
+            "klotho_ir::ParameterDecl",
+            vec![
+                field("name", "Name", "parameter name"),
+                field("ty", "ParameterType", "value type"),
+                field("default", "Option<ParameterValue>", "flatten default"),
+            ],
+            "(name:\"scale\",ty:I32,default:Some(I32(1)))",
+            "(name:\"\",ty:I32,default:None)",
+        ),
+        structure(
+            "klotho_ir::ObjectAnchor",
+            vec![
+                field("kind", "AnchorKind", "object family"),
+                field("name", "Name", "current name"),
+                field("anchor", "AnchorId", "frozen identity"),
+            ],
+            "(kind:Locus,name:\"oak_door\",anchor:\"00000000000000000000000000000000\")",
+            "(kind:Locus,name:\"\",anchor:\"00\")",
+        ),
+        structure(
+            "klotho_ir::SourceSpan",
+            vec![
+                field("module", "AnchorId", "originating module"),
+                field("kind", "SpanKind", "item family"),
+                field("index", "u32", "index within the family"),
+                bounded("start", "u32", "canonical stream start", 0, 4_294_967_295),
+                bounded("end", "u32", "canonical stream end", 0, 4_294_967_295),
+            ],
+            "(module:\"00000000000000000000000000000000\",kind:Seed,index:0,start:0,end:0)",
+            "(module:\"00\",kind:Seed,index:0,start:0,end:0)",
+        ),
+        enumeration(
+            "klotho_ir::AnchorKind",
+            [
+                ("Module", 0, "module identity"),
+                ("Locus", 1, "seed locus"),
+                ("Law", 2, "law id"),
+                ("Affordance", 3, "affordance id"),
+                ("Rite", 4, "rite id"),
+                ("Beat", 5, "beat id"),
+                ("Mind", 6, "mind spec"),
+            ]
+            .into_iter()
+            .map(|(n, d, desc)| variant(n, Some(d), "unit", desc))
+            .collect(),
+            "Locus",
+        ),
+        enumeration(
+            "klotho_ir::ParameterType",
+            {
+                ["Name", "I32", "Bool", "Anchor"]
+                    .into_iter()
+                    .map(|n| variant(n, None, "unit", "module parameter type"))
+                    .collect()
+            },
+            "I32",
+        ),
+        structure(
             "klotho_ir::StyleIntent",
             vec![
                 field("notes", "String", "free-form visual direction"),
@@ -666,6 +780,19 @@ fn diagnostics() -> Vec<DiagnosticSchema> {
         "InvalidRiteCap",
         "InvalidPhase",
         "DuplicateChannel",
+        "InvalidModuleVersion",
+        "ImportCycle",
+        "HashDrift",
+        "DuplicateModule",
+        "MissingModule",
+        "TombstoneReuse",
+        "AliasCollision",
+        "UnboundParameter",
+        "DuplicateAnchor",
+        "MissingAnchor",
+        "DuplicateObjectName",
+        "ExportUnknown",
+        "ParameterTypeMismatch",
     ];
     let canon = [
         "MixedLabeling",
@@ -736,6 +863,20 @@ fn operations() -> Vec<OperationSchema> {
             "{old:ProvenanceId,new:ProvenanceId}",
             &["provenance"],
             2,
+        ),
+        ("module.add@1", "IntentModule", &["modules", "lock"], 3),
+        ("module.import@1", "ModuleImport", &["imports", "lock"], 2),
+        (
+            "anchor.rename@1",
+            "{target:AnchorId,to:Name}",
+            &["body", "aliases"],
+            2,
+        ),
+        (
+            "object.tombstone@1",
+            "Tombstone",
+            &["tombstones", "body"],
+            3,
         ),
     ]
     .into_iter()
@@ -833,12 +974,30 @@ mod tests {
             style: StyleIntent::default(),
             canon_diffs: Vec::new(),
             seed: vec![SeedFact::Locus {
-                name,
+                name: name.clone(),
                 kind: LocusKind::Actor,
             }],
             minds: Vec::new(),
             provenance: ProvenanceId(Hash::ZERO),
         });
+        let bundle = klotho_ir::migrate_doc(
+            Name::from("hearth"),
+            Name::from("main"),
+            IntentDoc {
+                style: StyleIntent::default(),
+                canon_diffs: Vec::new(),
+                seed: vec![SeedFact::Locus {
+                    name,
+                    kind: LocusKind::Actor,
+                }],
+                minds: Vec::new(),
+                provenance: ProvenanceId(Hash::ZERO),
+            },
+        )
+        .unwrap();
+        round_trip(&bundle.project);
+        round_trip(&bundle.modules[0]);
+        round_trip(&bundle.modules[0].anchor);
     }
 
     #[test]

@@ -44,8 +44,8 @@ use serde::de::DeserializeOwned;
 
 use crate::error::AuthorError;
 
-/// Load by extension: `*.kdown` is sugar, anything else is canonical RON.
-pub fn load_file(path: &Path) -> Result<IntentDoc, AuthorError> {
+/// Load a single [`IntentDoc`] by extension. Projects go through [`crate::load_file`].
+pub fn load_doc_file(path: &Path) -> Result<IntentDoc, AuthorError> {
     let src = std::fs::read_to_string(path)
         .map_err(|e| AuthorError::Io(format!("{}: {e}", path.display())))?;
     match path.extension().and_then(|e| e.to_str()) {

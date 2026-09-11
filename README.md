@@ -12,6 +12,7 @@ This is not Bevy + an LLM. Models may propose; only `CommitKernel` commits.
 **Tools:** Distaff (authoring), Weaver (cook + present), `.warp` (package).
 
 The current high-level design is in [`docs/hld.md`](docs/hld.md). The original v1 design is preserved in [`docs/hld-v1.md`](docs/hld-v1.md).
+The proposed post-AAA plan for AI-native, end-to-end production of Klotho's first AAA title is in [`docs/hld-ai.md`](docs/hld-ai.md); it does not supersede the current HLD until its decisions land.
 
 ## Status
 

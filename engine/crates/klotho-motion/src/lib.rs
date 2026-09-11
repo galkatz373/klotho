@@ -16,7 +16,10 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
-pub use klotho_anim::{Clip, ClipSet, WALK_MM_PER_TICK};
+pub use klotho_anim::{
+    ArtifactAuthority, Clip, ClipSet, EvidenceLane, WALK_MM_PER_TICK, classify_clip,
+    classify_clip_change,
+};
 pub use klotho_core::rotate_xz;
 
 use klotho_commit::{AdmitBuf, IslandProposer, Proposal, SyncProposer};

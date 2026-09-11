@@ -15,12 +15,14 @@
 
 pub(crate) mod tables;
 
+mod feel;
 mod material;
 mod observer;
 mod sonic;
 mod ui;
 mod visual;
 
+pub use feel::FeelManifest;
 pub use material::MaterialTag;
 pub use observer::{EYE_HEIGHT_MM, GpuBudget, Observer};
 pub use sonic::{BedRef, GrainVoice, SonicManifest};

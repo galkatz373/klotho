@@ -118,6 +118,42 @@ pub fn specs() -> &'static [PatternSpec] {
     const ZONE_PARAMS: &[ParamSpec] = &[n("place"), n_d("tag", "zone")];
     const UI_PARAMS: &[ParamSpec] = &[n("actor"), n("action")];
     const PERF_PARAMS: &[ParamSpec] = &[n("place"), i_d("budget_ms", 8)];
+    const FEEL_ACTION_PARAMS: &[ParamSpec] = &[
+        n("actor"),
+        n_d("action", "use"),
+        i_d("buffer_ticks", 2),
+        i_d("coyote_ticks", 2),
+        i_d("cancel_start", 0),
+        i_d("cancel_end", 3),
+        i_d("combo_start", 4),
+        i_d("combo_end", 8),
+        i_d("recovery_wait", 4),
+        i_d("hit_stop_present", 2),
+    ];
+    const FEEL_CAMERA_PARAMS: &[ParamSpec] = &[
+        n("actor"),
+        i_d("smoothing_ticks", 2),
+        i_d("follow_stiffness", 500),
+        i_d("shake_amp_mm", 8),
+        i_d("shake_cap_mm", 16),
+        i_d("hull_radius_mm", 250),
+    ];
+    const FEEL_AIM_PARAMS: &[ParamSpec] = &[
+        n("actor"),
+        i_d("magnet_permille", 250),
+        i_d("cone_md", 8000),
+        i_d("max_correction_md", 2000),
+    ];
+    const FEEL_HAPTIC_PARAMS: &[ParamSpec] =
+        &[n("actor"), n_d("action", "use"), n_d("haptic", "hit")];
+    const FEEL_ACCESS_PARAMS: &[ParamSpec] = &[
+        n("actor"),
+        n_d("action", "use"),
+        b_d("reduce_shake", false),
+        b_d("reduce_haptics", false),
+        b_d("hold_to_toggle", false),
+        b_d("aim_assist_required", false),
+    ];
 
     const S: &[PatternSpec] = &[
         spec!(
@@ -498,6 +534,51 @@ pub fn specs() -> &'static [PatternSpec] {
             conflicts: &[],
             budget: budget(8, 8),
             journeys: &["start", "budget_ok", "over_budget"]
+        ),
+        spec!(
+            "feel.action_contract", 1, PatternFamily::Feel, ExpandKind::FeelContract,
+            params: FEEL_ACTION_PARAMS,
+            req: &[("actor", "Mobile")],
+            grants: &[("actor", "FeelTuned")],
+            conflicts: &[],
+            budget: budget(8, 8),
+            journeys: &["buffered", "coyote", "recover"]
+        ),
+        spec!(
+            "feel.camera_response", 1, PatternFamily::Feel, ExpandKind::FeelContract,
+            params: FEEL_CAMERA_PARAMS,
+            req: &[("actor", "Mobile")],
+            grants: &[("actor", "CameraFeel")],
+            conflicts: &[],
+            budget: budget(4, 8),
+            journeys: &["follow", "shake_capped", "hull_clear"]
+        ),
+        spec!(
+            "feel.aim_assist", 1, PatternFamily::Feel, ExpandKind::FeelContract,
+            params: FEEL_AIM_PARAMS,
+            req: &[("actor", "Mobile")],
+            grants: &[("actor", "AimAssist")],
+            conflicts: &[],
+            budget: budget(4, 8),
+            journeys: &["magnet", "cone", "off"]
+        ),
+        spec!(
+            "feel.haptic_cue", 1, PatternFamily::Feel, ExpandKind::FeelContract,
+            params: FEEL_HAPTIC_PARAMS,
+            req: &[("actor", "Mobile")],
+            grants: &[("actor", "Haptic")],
+            conflicts: &[],
+            budget: budget(4, 8),
+            journeys: &["play", "fallback"]
+        ),
+        spec!(
+            "feel.accessibility", 1, PatternFamily::Feel, ExpandKind::FeelContract,
+            params: FEEL_ACCESS_PARAMS,
+            req: &[("actor", "Mobile")],
+            grants: &[("actor", "AccessibleFeel")],
+            conflicts: &[],
+            budget: budget(4, 8),
+            journeys: &["default", "reduced", "hold_toggle"]
         ),
     ];
     S

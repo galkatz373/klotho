@@ -54,6 +54,13 @@ pub enum IrError {
     ParameterTypeMismatch(String),
     /// A pattern instance is still present at flatten time.
     UnexpandedPattern(String),
+    /// A [`crate::FeelContract`] field is out of bounds.
+    InvalidFeel {
+        /// Field path (`input_buffer_ticks`).
+        field: String,
+        /// Why it failed.
+        reason: String,
+    },
 }
 
 impl fmt::Display for IrError {
@@ -84,6 +91,7 @@ impl fmt::Display for IrError {
             Self::ExportUnknown(name) => write!(f, "ExportUnknown({name})"),
             Self::ParameterTypeMismatch(name) => write!(f, "ParameterTypeMismatch({name})"),
             Self::UnexpandedPattern(id) => write!(f, "UnexpandedPattern({id})"),
+            Self::InvalidFeel { field, reason } => write!(f, "InvalidFeel({field}: {reason})"),
         }
     }
 }

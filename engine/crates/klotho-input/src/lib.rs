@@ -3,6 +3,11 @@
 //! Injected devices are the v1 test surface. OS backends land with
 //! `klotho-platform`. Runtime wraps the result as `Proposal::Player`.
 //!
+//! KAI-10 adds a typed [`klotho_ir::FeelContract`] mapper: bounded input
+//! buffer, coyote and cancel/combo windows, fixed-point stick curves,
+//! aim-assist, and device-latency capture. Hit-stop remains Manifest;
+//! recovery is Rite `WAIT`.
+//!
 //! `#![forbid(unsafe_code)]`.
 
 #![forbid(unsafe_code)]
@@ -14,6 +19,10 @@ use serde::{Deserialize, Serialize};
 
 use klotho_core::{PlayerId, Tick, YawMd};
 use klotho_ir::{Agency, Analog, Channel, IntentTarget, PlayerIntent, Verb};
+
+mod feel;
+
+pub use feel::{DeviceLane, FeelGate, FeelMapper, LatencyLog, LatencySample, apply_aim_assist};
 
 /// One digital control a bind table can name.
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Serialize, Deserialize)]
@@ -166,6 +175,12 @@ pub struct DeviceSample {
     pub phase: u16,
     /// Intent target (reticle / interact).
     pub target: IntentTarget,
+    /// Support under the actor this sample. Coyote reads this; it is not Projection.
+    pub grounded: bool,
+    /// Caller-supplied sample timestamp, microseconds. Latency capture only.
+    pub sample_us: u64,
+    /// Signed yaw error to the aim magnet target, millidegrees. Zero = no target.
+    pub aim_yaw_error_md: i32,
 }
 
 impl DeviceSample {
@@ -182,6 +197,9 @@ impl DeviceSample {
             look_pitch: 0,
             phase: 0,
             target: IntentTarget::None,
+            grounded: false,
+            sample_us: 0,
+            aim_yaw_error_md: 0,
         }
     }
 }

@@ -7,8 +7,10 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod camera;
 mod track;
 
+pub use camera::CameraFeel;
 pub use track::{CinematicManifest, Keyframe, ObserverTrack, PlayerPhys, TrackError};
 
 pub use klotho_ir::{Beat, LocusKind, Name};

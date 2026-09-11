@@ -15,10 +15,12 @@ path = "src/main.rs"
 
 [dependencies]
 klotho-ai.workspace = true
+klotho-anim.workspace = true
 klotho-author.workspace = true
 klotho-commit.workspace = true
 klotho-core.workspace = true
 klotho-eval.workspace = true
+klotho-input.workspace = true
 klotho-ir.workspace = true
 klotho-prove.workspace = true
 klotho-manifest.workspace = true

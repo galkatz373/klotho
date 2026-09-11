@@ -929,10 +929,12 @@ name = "klotho-editor"
 version = "0.1.0"
 dependencies = [
  "klotho-ai",
+ "klotho-anim",
  "klotho-author",
  "klotho-commit",
  "klotho-core",
  "klotho-eval",
+ "klotho-input",
  "klotho-ir",
  "klotho-manifest",
  "klotho-prove",

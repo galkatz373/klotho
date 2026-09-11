@@ -7,5 +7,10 @@ input. The first deterministic model response intentionally binds the passage
 to `lockpick_tool`; the trusted journey counterexample drives a bounded repair
 to `iron_key` before evidence and Pin.
 
+`feel.ron` is the KAI-10 Spindle Use action suite: typed buffer/coyote/cancel
+windows, linear stick curves, camera follow, presentation hit-stop versus Rite
+`WAIT` recovery, and the haptic cue. Distaff A/B and the named feel owner Pin
+that snapshot; it is not title Rust.
+
 There is no Cargo package or title Rust in this directory. The generic Klotho
 AI, evaluation, and Distaff test harness executes the slice.

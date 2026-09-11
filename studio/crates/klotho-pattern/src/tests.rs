@@ -3,8 +3,8 @@
 use klotho_canon::cook;
 use klotho_core::{Hash, LocusKind};
 use klotho_ir::{
-    AnchorKind, IntentDoc, Name, ParameterValue, PatternArg, PatternInstance, ProvenanceId,
-    SeedFact, StyleIntent, migrate_doc, to_ron,
+    AnchorKind, CanonDiff, IntentDoc, Name, ParameterValue, PatternArg, PatternInstance,
+    ProvenanceId, RiteNode, RiteOp, SeedFact, StyleIntent, migrate_doc, to_ron,
 };
 use klotho_prove::hash_bytes;
 
@@ -102,9 +102,9 @@ fn attach(module: &mut klotho_ir::IntentModule, instance: &PatternInstance) {
 }
 
 #[test]
-fn stdlib_has_forty_one_first_patterns() {
+fn stdlib_has_forty_six_first_patterns() {
     let ids = first_pattern_ids();
-    assert_eq!(ids.len(), 41, "{ids:?}");
+    assert_eq!(ids.len(), 46, "{ids:?}");
     for family in [
         "traversal.",
         "combat.",
@@ -114,6 +114,7 @@ fn stdlib_has_forty_one_first_patterns() {
         "world.",
         "ui.",
         "production.",
+        "feel.",
     ] {
         assert!(
             ids.iter().any(|id| id.starts_with(family)),
@@ -367,4 +368,37 @@ fn empty_expand_is_flatten_identity() {
         bundle.project.flatten(&bundle.modules).unwrap().doc,
         expanded.project.flatten(&expanded.modules).unwrap().doc
     );
+}
+
+#[test]
+fn feel_action_recovery_is_rite_wait_and_hit_stop_is_qty() {
+    let spec = lookup("feel.action_contract", 1).unwrap();
+    let module = host_for(spec);
+    let expansion =
+        expand_instance(&module, &instance_for(spec, module.anchor), &caps_for(spec)).unwrap();
+    let waits: Vec<u16> = expansion
+        .canon_diffs
+        .iter()
+        .filter_map(|d| match d {
+            CanonDiff::AddRite(r) => r.nodes.iter().find_map(|n| match n {
+                RiteNode::Op(RiteOp::Wait(ticks, None))
+                | RiteNode::Labeled {
+                    op: RiteOp::Wait(ticks, None),
+                    ..
+                } => Some(*ticks),
+                _ => None,
+            }),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        waits,
+        vec![4],
+        "authoritative recovery is WAIT, not hit-stop"
+    );
+    let hit_stop = expansion.seed.iter().find_map(|f| match f {
+        SeedFact::Qty { res, value, .. } if res.as_str() == "hit_stop_present" => Some(*value),
+        _ => None,
+    });
+    assert_eq!(hit_stop, Some(2));
 }

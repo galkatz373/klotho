@@ -1,0 +1,26 @@
+(
+    action: "use",
+    input_buffer_ticks: 2,
+    coyote_ticks: 2,
+    cancel_windows: [(start: 0, end: 3, verb: Drop)],
+    combo_windows: [(start: 4, end: 8, verb: Use)],
+    accel_curve: (knots: [(x: 0, y: 0), (x: 1000, y: 65536)]),
+    decel_curve: (knots: [(x: 0, y: 0), (x: 1000, y: 65536)]),
+    camera: (
+        smoothing_ticks: 2,
+        follow_stiffness: 500,
+        shake_amp_mm: 8,
+        shake_cap_mm: 16,
+        accel_cap_md: 12000,
+        hull_radius_mm: 250,
+    ),
+    aim_assist: None,
+    impact: (hit_stop_present_ticks: 2, recovery_wait_ticks: 4, shake_amp_mm: 6),
+    haptics: "hit",
+    accessibility: (
+        reduce_shake: false,
+        reduce_haptics: false,
+        hold_to_toggle: false,
+        aim_assist_required: false,
+    ),
+)

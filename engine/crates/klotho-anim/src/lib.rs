@@ -12,7 +12,10 @@ mod clip;
 mod ik;
 mod palette;
 
-pub use clip::{Clip, ClipSet, WALK_MM_PER_TICK};
+pub use clip::{
+    ArtifactAuthority, Clip, ClipSet, EvidenceLane, WALK_MM_PER_TICK, classify_clip,
+    classify_clip_change,
+};
 pub use ik::look_at_yaw;
 pub use palette::{
     MAX_SKIN_BONES, WEIGHT_SUM, apply_pose, capped_joints, clip_grounded, clip_verb, compose,

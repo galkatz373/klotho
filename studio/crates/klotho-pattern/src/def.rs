@@ -29,6 +29,8 @@ pub enum PatternFamily {
     Ui,
     /// Save, analytics, screenshot, journey, performance.
     Production,
+    /// Input buffer, camera, aim-assist, haptics, accessibility (KAI-10).
+    Feel,
 }
 
 impl PatternFamily {
@@ -44,6 +46,7 @@ impl PatternFamily {
             Self::World => "world",
             Self::Ui => "ui",
             Self::Production => "production",
+            Self::Feel => "feel",
         }
     }
 }
@@ -122,6 +125,8 @@ pub enum ExpandKind {
     UiCue,
     /// Performance encounter Beat + Cap law.
     ProductionEncounter,
+    /// Feel contract: windows, curves, camera, haptics, accessibility.
+    FeelContract,
 }
 
 /// Closed standard-library row.

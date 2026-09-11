@@ -282,6 +282,7 @@ pub fn diagnostic_catalog() -> &'static [DiagnosticCatalogEntry] {
         "IR.ExportUnknown",
         "IR.ParameterTypeMismatch",
         "IR.UnexpandedPattern",
+        "IR.InvalidFeel",
     ];
     const PATTERN: &[&str] = &[
         "PATTERN.Unknown",
@@ -875,6 +876,7 @@ impl IrError {
                 schema_diag("IR.ParameterTypeMismatch", name, message)
             }
             Self::UnexpandedPattern(id) => schema_diag("IR.UnexpandedPattern", id, message),
+            Self::InvalidFeel { field, .. } => schema_diag("IR.InvalidFeel", field, message),
         }
     }
 }

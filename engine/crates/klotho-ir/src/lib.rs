@@ -28,6 +28,7 @@ mod decl;
 mod diag;
 mod doc;
 mod error;
+mod feel;
 mod infer;
 mod mind;
 mod name;
@@ -56,6 +57,10 @@ pub use diag::{
 };
 pub use doc::IntentDoc;
 pub use error::IrError;
+pub use feel::{
+    AimAssistContract, CameraResponse, CurveKnot, FeelAccessibility, FeelContract,
+    ImpactPresentation, QuantizedCurve, TickWindow,
+};
 pub use infer::{FactId, InferIntent, ModelId};
 pub use klotho_core::{LocusKind, PlayerId, PoseMm, Sigil, SimLod, Tick};
 pub use klotho_prove::ProvenanceId;

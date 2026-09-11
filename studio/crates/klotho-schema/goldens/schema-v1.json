@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "toolchain_hash": "cba1ad4a6121fe69ea646edd3ddc14d3d5e3bb3abc9800f457f4ed2f0a51c1b3",
+  "toolchain_hash": "d410ca6f5ab31a14ade63ec43d1a2fd88123a29b749d5a07bb3bba98bd1c1954",
   "kinds": [
     {
       "id": "klotho_ir::IntentDoc",
@@ -782,6 +782,316 @@
       "variants": [],
       "positive_example": "(claimed:[],assist:None)",
       "negative_example": "(claimed:[Timing,Timing],assist:None)"
+    },
+    {
+      "id": "klotho_ir::TickWindow",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "start",
+          "ty": "u8",
+          "description": "inclusive start tick",
+          "min": 0,
+          "max": 32
+        },
+        {
+          "name": "end",
+          "ty": "u8",
+          "description": "inclusive end tick",
+          "min": 0,
+          "max": 32
+        },
+        {
+          "name": "verb",
+          "ty": "Verb",
+          "description": "verb this window admits",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(start:0,end:3,verb:Drop)",
+      "negative_example": "(start:4,end:1,verb:Use)"
+    },
+    {
+      "id": "klotho_ir::CurveKnot",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "x",
+          "ty": "u16",
+          "description": "stick magnitude per-mille",
+          "min": 0,
+          "max": 1000
+        },
+        {
+          "name": "y",
+          "ty": "i32",
+          "description": "16.16 scale factor",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(x:0,y:0)",
+      "negative_example": "(x:1001,y:0)"
+    },
+    {
+      "id": "klotho_ir::QuantizedCurve",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "knots",
+          "ty": "Vec<CurveKnot>",
+          "description": "strictly increasing 0..=1000",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(knots:[(x:0,y:0),(x:1000,y:65536)])",
+      "negative_example": "(knots:[(x:100,y:0)])"
+    },
+    {
+      "id": "klotho_ir::CameraResponse",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "smoothing_ticks",
+          "ty": "u8",
+          "description": "presentation lerp horizon",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "follow_stiffness",
+          "ty": "u16",
+          "description": "per-mille follow",
+          "min": 0,
+          "max": 1000
+        },
+        {
+          "name": "shake_amp_mm",
+          "ty": "u16",
+          "description": "authored shake millimetres",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "shake_cap_mm",
+          "ty": "u16",
+          "description": "accessibility shake cap",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "accel_cap_md",
+          "ty": "u32",
+          "description": "look accel cap millidegrees/tick^2",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "hull_radius_mm",
+          "ty": "u16",
+          "description": "collision-free camera hull",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(smoothing_ticks:2,follow_stiffness:500,shake_amp_mm:8,shake_cap_mm:16,accel_cap_md:12000,hull_radius_mm:250)",
+      "negative_example": "(smoothing_ticks:2,follow_stiffness:1001,shake_amp_mm:8,shake_cap_mm:16,accel_cap_md:12000,hull_radius_mm:250)"
+    },
+    {
+      "id": "klotho_ir::AimAssistContract",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "magnet_permille",
+          "ty": "u16",
+          "description": "yaw-error pull",
+          "min": 0,
+          "max": 1000
+        },
+        {
+          "name": "cone_md",
+          "ty": "u32",
+          "description": "magnet cone millidegrees",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "max_correction_md",
+          "ty": "u32",
+          "description": "per-tick cap millidegrees",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(magnet_permille:250,cone_md:8000,max_correction_md:2000)",
+      "negative_example": "(magnet_permille:1001,cone_md:0,max_correction_md:0)"
+    },
+    {
+      "id": "klotho_ir::ImpactPresentation",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "hit_stop_present_ticks",
+          "ty": "u8",
+          "description": "Manifest freeze; tick still advances",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "recovery_wait_ticks",
+          "ty": "u8",
+          "description": "authoritative Rite WAIT",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "shake_amp_mm",
+          "ty": "u16",
+          "description": "impact shake millimetres",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(hit_stop_present_ticks:2,recovery_wait_ticks:4,shake_amp_mm:6)",
+      "negative_example": "(hit_stop_present_ticks:2,recovery_wait_ticks:4,shake_amp_mm:6,pause_tick:true)"
+    },
+    {
+      "id": "klotho_ir::FeelAccessibility",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "reduce_shake",
+          "ty": "bool",
+          "description": "zero presented shake",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "reduce_haptics",
+          "ty": "bool",
+          "description": "suppress haptic cue",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "hold_to_toggle",
+          "ty": "bool",
+          "description": "hold becomes toggle",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "aim_assist_required",
+          "ty": "bool",
+          "description": "require AimAssistContract",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(reduce_shake:false,reduce_haptics:false,hold_to_toggle:false,aim_assist_required:false)",
+      "negative_example": "(reduce_shake:false)"
+    },
+    {
+      "id": "klotho_ir::FeelContract",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "action",
+          "ty": "Name",
+          "description": "tuned action",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "input_buffer_ticks",
+          "ty": "u8",
+          "description": "pending press horizon",
+          "min": 0,
+          "max": 8
+        },
+        {
+          "name": "coyote_ticks",
+          "ty": "u8",
+          "description": "post-support window",
+          "min": 0,
+          "max": 8
+        },
+        {
+          "name": "cancel_windows",
+          "ty": "Vec<TickWindow>",
+          "description": "cancel windows",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "combo_windows",
+          "ty": "Vec<TickWindow>",
+          "description": "combo windows",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "accel_curve",
+          "ty": "QuantizedCurve",
+          "description": "stick acceleration",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "decel_curve",
+          "ty": "QuantizedCurve",
+          "description": "stick release",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "camera",
+          "ty": "CameraResponse",
+          "description": "follow and shake",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "aim_assist",
+          "ty": "Option<AimAssistContract>",
+          "description": "analog magnet",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "impact",
+          "ty": "ImpactPresentation",
+          "description": "hit-stop vs WAIT recovery",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "haptics",
+          "ty": "Name",
+          "description": "haptic pattern; empty is invalid",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "accessibility",
+          "ty": "FeelAccessibility",
+          "description": "same-action access",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(action:\"use\",input_buffer_ticks:2,coyote_ticks:2,cancel_windows:[(start:0,end:3,verb:Drop)],combo_windows:[(start:4,end:8,verb:Use)],accel_curve:(knots:[(x:0,y:0),(x:1000,y:65536)]),decel_curve:(knots:[(x:0,y:0),(x:1000,y:65536)]),camera:(smoothing_ticks:2,follow_stiffness:500,shake_amp_mm:8,shake_cap_mm:16,accel_cap_md:12000,hull_radius_mm:250),aim_assist:None,impact:(hit_stop_present_ticks:2,recovery_wait_ticks:4,shake_amp_mm:6),haptics:\"hit\",accessibility:(reduce_shake:false,reduce_haptics:false,hold_to_toggle:false,aim_assist_required:false))",
+      "negative_example": "(action:\"use\",input_buffer_ticks:9,coyote_ticks:2,cancel_windows:[],combo_windows:[],accel_curve:(knots:[]),decel_curve:(knots:[]),camera:(smoothing_ticks:0,follow_stiffness:0,shake_amp_mm:0,shake_cap_mm:0,accel_cap_md:0,hull_radius_mm:0),aim_assist:None,impact:(hit_stop_present_ticks:0,recovery_wait_ticks:0,shake_amp_mm:0),haptics:\"hit\",accessibility:(reduce_shake:false,reduce_haptics:false,hold_to_toggle:false,aim_assist_required:false))"
     },
     {
       "id": "klotho_ir::CanonDiff",
@@ -2586,6 +2896,120 @@
       "per_tick": 0
     },
     {
+      "id": "feel.accessibility",
+      "version": 1,
+      "family": "feel",
+      "parameters": [
+        "actor",
+        "action",
+        "reduce_shake",
+        "reduce_haptics",
+        "hold_to_toggle",
+        "aim_assist_required"
+      ],
+      "requires": [
+        "actor:Mobile"
+      ],
+      "grants": [
+        "actor:AccessibleFeel"
+      ],
+      "conflicts": [],
+      "predicates": 4,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "feel.action_contract",
+      "version": 1,
+      "family": "feel",
+      "parameters": [
+        "actor",
+        "action",
+        "buffer_ticks",
+        "coyote_ticks",
+        "cancel_start",
+        "cancel_end",
+        "combo_start",
+        "combo_end",
+        "recovery_wait",
+        "hit_stop_present"
+      ],
+      "requires": [
+        "actor:Mobile"
+      ],
+      "grants": [
+        "actor:FeelTuned"
+      ],
+      "conflicts": [],
+      "predicates": 8,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "feel.aim_assist",
+      "version": 1,
+      "family": "feel",
+      "parameters": [
+        "actor",
+        "magnet_permille",
+        "cone_md",
+        "max_correction_md"
+      ],
+      "requires": [
+        "actor:Mobile"
+      ],
+      "grants": [
+        "actor:AimAssist"
+      ],
+      "conflicts": [],
+      "predicates": 4,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "feel.camera_response",
+      "version": 1,
+      "family": "feel",
+      "parameters": [
+        "actor",
+        "smoothing_ticks",
+        "follow_stiffness",
+        "shake_amp_mm",
+        "shake_cap_mm",
+        "hull_radius_mm"
+      ],
+      "requires": [
+        "actor:Mobile"
+      ],
+      "grants": [
+        "actor:CameraFeel"
+      ],
+      "conflicts": [],
+      "predicates": 4,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "feel.haptic_cue",
+      "version": 1,
+      "family": "feel",
+      "parameters": [
+        "actor",
+        "action",
+        "haptic"
+      ],
+      "requires": [
+        "actor:Mobile"
+      ],
+      "grants": [
+        "actor:Haptic"
+      ],
+      "conflicts": [],
+      "predicates": 4,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
       "id": "narrative.bark_set",
       "version": 1,
       "family": "narrative",
@@ -3449,6 +3873,13 @@
       "legal_repairs": []
     },
     {
+      "code": "IR.InvalidFeel",
+      "source": "klotho-ir",
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
       "code": "CANON.MixedLabeling",
       "source": "klotho-canon",
       "class": "cfg",
@@ -3967,6 +4398,22 @@
         "review"
       ],
       "cost_units": 1
+    },
+    {
+      "id": "author.set_feel@1",
+      "input": "FeelContract",
+      "writes": [
+        "feel"
+      ],
+      "cost_units": 2
+    },
+    {
+      "id": "author.feel_sweep@1",
+      "input": "{action:Name,candidates:Vec<FeelContract>}",
+      "writes": [
+        "review"
+      ],
+      "cost_units": 2
     }
   ]
 }

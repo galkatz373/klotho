@@ -39,6 +39,7 @@ klotho-pattern = { path = "crates/klotho-pattern" }
 klotho-eval = { path = "crates/klotho-eval" }
 klotho-debug = { path = "../engine/crates/klotho-debug" }
 klotho-input = { path = "../engine/crates/klotho-input" }
+klotho-anim = { path = "../engine/crates/klotho-anim" }
 ron = "0.11.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.151"

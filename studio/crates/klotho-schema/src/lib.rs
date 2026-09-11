@@ -559,6 +559,102 @@ fn type_schemas() -> Vec<TypeSchema> {
             "(claimed:[],assist:None)",
             "(claimed:[Timing,Timing],assist:None)",
         ),
+        structure(
+            "klotho_ir::TickWindow",
+            vec![
+                bounded("start", "u8", "inclusive start tick", 0, 32),
+                bounded("end", "u8", "inclusive end tick", 0, 32),
+                field("verb", "Verb", "verb this window admits"),
+            ],
+            "(start:0,end:3,verb:Drop)",
+            "(start:4,end:1,verb:Use)",
+        ),
+        structure(
+            "klotho_ir::CurveKnot",
+            vec![
+                bounded("x", "u16", "stick magnitude per-mille", 0, 1000),
+                field("y", "i32", "16.16 scale factor"),
+            ],
+            "(x:0,y:0)",
+            "(x:1001,y:0)",
+        ),
+        structure(
+            "klotho_ir::QuantizedCurve",
+            vec![field(
+                "knots",
+                "Vec<CurveKnot>",
+                "strictly increasing 0..=1000",
+            )],
+            "(knots:[(x:0,y:0),(x:1000,y:65536)])",
+            "(knots:[(x:100,y:0)])",
+        ),
+        structure(
+            "klotho_ir::CameraResponse",
+            vec![
+                field("smoothing_ticks", "u8", "presentation lerp horizon"),
+                bounded("follow_stiffness", "u16", "per-mille follow", 0, 1000),
+                field("shake_amp_mm", "u16", "authored shake millimetres"),
+                field("shake_cap_mm", "u16", "accessibility shake cap"),
+                field("accel_cap_md", "u32", "look accel cap millidegrees/tick^2"),
+                field("hull_radius_mm", "u16", "collision-free camera hull"),
+            ],
+            "(smoothing_ticks:2,follow_stiffness:500,shake_amp_mm:8,shake_cap_mm:16,accel_cap_md:12000,hull_radius_mm:250)",
+            "(smoothing_ticks:2,follow_stiffness:1001,shake_amp_mm:8,shake_cap_mm:16,accel_cap_md:12000,hull_radius_mm:250)",
+        ),
+        structure(
+            "klotho_ir::AimAssistContract",
+            vec![
+                bounded("magnet_permille", "u16", "yaw-error pull", 0, 1000),
+                field("cone_md", "u32", "magnet cone millidegrees"),
+                field("max_correction_md", "u32", "per-tick cap millidegrees"),
+            ],
+            "(magnet_permille:250,cone_md:8000,max_correction_md:2000)",
+            "(magnet_permille:1001,cone_md:0,max_correction_md:0)",
+        ),
+        structure(
+            "klotho_ir::ImpactPresentation",
+            vec![
+                field(
+                    "hit_stop_present_ticks",
+                    "u8",
+                    "Manifest freeze; tick still advances",
+                ),
+                field("recovery_wait_ticks", "u8", "authoritative Rite WAIT"),
+                field("shake_amp_mm", "u16", "impact shake millimetres"),
+            ],
+            "(hit_stop_present_ticks:2,recovery_wait_ticks:4,shake_amp_mm:6)",
+            "(hit_stop_present_ticks:2,recovery_wait_ticks:4,shake_amp_mm:6,pause_tick:true)",
+        ),
+        structure(
+            "klotho_ir::FeelAccessibility",
+            vec![
+                field("reduce_shake", "bool", "zero presented shake"),
+                field("reduce_haptics", "bool", "suppress haptic cue"),
+                field("hold_to_toggle", "bool", "hold becomes toggle"),
+                field("aim_assist_required", "bool", "require AimAssistContract"),
+            ],
+            "(reduce_shake:false,reduce_haptics:false,hold_to_toggle:false,aim_assist_required:false)",
+            "(reduce_shake:false)",
+        ),
+        structure(
+            "klotho_ir::FeelContract",
+            vec![
+                field("action", "Name", "tuned action"),
+                bounded("input_buffer_ticks", "u8", "pending press horizon", 0, 8),
+                bounded("coyote_ticks", "u8", "post-support window", 0, 8),
+                field("cancel_windows", "Vec<TickWindow>", "cancel windows"),
+                field("combo_windows", "Vec<TickWindow>", "combo windows"),
+                field("accel_curve", "QuantizedCurve", "stick acceleration"),
+                field("decel_curve", "QuantizedCurve", "stick release"),
+                field("camera", "CameraResponse", "follow and shake"),
+                field("aim_assist", "Option<AimAssistContract>", "analog magnet"),
+                field("impact", "ImpactPresentation", "hit-stop vs WAIT recovery"),
+                field("haptics", "Name", "haptic pattern; empty is invalid"),
+                field("accessibility", "FeelAccessibility", "same-action access"),
+            ],
+            "(action:\"use\",input_buffer_ticks:2,coyote_ticks:2,cancel_windows:[(start:0,end:3,verb:Drop)],combo_windows:[(start:4,end:8,verb:Use)],accel_curve:(knots:[(x:0,y:0),(x:1000,y:65536)]),decel_curve:(knots:[(x:0,y:0),(x:1000,y:65536)]),camera:(smoothing_ticks:2,follow_stiffness:500,shake_amp_mm:8,shake_cap_mm:16,accel_cap_md:12000,hull_radius_mm:250),aim_assist:None,impact:(hit_stop_present_ticks:2,recovery_wait_ticks:4,shake_amp_mm:6),haptics:\"hit\",accessibility:(reduce_shake:false,reduce_haptics:false,hold_to_toggle:false,aim_assist_required:false))",
+            "(action:\"use\",input_buffer_ticks:9,coyote_ticks:2,cancel_windows:[],combo_windows:[],accel_curve:(knots:[]),decel_curve:(knots:[]),camera:(smoothing_ticks:0,follow_stiffness:0,shake_amp_mm:0,shake_cap_mm:0,accel_cap_md:0,hull_radius_mm:0),aim_assist:None,impact:(hit_stop_present_ticks:0,recovery_wait_ticks:0,shake_amp_mm:0),haptics:\"hit\",accessibility:(reduce_shake:false,reduce_haptics:false,hold_to_toggle:false,aim_assist_required:false))",
+        ),
         enumeration(
             "klotho_ir::CanonDiff",
             canon_diff_variants(),
@@ -1096,6 +1192,13 @@ fn operations() -> Vec<OperationSchema> {
             3,
         ),
         ("author.transaction.submit@1", "ChangeId", &["review"], 1),
+        ("author.set_feel@1", "FeelContract", &["feel"], 2),
+        (
+            "author.feel_sweep@1",
+            "{action:Name,candidates:Vec<FeelContract>}",
+            &["review"],
+            2,
+        ),
     ]
     .into_iter()
     .map(|(id, input, writes, cost_units)| OperationSchema {
@@ -1136,12 +1239,18 @@ mod tests {
         assert_eq!(catalog.rels.len(), 13);
         assert_eq!(catalog.predicates.len(), 25);
         assert_eq!(catalog.rite_ops.len(), 14);
-        assert_eq!(catalog.patterns.len(), 42);
+        assert_eq!(catalog.patterns.len(), 47);
         assert!(
             catalog
                 .patterns
                 .iter()
                 .any(|p| p.id == "traversal.door_key" && p.version == 2)
+        );
+        assert!(
+            catalog
+                .patterns
+                .iter()
+                .any(|p| p.id == "feel.action_contract" && p.family == "feel")
         );
         assert!(
             catalog
@@ -1170,6 +1279,7 @@ mod tests {
             look_yaw: YawMd(3),
             look_pitch: 4,
         });
+        round_trip(&klotho_ir::FeelContract::spindle_use());
         round_trip(&Cost {
             res: Name::from("stamina"),
             amount: 1,

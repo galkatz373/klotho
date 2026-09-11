@@ -11,6 +11,7 @@
 mod assistant;
 mod dashboard;
 mod error;
+mod feel;
 mod inspector;
 mod kernel;
 mod outliner;
@@ -23,6 +24,7 @@ pub use assistant::{
 };
 pub use dashboard::CookDashboard;
 pub use error::EditorError;
+pub use feel::{FeelAbSession, FeelCandidate, FeelSweep, evidence_copy};
 pub use inspector::InspectorView;
 pub use outliner::{LocusEntry, Outliner, PlaceGroup};
 pub use session::EditorSession;
@@ -40,5 +42,7 @@ pub use klotho_ui::Pause;
 mod kai08_tests;
 #[cfg(test)]
 mod kai09_tests;
+#[cfg(test)]
+mod kai10_tests;
 #[cfg(test)]
 mod tests;

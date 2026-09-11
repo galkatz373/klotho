@@ -42,17 +42,15 @@ impl KernelHost {
     }
 
     fn sample(action: &DeviceAction, tick: Tick) -> DeviceSample {
-        DeviceSample {
-            tick,
-            player: action.player,
-            buttons: action.buttons.clone(),
-            stick_x: action.stick_x,
-            stick_z: action.stick_z,
-            look_yaw: YawMd(action.look_yaw),
-            look_pitch: action.look_pitch,
-            phase: action.phase,
-            target: action.target.clone(),
-        }
+        let mut sample = DeviceSample::new(action.player, tick);
+        sample.buttons = action.buttons.clone();
+        sample.stick_x = action.stick_x;
+        sample.stick_z = action.stick_z;
+        sample.look_yaw = YawMd(action.look_yaw);
+        sample.look_pitch = action.look_pitch;
+        sample.phase = action.phase;
+        sample.target = action.target.clone();
+        sample
     }
 
     fn fail(&self, blocked: &str) -> EvalError {

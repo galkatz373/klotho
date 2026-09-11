@@ -317,6 +317,7 @@ fn emit(ctx: &Ctx<'_>) -> Result<Expansion, PatternError> {
         ExpandKind::Zone => emit_zone(ctx),
         ExpandKind::UiCue => emit_ui(ctx),
         ExpandKind::ProductionEncounter => emit_perf(ctx),
+        ExpandKind::FeelContract => emit_feel(ctx),
     }
 }
 
@@ -681,6 +682,137 @@ fn emit_ui(ctx: &Ctx<'_>) -> Result<Expansion, PatternError> {
     b.beat(ctx, "cue", action.0.clone());
     b.rite(ctx, "prompt", "Shown");
     Ok(b.finish())
+}
+
+fn emit_feel(ctx: &Ctx<'_>) -> Result<Expansion, PatternError> {
+    let actor = ctx.arg_name("actor")?;
+    let mut b = Builder::new(ctx);
+    match ctx.spec.id {
+        "feel.action_contract" => {
+            let action = ctx.arg_name("action")?;
+            let recovery = ctx.arg_i32("recovery_wait")?.clamp(1, 32) as u16;
+            qty(&mut b, &actor, "buffer_ticks", ctx.arg_i32("buffer_ticks")?);
+            qty(&mut b, &actor, "coyote_ticks", ctx.arg_i32("coyote_ticks")?);
+            qty(&mut b, &actor, "recovery_wait", i32::from(recovery));
+            qty(
+                &mut b,
+                &actor,
+                "hit_stop_present",
+                ctx.arg_i32("hit_stop_present")?,
+            );
+            b.beat(
+                ctx,
+                "feel",
+                format!("{}:{}", actor.as_str(), action.as_str()),
+            );
+            let id = ctx.qual("recover");
+            b.push_anchor(ctx, AnchorKind::Rite, id.clone(), "recover");
+            b.diffs.push(CanonDiff::AddRite(RiteGraph {
+                id,
+                cap_steps: 8,
+                cap_ticks: recovery.max(8),
+                entry: 0,
+                nodes: vec![
+                    RiteNode::Op(RiteOp::Bind(BindSrc::Target)),
+                    RiteNode::Op(RiteOp::Wait(recovery, None)),
+                    RiteNode::Op(RiteOp::Emit(Name::from("Recovered"))),
+                    RiteNode::Op(RiteOp::Halt(Status::Success)),
+                ],
+            }));
+        }
+        "feel.camera_response" => {
+            qty(
+                &mut b,
+                &actor,
+                "smoothing_ticks",
+                ctx.arg_i32("smoothing_ticks")?,
+            );
+            qty(
+                &mut b,
+                &actor,
+                "follow_stiffness",
+                ctx.arg_i32("follow_stiffness")?,
+            );
+            qty(&mut b, &actor, "shake_amp_mm", ctx.arg_i32("shake_amp_mm")?);
+            qty(&mut b, &actor, "shake_cap_mm", ctx.arg_i32("shake_cap_mm")?);
+            qty(
+                &mut b,
+                &actor,
+                "hull_radius_mm",
+                ctx.arg_i32("hull_radius_mm")?,
+            );
+            b.beat(ctx, "camera", actor.0.clone());
+            b.rite(ctx, "follow", "Followed");
+        }
+        "feel.aim_assist" => {
+            qty(
+                &mut b,
+                &actor,
+                "magnet_permille",
+                ctx.arg_i32("magnet_permille")?,
+            );
+            qty(&mut b, &actor, "cone_md", ctx.arg_i32("cone_md")?);
+            qty(
+                &mut b,
+                &actor,
+                "max_correction_md",
+                ctx.arg_i32("max_correction_md")?,
+            );
+            b.beat(ctx, "aim", actor.0.clone());
+            b.rite(ctx, "magnet", "Magnet");
+        }
+        "feel.haptic_cue" => {
+            let haptic = ctx.arg_name("haptic")?;
+            b.beat(
+                ctx,
+                "haptic",
+                format!("{}:{}", actor.as_str(), haptic.as_str()),
+            );
+            b.rite(ctx, "rumble", "Played");
+        }
+        _ => {
+            let action = ctx.arg_name("action")?;
+            qty(
+                &mut b,
+                &actor,
+                "reduce_shake",
+                i32::from(ctx.arg_bool("reduce_shake").unwrap_or(false)),
+            );
+            qty(
+                &mut b,
+                &actor,
+                "reduce_haptics",
+                i32::from(ctx.arg_bool("reduce_haptics").unwrap_or(false)),
+            );
+            qty(
+                &mut b,
+                &actor,
+                "hold_to_toggle",
+                i32::from(ctx.arg_bool("hold_to_toggle").unwrap_or(false)),
+            );
+            qty(
+                &mut b,
+                &actor,
+                "aim_assist_required",
+                i32::from(ctx.arg_bool("aim_assist_required").unwrap_or(false)),
+            );
+            b.beat(
+                ctx,
+                "access",
+                format!("{}:{}", actor.as_str(), action.as_str()),
+            );
+            b.rite(ctx, "access_rite", "Accessible");
+        }
+    }
+    Ok(b.finish())
+}
+
+fn qty(b: &mut Builder, of: &Name, res: &str, value: i32) {
+    b.seed.push(SeedFact::Qty {
+        of: of.clone(),
+        res: Name::from(res),
+        value,
+    });
 }
 
 fn emit_perf(ctx: &Ctx<'_>) -> Result<Expansion, PatternError> {

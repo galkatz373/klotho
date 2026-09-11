@@ -26,6 +26,62 @@ pub struct Clip {
     pub joints: Vec<Vec<PoseMm>>,
 }
 
+/// Who owns displacement for an authored artifact (KAI-10 / K84).
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub enum ArtifactAuthority {
+    /// Zero root displacement: skeletal, material, IK, facial, cloth.
+    Visual,
+    /// Non-zero root, hull, socket, traversal, or nav. Semantic evidence required.
+    Semantic,
+}
+
+/// Evidence lane selected by [`classify_clip_change`].
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub enum EvidenceLane {
+    /// Visual-only path. Rite `WAIT` must be unchanged.
+    VisualOnly,
+    /// Pin plus affected deterministic journeys.
+    SemanticJourneys,
+}
+
+/// Classify a clip by whether any root sample displaces the actor.
+#[must_use]
+pub fn classify_clip(clip: &Clip) -> ArtifactAuthority {
+    if clip
+        .samples
+        .iter()
+        .any(|s| s.x != 0 || s.y != 0 || s.z != 0)
+    {
+        ArtifactAuthority::Semantic
+    } else {
+        ArtifactAuthority::Visual
+    }
+}
+
+/// Hull, socket, traversal, or root-motion changes take the semantic lane.
+/// Joint-only edits of a zero-root clip take the visual lane.
+#[must_use]
+pub fn classify_clip_change(
+    before: Option<&Clip>,
+    after: &Clip,
+    hull_changed: bool,
+    socket_or_nav_changed: bool,
+) -> EvidenceLane {
+    if hull_changed || socket_or_nav_changed {
+        return EvidenceLane::SemanticJourneys;
+    }
+    if let Some(before) = before {
+        if before.samples != after.samples {
+            return EvidenceLane::SemanticJourneys;
+        }
+        return EvidenceLane::VisualOnly;
+    }
+    match classify_clip(after) {
+        ArtifactAuthority::Semantic => EvidenceLane::SemanticJourneys,
+        ArtifactAuthority::Visual => EvidenceLane::VisualOnly,
+    }
+}
+
 impl Clip {
     /// Root delta at `tick`. Empty clips are zero. Debug T-pose is a zero sample.
     #[must_use]
@@ -156,6 +212,47 @@ mod tests {
         assert_eq!(c.sample(Tick(0)).z, WALK_MM_PER_TICK);
         assert_eq!(c.sample(Tick(1)).z, WALK_MM_PER_TICK);
         assert!(c.sample_joints(Tick(0)).is_empty());
+    }
+
+    #[test]
+    fn walk_root_is_semantic_and_use_tpose_is_visual() {
+        let set = ClipSet::hearth();
+        assert_eq!(classify_clip(&set.clips[1]), ArtifactAuthority::Semantic);
+        assert_eq!(classify_clip(&set.clips[2]), ArtifactAuthority::Visual);
+    }
+
+    #[test]
+    fn joint_only_edit_of_zero_root_is_visual_lane() {
+        let mut after = Clip::tpose(2, Verb::Use);
+        after.joints = vec![vec![PoseMm::default()]];
+        assert_eq!(
+            classify_clip_change(Some(&Clip::tpose(2, Verb::Use)), &after, false, false),
+            EvidenceLane::VisualOnly
+        );
+    }
+
+    #[test]
+    fn root_sample_edit_is_semantic_lane() {
+        let before = ClipSet::hearth().clips[1].clone();
+        let mut after = before.clone();
+        after.samples[0].z += 1;
+        assert_eq!(
+            classify_clip_change(Some(&before), &after, false, false),
+            EvidenceLane::SemanticJourneys
+        );
+    }
+
+    #[test]
+    fn hull_change_is_semantic_even_when_clip_is_visual() {
+        assert_eq!(
+            classify_clip_change(
+                Some(&Clip::tpose(0, Verb::Look)),
+                &Clip::tpose(0, Verb::Look),
+                true,
+                false
+            ),
+            EvidenceLane::SemanticJourneys
+        );
     }
 
     #[test]

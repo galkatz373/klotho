@@ -1,0 +1,45 @@
+# Mini-Tapestry starts from an approved keep and kit. Mechanics are assembled by patterns.
+style notes "readable keep silhouettes, brass fittings, worn stone, approved kitbash"
+style palette stone
+style palette metal
+style tag place.hearth.interior
+style tag door.oak.lockable
+style tag npc.human.biped
+style tag relic.key
+style tag relic.hammer
+style tag prop.anvil
+
+seed locus hearth Place
+seed locus player Actor
+seed locus oak_door Relic
+seed locus iron_key Relic
+seed locus kel Actor
+seed locus fathers_hammer Relic
+seed locus anvil Relic
+seed locus Openable Relic
+seed locus Carryable Relic
+seed locus Armed Relic
+seed locus Hittable Relic
+seed locus Mobile Relic
+seed locus Placeable Relic
+seed locus Minded Relic
+seed locus Talkable Relic
+seed locus use Relic
+seed locus talk Relic
+seed rel player In hearth
+seed rel oak_door In hearth
+seed rel iron_key In hearth
+seed rel kel In hearth
+seed rel fathers_hammer In hearth
+seed rel anvil In hearth
+seed rel oak_door Knows Openable
+seed rel iron_key Knows Carryable
+seed rel fathers_hammer Knows Carryable
+seed rel player Knows Mobile
+seed rel player Knows Armed
+seed rel player Knows Minded
+seed rel player Knows Talkable
+seed rel kel Knows Hittable
+seed rel anvil Knows Placeable
+seed rel hearth Knows Placeable
+seed qty player stamina 80

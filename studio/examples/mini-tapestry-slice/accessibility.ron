@@ -1,0 +1,9 @@
+(
+    remap: true,
+    hold_to_toggle: true,
+    subtitles: true,
+    text_scale_milli: 1000,
+    contrast: "default",
+    reduce_motion: true,
+    reduce_shake: true,
+)

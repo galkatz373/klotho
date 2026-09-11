@@ -1,0 +1,8 @@
+(
+    title: "Mini-Tapestry",
+    entries: [
+        (name: "Klotho", role: "engine"),
+        (name: "Distaff", role: "authoring"),
+        (name: "Approved kitbash", role: "art and audio"),
+    ],
+)

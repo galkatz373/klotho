@@ -37,6 +37,7 @@ klotho-author = { path = "crates/klotho-author" }
 klotho-ai = { path = "crates/klotho-ai" }
 klotho-pattern = { path = "crates/klotho-pattern" }
 klotho-eval = { path = "crates/klotho-eval" }
+klotho-kai-bench = { path = "crates/klotho-kai-bench" }
 klotho-debug = { path = "../engine/crates/klotho-debug" }
 klotho-input = { path = "../engine/crates/klotho-input" }
 klotho-anim = { path = "../engine/crates/klotho-anim" }

@@ -1,0 +1,19 @@
+(
+    id: "mini-tapestry-accessibility",
+    start: (name: "keep-locked"),
+    steps: [
+        Wait(ticks: 1),
+    ],
+    assertions: [
+        Qty(locus: "player", resource: "reduce_shake", cmp: Eq, value: 0),
+        Qty(locus: "player", resource: "hold_to_toggle", cmp: Eq, value: 0),
+        Knows(mind: "player", fact: "use", present: true),
+    ],
+    capture_points: [
+        (name: "access_defaults", after_step: 0, kind: semantic),
+    ],
+    max_ticks: 4,
+    depends_on: ["mini-tapestry-hud"],
+    anchors: [],
+    modules: [],
+)

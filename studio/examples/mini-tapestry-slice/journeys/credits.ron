@@ -1,0 +1,18 @@
+(
+    id: "mini-tapestry-credits",
+    start: (name: "keep-locked"),
+    steps: [
+        Camera(name: "credits"),
+    ],
+    assertions: [
+        Trace(contains: "Camera(credits)"),
+        Place(locus: "player", place: "hearth"),
+    ],
+    capture_points: [
+        (name: "credits_roll", after_step: 0, kind: semantic),
+    ],
+    max_ticks: 4,
+    depends_on: ["mini-tapestry-checkpoint"],
+    anchors: [],
+    modules: [],
+)

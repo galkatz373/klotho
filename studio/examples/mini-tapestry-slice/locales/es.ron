@@ -1,0 +1,13 @@
+(
+    id: "es",
+    strings: {
+        "hud.stamina": "Resistencia",
+        "hud.prompt_use": "Usar",
+        "hud.prompt_attack": "Golpear",
+        "menu.accessibility": "Accesibilidad",
+        "save.checkpoint": "Punto de control guardado",
+        "credits.title": "Mini-Tapestry",
+        "credits.body": "Una aventura de un solo Place en la fortaleza",
+        "play.complete": "La fortaleza esta en calma",
+    },
+)

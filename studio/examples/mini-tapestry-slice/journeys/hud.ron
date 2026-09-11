@@ -1,0 +1,19 @@
+(
+    id: "mini-tapestry-hud",
+    start: (name: "keep-locked"),
+    steps: [
+        Wait(ticks: 1),
+    ],
+    assertions: [
+        Knows(mind: "player", fact: "use", present: true),
+        Qty(locus: "player", resource: "stamina", cmp: Eq, value: 80),
+        Place(locus: "player", place: "hearth"),
+    ],
+    capture_points: [
+        (name: "hud_status", after_step: 0, kind: semantic),
+    ],
+    max_ticks: 4,
+    depends_on: [],
+    anchors: [],
+    modules: [],
+)

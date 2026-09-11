@@ -1,0 +1,26 @@
+(
+    version: 1,
+    outcomes: [
+        (
+            id: "KAI-MINI-TAPESTRY-001",
+            domain: "mechanic",
+            difficulty: "composed",
+            input: "Author a ten-minute single-Place keep adventure with traversal, combat, checkpoint save, camera, production HUD, three locales, accessibility settings, credits, and a desktop package. Use only the approved kitbash. Pin without title code.",
+            acceptance: "mini-tapestry-ship",
+            maximum_scope: (semantic_operations: 16, files: 24, assets: 0),
+            required_journeys: [
+                "mini-tapestry-traverse",
+                "mini-tapestry-combat",
+                "mini-tapestry-checkpoint",
+                "mini-tapestry-camera",
+                "mini-tapestry-hud",
+                "mini-tapestry-accessibility",
+                "mini-tapestry-credits",
+                "mini-tapestry-critical-path",
+            ],
+            seeded_fault: "None. Mini-Tapestry is the ship increment; Spindle already proved bounded repair.",
+            repair_cap: 3,
+            title_rust: 0,
+        ),
+    ],
+)

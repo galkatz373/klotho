@@ -5,7 +5,7 @@
 | Document | High-Level Design — AI-native production for Klotho's first AAA title |
 | Author | Gal Katz |
 | Date | 2026-09-11 |
-| Status | Active successor plan (KAI-00–10 landed; KAI-11–24 not landed) |
+| Status | Active successor plan (KAI-00–11 landed; KAI-12–24 not landed) |
 | Baseline | `docs/hld.md` rev 6; AAA-01–27 landed |
 | Audience | Engine, tools, gameplay, content, AI platform, build, QA, and production leads |
 | Language | Rust (edition 2024; 2021-compatible crates OK) |
@@ -1911,7 +1911,7 @@ managers.
 
 ## PR plan
 
-Landed baseline: AAA-01–27 and KAI-00–10 (2026-09-11). KAI-11–24 remain planned.
+Landed baseline: AAA-01–27 and KAI-00–11 (2026-09-11). KAI-12–24 remain planned.
 Each header gains `— landed` only with its implementation, tests, date bump, and
 this section's landed list update.
 
@@ -2120,7 +2120,7 @@ flowchart TB
   visual-only versus semantic evidence; human feel owner approves the Spindle
   action suite.
 
-#### KAI-11 — Mini-Tapestry independently shippable increment
+#### KAI-11 — Mini-Tapestry independently shippable increment — **landed 2026-09-11**
 
 - **Files:** new `examples/mini-tapestry-slice/**` or dedicated proving project;
   one-Place package fixture and installer lane.

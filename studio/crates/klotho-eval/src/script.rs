@@ -31,6 +31,7 @@ pub struct ScriptHost {
     project_hash: Hash,
     toolchain_hash: Hash,
     canon_hash: Hash,
+    checkpoint: String,
 }
 
 #[derive(Clone, Debug)]
@@ -62,6 +63,7 @@ impl ScriptHost {
             project_hash: hash_bytes(b"script-project"),
             toolchain_hash: hash_bytes(b"script-toolchain"),
             canon_hash: hash_bytes(b"script-canon"),
+            checkpoint: String::new(),
         };
         h.add_rel(&h.door.clone(), Rel::LockedBy, &h.door.clone());
         h.add_rel(&h.player.clone(), Rel::In, &h.place.clone());
@@ -99,6 +101,7 @@ impl ScriptHost {
             project_hash: hash_bytes(encoded.as_bytes()),
             toolchain_hash: hash_bytes(b"intent-script-toolchain-v1"),
             canon_hash: hash_bytes(encoded.as_bytes()),
+            checkpoint: String::new(),
         };
         for fact in &doc.seed {
             match fact {
@@ -120,6 +123,13 @@ impl ScriptHost {
             host.last_state = "door-open".into();
         }
         Ok(host)
+    }
+
+    /// Name the checkpoint relic used by Use on a save marker.
+    #[must_use]
+    pub fn with_checkpoint(mut self, checkpoint: &Name) -> Self {
+        self.checkpoint = checkpoint.0.clone();
+        self
     }
 
     fn edge(a: &str, rel: Rel, b: &str) -> (String, u8, String) {
@@ -176,6 +186,14 @@ impl ScriptHost {
                 self.blocked = "Openable".into();
                 self.last_state = "door-locked".into();
             }
+            return;
+        }
+        if !self.checkpoint.is_empty() && target == self.checkpoint {
+            self.events.push("Checkpoint".into());
+            self.last_state = "checkpoint".into();
+            self.blocked.clear();
+            let slot = Name::from(self.checkpoint.as_str());
+            let _ = self.save(&slot);
         }
     }
 
@@ -187,8 +205,22 @@ impl ScriptHost {
                     self.use_on(&t);
                 }
             }
+            Verb::Fire => {
+                if let Some(t) = Self::target_name(target) {
+                    self.add_rel(&t, Rel::Dead, &t);
+                    self.events.push("Hit".into());
+                    self.last_state = "foe-down".into();
+                    self.blocked.clear();
+                }
+            }
             Verb::Look | Verb::Move => {
-                self.last_state = if self.has_key() {
+                self.last_state = if self
+                    .rels
+                    .iter()
+                    .any(|(_, rel, _)| *rel == Rel::Dead.as_u8())
+                {
+                    "foe-down".into()
+                } else if self.has_key() {
                     "has-key".into()
                 } else if self.has_rel(&self.door, Rel::LockedBy, &self.door) {
                     "door-locked".into()
@@ -226,7 +258,9 @@ impl ScriptHost {
 
 impl JourneyHost for ScriptHost {
     fn apply_device(&mut self, action: &DeviceAction) -> Result<StepOutcome, EvalError> {
-        let verb = if action.buttons.contains(&Button::KeyE)
+        let verb = if action.buttons.contains(&Button::KeyR) {
+            Verb::Fire
+        } else if action.buttons.contains(&Button::KeyE)
             || action.buttons.contains(&Button::MouseLeft)
             || action.buttons.contains(&Button::PadSouth)
         {

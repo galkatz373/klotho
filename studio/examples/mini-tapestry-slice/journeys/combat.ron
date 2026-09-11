@@ -1,0 +1,27 @@
+(
+    id: "mini-tapestry-combat",
+    start: (name: "keep-locked"),
+    steps: [
+        Device(action: (
+            player: PlayerId(0),
+            buttons: [KeyR],
+            stick_x: 0,
+            stick_z: 0,
+            look_yaw: 0,
+            look_pitch: 0,
+            phase: 0,
+            target: Name("kel"),
+        )),
+    ],
+    assertions: [
+        Rel(a: "kel", rel: Dead, b: "kel", present: true),
+        Trace(contains: "Hit"),
+    ],
+    capture_points: [
+        (name: "sentry_down", after_step: 0, kind: semantic),
+    ],
+    max_ticks: 8,
+    depends_on: ["mini-tapestry-traverse"],
+    anchors: [],
+    modules: [],
+)

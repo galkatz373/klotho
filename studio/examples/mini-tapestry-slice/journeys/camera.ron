@@ -1,0 +1,18 @@
+(
+    id: "mini-tapestry-camera",
+    start: (name: "keep-locked"),
+    steps: [
+        Camera(name: "follow"),
+    ],
+    assertions: [
+        Trace(contains: "Camera(follow)"),
+        Place(locus: "player", place: "hearth"),
+    ],
+    capture_points: [
+        (name: "camera_follow", after_step: 0, kind: semantic),
+    ],
+    max_ticks: 4,
+    depends_on: [],
+    anchors: [],
+    modules: [],
+)

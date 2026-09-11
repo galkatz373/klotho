@@ -1,0 +1,13 @@
+(
+    id: "ja",
+    strings: {
+        "hud.stamina": "スタミナ",
+        "hud.prompt_use": "使う",
+        "hud.prompt_attack": "攻撃",
+        "menu.accessibility": "アクセシビリティ",
+        "save.checkpoint": "チェックポイントを保存した",
+        "credits.title": "ミニタペストリー",
+        "credits.body": "ひとつの場所の砦の冒険",
+        "play.complete": "砦は静まった",
+    },
+)

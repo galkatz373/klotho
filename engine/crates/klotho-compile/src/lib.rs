@@ -22,6 +22,7 @@ mod epoch;
 mod error;
 mod header;
 mod kit;
+mod package;
 mod warp;
 
 #[cfg(test)]
@@ -51,6 +52,11 @@ pub use header::{
 pub use kit::{KitEntry, Kitbash};
 pub use klotho_manifest::MaterialTag;
 pub use klotho_prove::{Cas, LicenseSpan, MAX_BLOB_BYTES, MAX_BLOBS, ProvenanceDag};
+pub use package::{
+    AccessibilitySettings, CreditEntry, CreditsRoll, DESKTOP_SKUS, DesktopPackage, DesktopSku,
+    HudSpec, InstallRecord, LocaleTable, REQUIRED_LOCALE_KEYS, ShipContent, install_package,
+    pack_desktop, repair_package, uninstall_package,
+};
 pub use warp::{
     WARP_CAP_DESKTOP, WARP_CAP_MOBILE, WARP_MAGIC, WARP_MAX_LOCI, WARP_VERSION, pack_warp,
     unpack_warp, write_warp,

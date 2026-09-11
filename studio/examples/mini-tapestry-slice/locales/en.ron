@@ -1,0 +1,13 @@
+(
+    id: "en",
+    strings: {
+        "hud.stamina": "Stamina",
+        "hud.prompt_use": "Use",
+        "hud.prompt_attack": "Strike",
+        "menu.accessibility": "Accessibility",
+        "save.checkpoint": "Checkpoint saved",
+        "credits.title": "Mini-Tapestry",
+        "credits.body": "A single-Place keep adventure",
+        "play.complete": "The keep is clear",
+    },
+)

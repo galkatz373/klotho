@@ -18,6 +18,7 @@ mod kernel;
 mod narrative;
 mod outliner;
 mod present;
+mod quality;
 mod session;
 mod transaction;
 mod world;
@@ -34,6 +35,7 @@ pub use inspector::InspectorView;
 pub use narrative::{LineRow, QuestRow, WriterRoomView, review_narrative};
 pub use outliner::{LocusEntry, Outliner, PlaceGroup};
 pub use present::{PresentReview, review_presentation};
+pub use quality::{QualityReview, review_quality};
 pub use session::EditorSession;
 pub use transaction::EditorTransaction;
 pub use world::{GraphEdge, PlaceNode, WorldGraphView, review_world, world_graph};
@@ -62,5 +64,7 @@ mod kai15_tests;
 mod kai16_tests;
 #[cfg(test)]
 mod kai17_tests;
+#[cfg(test)]
+mod kai18_tests;
 #[cfg(test)]
 mod tests;

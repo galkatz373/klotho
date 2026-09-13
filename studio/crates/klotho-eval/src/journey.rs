@@ -18,14 +18,22 @@ pub struct StartStateRef {
     pub name: Name,
 }
 
-/// Capture class. Pixel/audio lanes land later; the marker is first-class now.
+/// Capture class. Pixel/audio lanes are first-class from KAI-18.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CaptureKind {
     /// Snapshot / semantic hashes.
     Semantic,
-    /// Presentation capture reserved for later PRs.
+    /// Presentation capture (legacy umbrella; prefer a domain kind).
     Presentation,
+    /// Fixed-camera RGBA / SSIM / LPIPS.
+    Pixel,
+    /// Animation pose / foot-slide / root samples.
+    Animation,
+    /// Mix PCM / loudness / cue presence.
+    Audio,
+    /// Locale × aspect × input × a11y surface.
+    Ui,
 }
 
 /// Named capture after a step index.

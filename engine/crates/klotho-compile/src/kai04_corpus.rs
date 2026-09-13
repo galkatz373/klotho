@@ -7,7 +7,7 @@ use klotho_core::{PlayerId, Tick};
 use klotho_ir::{
     Agency, Analog, AssistLevel, CanonDiff, Channel, Diagnostic, DiagnosticCode, FailureClass,
     IntentTarget, Law, LawBody, Name, PlayerIntent, Pred, RiteGraph, RiteNode, RiteOp, Slot,
-    Status, Verb, diagnose_budget, diagnose_journey,
+    Status, Verb, diagnose_budget, diagnose_journey, diagnose_quality,
 };
 use klotho_prove::{ArtifactKind, ProveError};
 
@@ -114,6 +114,10 @@ fn budget() -> Diagnostic {
     )
 }
 
+fn quality() -> Diagnostic {
+    diagnose_quality("ssim", 720, 900, &["hero.albedo"], "Quality(ssim 720<900)")
+}
+
 fn seeded() -> Vec<Diagnostic> {
     vec![
         contradiction(),
@@ -124,6 +128,7 @@ fn seeded() -> Vec<Diagnostic> {
         package(),
         journey(),
         budget(),
+        quality(),
     ]
 }
 
@@ -151,6 +156,7 @@ fn seeded_corpus_covers_required_classes_and_anchors() {
         FailureClass::Package,
         FailureClass::Journey,
         FailureClass::Budget,
+        FailureClass::Quality,
     ] {
         assert!(seen.contains(&class), "missing class {class:?}");
     }
@@ -162,6 +168,7 @@ fn seeded_corpus_covers_required_classes_and_anchors() {
     assert_eq!(diags[5].code.0, DiagnosticCode::PACKAGE);
     assert_eq!(diags[6].code.0, DiagnosticCode::JOURNEY);
     assert_eq!(diags[7].code.0, DiagnosticCode::BUDGET);
+    assert_eq!(diags[8].code.0, DiagnosticCode::QUALITY);
 
     let (hit, total) = Diagnostic::anchor_ratio(&diags);
     assert!(

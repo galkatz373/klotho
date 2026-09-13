@@ -5,7 +5,7 @@
 | Document | High-Level Design — AI-native production for Klotho's first AAA title |
 | Author | Gal Katz |
 | Date | 2026-09-13 |
-| Status | Active successor plan (KAI-00–17 landed; KAI-18–24 not landed) |
+| Status | Active successor plan (KAI-00–18 landed; KAI-19–24 not landed) |
 | Baseline | `docs/hld.md` rev 6; AAA-01–27 landed |
 | Audience | Engine, tools, gameplay, content, AI platform, build, QA, and production leads |
 | Language | Rust (edition 2024; 2021-compatible crates OK) |
@@ -1911,7 +1911,7 @@ managers.
 
 ## PR plan
 
-Landed baseline: AAA-01–27 and KAI-00–17 (2026-09-13). KAI-18–24 remain planned.
+Landed baseline: AAA-01–27 and KAI-00–18 (2026-09-13). KAI-19–24 remain planned.
 Each header gains `— landed` only with its implementation, tests, date bump, and
 this section's landed list update.
 
@@ -2221,7 +2221,7 @@ flowchart TB
   Tapestry stress scene meets the pinned High-tier frame/VRAM budgets with
   deterministic fallback tiers.
 
-#### KAI-18 — Multimodal quality evaluation and review scaling
+#### KAI-18 — Multimodal quality evaluation and review scaling — **landed 2026-09-13**
 
 - **Files:** `klotho-eval`, render/audio/anim/UI capture hooks, pinned SSIM/LPIPS
   metric plugins, backend baselines, risk router, sampling and flake policy.

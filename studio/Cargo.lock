@@ -937,6 +937,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "klotho-audio"
+version = "0.1.0"
+dependencies = [
+ "klotho-compile",
+ "klotho-core",
+ "klotho-ir",
+ "klotho-manifest",
+ "klotho-platform",
+ "klotho-trace",
+]
+
+[[package]]
 name = "klotho-author"
 version = "0.1.0"
 dependencies = [
@@ -955,6 +967,16 @@ version = "0.1.0"
 dependencies = [
  "klotho-core",
  "klotho-ir",
+]
+
+[[package]]
+name = "klotho-cinematic"
+version = "0.1.0"
+dependencies = [
+ "klotho-anim",
+ "klotho-core",
+ "klotho-ir",
+ "klotho-manifest",
 ]
 
 [[package]]
@@ -1056,6 +1078,9 @@ dependencies = [
 name = "klotho-eval"
 version = "0.1.0"
 dependencies = [
+ "klotho-anim",
+ "klotho-audio",
+ "klotho-cinematic",
  "klotho-core",
  "klotho-debug",
  "klotho-dialogue",

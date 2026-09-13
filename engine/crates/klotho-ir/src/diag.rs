@@ -42,6 +42,8 @@ impl DiagnosticCode {
     pub const BUDGET: &'static str = "KAI-DIAG-BUDGET";
     /// Content-hash drift under a locked environment.
     pub const HASH_DRIFT: &'static str = "KAI-DIAG-HASH-DRIFT";
+    /// Visual / animation / audio / loc / a11y numeric quality gate.
+    pub const QUALITY: &'static str = "KAI-DIAG-QUALITY";
 
     fn new(code: &str) -> Self {
         Self(code.to_owned())
@@ -78,6 +80,8 @@ pub enum FailureClass {
     Reproducibility,
     /// Schema, parse, or module structure. Not a KAI-00 seeded class.
     Schema,
+    /// Presentation capture or numeric quality gate.
+    Quality,
 }
 
 impl FailureClass {
@@ -95,6 +99,7 @@ impl FailureClass {
             Self::Budget => "budget",
             Self::Reproducibility => "reproducibility",
             Self::Schema => "schema",
+            Self::Quality => "quality",
         }
     }
 }
@@ -171,6 +176,17 @@ pub enum Counterexample {
         cap: u32,
         /// Estimated savings if the dominant item is reduced.
         estimated_savings: u32,
+    },
+    /// Aligned capture pair and the metric that failed.
+    Quality {
+        /// Metric id (`ssim`, `foot_slide_mm`).
+        metric: String,
+        /// Observed value in the metric's native unit.
+        used: i32,
+        /// Inclusive cap.
+        cap: i32,
+        /// Changed Manifest / capture input names.
+        inputs: Vec<String>,
     },
 }
 
@@ -303,6 +319,9 @@ pub fn diagnostic_catalog() -> &'static [DiagnosticCatalogEntry] {
         "EVAL.Projection",
         "EVAL.Agency",
         "EVAL.Replay",
+        "EVAL.Quality",
+        "EVAL.Flake",
+        "EVAL.Capture",
     ];
     const DIALOGUE: &[&str] = &[
         "DIALOGUE.Name",
@@ -417,6 +436,13 @@ pub fn diagnostic_catalog() -> &'static [DiagnosticCatalogEntry] {
             retryable: false,
             legal_repairs: &["reject candidate and isolate nondeterministic input"],
         },
+        DiagnosticCatalogEntry {
+            code: DiagnosticCode::QUALITY,
+            source: "klotho-eval",
+            class: FailureClass::Quality,
+            retryable: false,
+            legal_repairs: &["repair owned Manifest or clip from aligned capture witness"],
+        },
     ];
 
     // Leak a one-time concatenation so callers get a single slice. Catalog
@@ -520,6 +546,8 @@ fn class_for_detail(code: &str) -> FailureClass {
         "EVAL.Stale" | "DIALOGUE.Stale" => FailureClass::Reproducibility,
         "EVAL.Select" | "EVAL.Replay" | "DIALOGUE.Replay" => FailureClass::Journey,
         "EVAL.Projection" | "EVAL.Agency" => FailureClass::Agency,
+        "EVAL.Quality" | "EVAL.Capture" => FailureClass::Quality,
+        "EVAL.Flake" => FailureClass::Reproducibility,
         "DIALOGUE.Continuity" | "DIALOGUE.Quest" => FailureClass::Contradiction,
         "DIALOGUE.Release" => FailureClass::Provenance,
         "COMPILE.Warp" | "COMPILE.PackageAllowlist" | "COMPILE.MissingLockFile" => {
@@ -821,6 +849,35 @@ pub fn diagnose_hash_drift(
     )
 }
 
+/// Visual / animation / audio / loc quality miss with aligned capture witness.
+#[must_use]
+pub fn diagnose_quality(
+    metric: &str,
+    used: i32,
+    cap: i32,
+    inputs: &[&str],
+    message: impl Into<String>,
+) -> Diagnostic {
+    envelope(
+        DiagnosticCode::QUALITY,
+        FailureClass::Quality,
+        message.into(),
+        blame_anchor("capture", metric),
+        Vec::new(),
+        Some(Counterexample::Quality {
+            metric: metric.to_owned(),
+            used,
+            cap,
+            inputs: inputs.iter().map(|s| as_data(s)).collect(),
+        }),
+        vec![repair(
+            "author.bind_asset@1",
+            "repair owned Manifest or clip from aligned capture witness",
+        )],
+        Some(cost(3, "eval")),
+    )
+}
+
 /// Named schema/module failure with a blame token.
 #[must_use]
 pub fn diagnose_named(
@@ -1002,6 +1059,7 @@ mod tests {
             DiagnosticCode::JOURNEY,
             DiagnosticCode::BUDGET,
             DiagnosticCode::HASH_DRIFT,
+            DiagnosticCode::QUALITY,
         ] {
             assert!(codes.contains(&needed), "missing {needed}");
         }

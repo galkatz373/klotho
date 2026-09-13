@@ -8,10 +8,12 @@
 #![warn(missing_docs)]
 
 mod camera;
+mod capture;
 mod face;
 mod track;
 
 pub use camera::CameraFeel;
+pub use capture::{CameraCapture, seeded_hidden_hero};
 pub use face::{FaceSample, sample_face};
 pub use track::{CinematicManifest, Keyframe, ObserverTrack, PlayerPhys, TrackError};
 

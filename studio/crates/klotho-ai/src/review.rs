@@ -293,6 +293,26 @@ pub struct SampleRecord {
 }
 
 impl SampleRecord {
+    /// Recompute selection. A hand-edited `selected` list fails closed.
+    pub fn reproduce(
+        &self,
+        batch: &FrozenBatch,
+        reviewer: Name,
+        reviewer_nonce: &[u8],
+        now: u64,
+    ) -> Result<(), crate::AiError> {
+        let expected = batch.select(reviewer, reviewer_nonce, now)?;
+        if expected.selected != self.selected
+            || expected.manifest_hash != self.manifest_hash
+            || expected.policy_version != self.policy_version
+        {
+            return Err(crate::AiError::RequestState(
+                "sample record does not reproduce from frozen population".into(),
+            ));
+        }
+        Ok(())
+    }
+
     /// Record selected-item results. Count mismatch fails closed.
     pub fn decide(&mut self, passed: &[bool]) -> Result<SampleDisposition, crate::AiError> {
         if passed.len() != self.selected.len() {
@@ -307,6 +327,207 @@ impl SampleRecord {
         };
         Ok(self.disposition)
     }
+}
+
+/// Signed audit of a frozen-population sample. The nonce is part of the seal.
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SampleAudit {
+    /// Frozen population manifest.
+    pub manifest_hash: Hash,
+    /// Policy version.
+    pub policy_version: u32,
+    /// Named reviewer.
+    pub reviewer: Name,
+    /// Fresh reviewer nonce (audit storage, not runtime RNG).
+    pub reviewer_nonce: Vec<u8>,
+    /// Ranking algorithm identity.
+    pub ranking: Name,
+    /// Selected indexes.
+    pub selected: Vec<usize>,
+    /// Whole-batch disposition.
+    pub disposition: SampleDisposition,
+    /// Sequence time the audit was sealed.
+    pub signed_at: u64,
+    /// `evidence_signature` of the unsigned payload.
+    pub signature: Hash,
+}
+
+#[derive(Serialize)]
+struct UnsignedSampleAudit<'a> {
+    manifest_hash: Hash,
+    policy_version: u32,
+    reviewer: &'a Name,
+    reviewer_nonce: &'a [u8],
+    ranking: &'a Name,
+    selected: &'a [usize],
+    disposition: SampleDisposition,
+    signed_at: u64,
+}
+
+impl SampleAudit {
+    /// Seal a sample after selection. The nonce is committed here, not before freeze.
+    pub fn seal(
+        batch: &FrozenBatch,
+        record: &SampleRecord,
+        reviewer_nonce: &[u8],
+        signed_at: u64,
+    ) -> Result<Self, crate::AiError> {
+        batch.verify()?;
+        record.reproduce(batch, record.reviewer.clone(), reviewer_nonce, signed_at)?;
+        if signed_at > batch.policy.expires_at {
+            return Err(crate::AiError::RequestState("sample audit expired".into()));
+        }
+        refuse_predictable_nonce(batch, reviewer_nonce)?;
+        let mut audit = Self {
+            manifest_hash: record.manifest_hash,
+            policy_version: record.policy_version,
+            reviewer: record.reviewer.clone(),
+            reviewer_nonce: reviewer_nonce.to_vec(),
+            ranking: Name::from("blake3-klotho-review-v1"),
+            selected: record.selected.clone(),
+            disposition: record.disposition,
+            signed_at,
+            signature: Hash::ZERO,
+        };
+        audit.signature = sign_audit(&audit)?;
+        Ok(audit)
+    }
+
+    /// Recompute the seal against the frozen population.
+    pub fn verify(&self, batch: &FrozenBatch) -> Result<(), crate::AiError> {
+        batch.verify()?;
+        if self.manifest_hash != batch.manifest_hash {
+            return Err(crate::AiError::RequestState(
+                "sample audit does not match frozen population".into(),
+            ));
+        }
+        if sign_audit(self)? != self.signature {
+            return Err(crate::AiError::RequestState(
+                "sample audit signature mismatch".into(),
+            ));
+        }
+        let record = SampleRecord {
+            manifest_hash: self.manifest_hash,
+            policy_version: self.policy_version,
+            reviewer: self.reviewer.clone(),
+            reviewer_nonce_hash: hash_bytes(&self.reviewer_nonce),
+            selected: self.selected.clone(),
+            disposition: self.disposition,
+        };
+        record.reproduce(
+            batch,
+            self.reviewer.clone(),
+            &self.reviewer_nonce,
+            self.signed_at,
+        )
+    }
+}
+
+fn sign_audit(audit: &SampleAudit) -> Result<Hash, crate::AiError> {
+    let unsigned = UnsignedSampleAudit {
+        manifest_hash: audit.manifest_hash,
+        policy_version: audit.policy_version,
+        reviewer: &audit.reviewer,
+        reviewer_nonce: &audit.reviewer_nonce,
+        ranking: &audit.ranking,
+        selected: &audit.selected,
+        disposition: audit.disposition,
+        signed_at: audit.signed_at,
+    };
+    let encoded = to_ron(&unsigned).map_err(|error| crate::AiError::Ser(error.to_string()))?;
+    Ok(klotho_prove::evidence_signature(encoded.as_bytes()))
+}
+
+impl FrozenBatch {
+    /// Recompute roots. Post-freeze item replacement fails closed.
+    pub fn verify(&self) -> Result<(), crate::AiError> {
+        let encoded = to_ron(&(self.policy.policy_version, &self.items))
+            .map_err(|error| crate::AiError::Ser(error.to_string()))?;
+        let batch_root = hash_bytes(encoded.as_bytes());
+        if batch_root != self.batch_root {
+            return Err(crate::AiError::RequestState(
+                "frozen population root does not match items".into(),
+            ));
+        }
+        let manifest = to_ron(&(&self.policy, &self.items, batch_root))
+            .map_err(|error| crate::AiError::Ser(error.to_string()))?;
+        if hash_bytes(manifest.as_bytes()) != self.manifest_hash {
+            return Err(crate::AiError::RequestState(
+                "frozen population manifest hash does not match".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Lowering a trusted risk assignment is itself R3 and is refused here.
+pub fn refuse_lower(assigned: RiskLevel, proposed: RiskLevel) -> Result<(), crate::AiError> {
+    if proposed < assigned {
+        return Err(crate::AiError::RequestState(
+            "risk lowering is R3 and is not applied from a critic or author".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// Trusted assignment ignores a model/critic proposal.
+#[must_use]
+pub fn assigned_level(
+    policy: &RiskPolicy,
+    input: &RiskInput,
+    proposed: Option<RiskLevel>,
+) -> RiskLevel {
+    let _ = proposed;
+    policy.route(input)
+}
+
+/// Related changes from one request cannot be split without a trusted reason.
+pub fn refuse_split(
+    left: &FrozenBatch,
+    right: &FrozenBatch,
+    reason: Option<&str>,
+) -> Result<(), crate::AiError> {
+    let overlap = left
+        .items
+        .iter()
+        .any(|a| right.items.iter().any(|b| a.request == b.request));
+    if overlap && reason.is_none() {
+        return Err(crate::AiError::RequestState(
+            "related changes cannot be split across batches without a trusted-policy reason".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// Post-freeze replacement of the population is denied.
+pub fn refuse_replace(frozen: &FrozenBatch, items: &[BatchItem]) -> Result<(), crate::AiError> {
+    frozen.verify()?;
+    if items != frozen.items.as_slice() {
+        return Err(crate::AiError::RequestState(
+            "cannot replace a frozen sample population".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn refuse_predictable_nonce(batch: &FrozenBatch, nonce: &[u8]) -> Result<(), crate::AiError> {
+    if nonce == batch.batch_root.as_bytes().as_slice() || nonce.iter().all(|b| *b == 0) {
+        return Err(crate::AiError::RequestState(
+            "reviewer nonce must not be derived from the frozen population".into(),
+        ));
+    }
+    for item in &batch.items {
+        if nonce == item.operation_hash.as_bytes().as_slice()
+            || nonce == item.evidence_hash.as_bytes().as_slice()
+            || nonce == item.anchor.0.as_slice()
+        {
+            return Err(crate::AiError::RequestState(
+                "reviewer nonce was stuffed into the frozen population".into(),
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Milestone capacity for one review owner.

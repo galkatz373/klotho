@@ -1146,6 +1146,7 @@ fn type_schemas() -> Vec<TypeSchema> {
                 ("Budget", "budget miss"),
                 ("Reproducibility", "hash drift"),
                 ("Schema", "parse/module structure"),
+                ("Quality", "capture / numeric quality gate"),
             ]
             .into_iter()
             .map(|(n, desc)| variant(n, None, "unit", desc))
@@ -1209,6 +1210,38 @@ fn type_schemas() -> Vec<TypeSchema> {
             .map(|(n, desc)| variant(n, None, "payload", desc))
             .collect(),
             "Place(locus:\"player\",place:\"hall\")",
+        ),
+        enumeration(
+            "klotho_eval::CaptureKind",
+            [
+                ("Semantic", "snapshot / semantic hashes"),
+                ("Presentation", "legacy presentation umbrella"),
+                ("Pixel", "fixed-camera RGBA / SSIM / LPIPS"),
+                ("Animation", "pose / foot-slide / root samples"),
+                ("Audio", "mix PCM / loudness / cues"),
+                ("Ui", "locale × aspect × input × a11y"),
+            ]
+            .into_iter()
+            .map(|(n, desc)| variant(n, None, "unit", desc))
+            .collect(),
+            "Semantic",
+        ),
+        structure(
+            "klotho_eval::CapturePolicy",
+            vec![
+                bounded("version", "u32", "policy version", 1, 1),
+                bounded("width", "u32", "pixels", 1, 7680),
+                bounded("height", "u32", "pixels", 1, 4320),
+                field("color_transform", "Name", "OCIO / rec709 lock"),
+                field("camera", "Name", "shot name"),
+                bounded("warmup_frames", "u32", "discarded frames", 0, 256),
+                field("driver", "Name", "machine-manifest driver"),
+                field("backend", "Name", "graphics backend"),
+                bounded("jitter_seq", "u8", "temporal jitter id", 0, 255),
+                field("metrics", "MetricLock", "pinned SSIM/LPIPS pair"),
+            ],
+            "(version:1,width:16,height:16,color_transform:\"rec709-v1\",camera:\"hero\",warmup_frames:0,driver:\"ci\",backend:\"null\",jitter_seq:0,metrics:(ssim:(id:\"klotho-ssim-v1\",lock:\"0000000000000000000000000000000000000000000000000000000000000000\"),lpips:(id:\"klotho-lpips-v1\",lock:\"0000000000000000000000000000000000000000000000000000000000000000\")))",
+            "(version:0,width:0,height:0)",
         ),
         structure(
             "klotho_eval::EvidenceBundle",
@@ -1779,6 +1812,12 @@ fn operations() -> Vec<OperationSchema> {
             3,
         ),
         ("present.casting.set@1", "CastingConsent", &["casting"], 2),
+        (
+            "eval.capture.compare@1",
+            "{reference:CaptureSet,candidate:CaptureSet}",
+            &["evidence"],
+            3,
+        ),
     ]
     .into_iter()
     .map(|(id, input, writes, cost_units)| OperationSchema {
@@ -1837,6 +1876,18 @@ mod tests {
                 .kinds
                 .iter()
                 .any(|k| k.id == "klotho_dialogue::StoryBible")
+        );
+        assert!(
+            catalog
+                .kinds
+                .iter()
+                .any(|k| k.id == "klotho_eval::CapturePolicy")
+        );
+        assert!(
+            catalog
+                .operations
+                .iter()
+                .any(|o| o.id == "eval.capture.compare@1")
         );
         assert!(
             catalog
@@ -1909,6 +1960,7 @@ mod tests {
         round_trip(&klotho_ir::PresentProfile::high());
         round_trip(&klotho_ir::MaterialGraph::organic());
         round_trip(&klotho_ir::CastingConsent::first_title());
+        round_trip(&klotho_ir::FailureClass::Quality);
         round_trip(&klotho_pattern::greybox_route());
         round_trip(&klotho_pattern::PlaceBudgets::greybox());
         round_trip(&klotho_dialogue::observatory());

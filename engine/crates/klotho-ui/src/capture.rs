@@ -133,6 +133,36 @@ fn capture_cell(
     }
 }
 
+/// Seeded overflow cell used by multimodal eval. Not part of the shipping matrix.
+#[must_use]
+pub fn seeded_overflow_fault() -> CaptureCell {
+    CaptureCell {
+        locale: "en-XA".into(),
+        width: 1_440,
+        height: 1_080,
+        input: InputFamily::KeyboardMouse,
+        profile: "large_text".into(),
+        overflow: 1,
+        overlap: 0,
+        focus_complete: true,
+    }
+}
+
+/// Seeded incomplete-focus cell used by multimodal eval.
+#[must_use]
+pub fn seeded_focus_fault() -> CaptureCell {
+    CaptureCell {
+        locale: "en".into(),
+        width: 1_920,
+        height: 1_080,
+        input: InputFamily::Gamepad,
+        profile: "default".into(),
+        overflow: 0,
+        overlap: 0,
+        focus_complete: false,
+    }
+}
+
 /// Hard gate used by eval / Distaff.
 pub fn matrix_gate(table: &BindTable) -> Result<CaptureReport, UiError> {
     let report = run_capture_matrix(table);

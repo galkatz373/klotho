@@ -9,6 +9,7 @@
 #![allow(unsafe_code)]
 #![warn(missing_docs)]
 
+mod capture;
 mod cluster;
 mod extract;
 mod gpu;
@@ -23,6 +24,7 @@ mod probes;
 mod surface;
 mod thread;
 
+pub use capture::{CAPTURE_HEIGHT, CAPTURE_WIDTH, CaptureDesc, HIST_BINS, PixelStats, luma};
 pub use cluster::{PointLight, TileAssign, assign_tiles};
 pub use extract::{
     VisualBind, binds_from_cooked, extract_visual, extract_visual_with_clips, skinned_instance,

@@ -51,6 +51,21 @@ pub enum EvalError {
     Replay,
     /// Underlying kernel/debug fault, escaped as text.
     Host(String),
+    /// Capture policy, alignment, or metric plugin failure.
+    Capture(String),
+    /// Numeric quality gate miss.
+    Quality {
+        /// Metric id.
+        metric: String,
+        /// Observed value.
+        used: i32,
+        /// Inclusive cap or floor.
+        cap: i32,
+    },
+    /// Flake policy refusal (retry-to-green, relabel, quarantine).
+    Flake(String),
+    /// Farm lane SLO / coverage refusal.
+    Lane(String),
 }
 
 impl EvalError {
@@ -133,6 +148,34 @@ impl EvalError {
                 token,
                 self.to_string(),
             ),
+            Self::Capture(token) => diagnose_named(
+                "EVAL.Capture",
+                FailureClass::Quality,
+                "capture",
+                token,
+                self.to_string(),
+            ),
+            Self::Quality { metric, used, cap } => klotho_ir::diagnose_quality(
+                metric,
+                *used,
+                *cap,
+                &[metric.as_str()],
+                self.to_string(),
+            ),
+            Self::Flake(token) => diagnose_named(
+                "EVAL.Flake",
+                FailureClass::Reproducibility,
+                "flake",
+                token,
+                self.to_string(),
+            ),
+            Self::Lane(token) => diagnose_named(
+                "EVAL.Capture",
+                FailureClass::Budget,
+                "lane",
+                token,
+                self.to_string(),
+            ),
         }
     }
 
@@ -168,6 +211,12 @@ impl fmt::Display for EvalError {
             Self::Agency => write!(f, "AgencyMintDenied"),
             Self::Replay => write!(f, "MinimizeReplayMismatch"),
             Self::Host(s) => write!(f, "EvalHost({s})"),
+            Self::Capture(s) => write!(f, "Capture({s})"),
+            Self::Quality { metric, used, cap } => {
+                write!(f, "Quality({metric} {used}/{cap})")
+            }
+            Self::Flake(s) => write!(f, "Flake({s})"),
+            Self::Lane(s) => write!(f, "Lane({s})"),
         }
     }
 }

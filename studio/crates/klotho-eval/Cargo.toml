@@ -10,6 +10,9 @@ readme = false
 publish = false
 
 [dependencies]
+klotho-anim.workspace = true
+klotho-audio.workspace = true
+klotho-cinematic.workspace = true
 klotho-core.workspace = true
 klotho-debug.workspace = true
 klotho-input.workspace = true

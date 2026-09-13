@@ -44,6 +44,8 @@ klotho-kai-bench = { path = "crates/klotho-kai-bench" }
 klotho-debug = { path = "../engine/crates/klotho-debug" }
 klotho-input = { path = "../engine/crates/klotho-input" }
 klotho-anim = { path = "../engine/crates/klotho-anim" }
+klotho-audio = { path = "../engine/crates/klotho-audio" }
+klotho-cinematic = { path = "../engine/crates/klotho-cinematic" }
 ron = "0.11.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.151"

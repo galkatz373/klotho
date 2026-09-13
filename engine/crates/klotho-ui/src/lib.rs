@@ -24,7 +24,10 @@ mod pause;
 mod skin;
 
 pub use a11y::{apply_profile, caption_band, check_compliance, compliance_evidence, prove_menu};
-pub use capture::{CaptureCell, CaptureReport, capture_profiles, matrix_gate, run_capture_matrix};
+pub use capture::{
+    CaptureCell, CaptureReport, capture_profiles, matrix_gate, run_capture_matrix,
+    seeded_focus_fault, seeded_overflow_fault,
+};
 pub use error::UiError;
 pub use extract::extract_ui;
 pub use focus::{FocusCycle, FocusNav, nav_from_button, screen_reader_tree};

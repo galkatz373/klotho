@@ -7,11 +7,13 @@
 #![allow(unsafe_code)]
 #![warn(missing_docs)]
 
+mod capture;
 mod extract;
 mod mix;
 mod music;
 mod thread;
 
+pub use capture::{AudioStats, loudness_range_milli, true_peak_milli};
 pub use extract::extract_sonic;
 pub use mix::{
     DeviceMixer, IntegerMixer, MixBudget, MixFrame, Mixer, NullMixer, OCCLUDED_GAIN_MILLI,

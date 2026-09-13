@@ -74,7 +74,8 @@ pub use policy::{
 };
 pub use review::{
     ArtifactClass, BatchItem, FrozenBatch, OwnerBudget, OwnerQueues, R0Rule, RiskInput, RiskLevel,
-    RiskPolicy, SampleDisposition, SampleRecord, SamplingPolicy,
+    RiskPolicy, SampleAudit, SampleDisposition, SampleRecord, SamplingPolicy, assigned_level,
+    refuse_lower, refuse_replace, refuse_split,
 };
 pub use service::{KlothoAi, RepairOutcome, ReviewPackage};
 pub use store::{AuthoringTransaction, TransactionStore, TxStatus};
@@ -87,5 +88,7 @@ pub use klotho_author::{AnchoredSeedFact, SemanticEdit, apply_edit, bundle_conte
 mod kai07_tests;
 #[cfg(test)]
 mod kai08_tests;
+#[cfg(test)]
+mod kai18_tests;
 #[cfg(test)]
 mod tests;

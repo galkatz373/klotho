@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "toolchain_hash": "b341e60237921e0fd4c0cf8760f6527bb6ba80d5d0d2eea4f543cc82195dd96b",
+  "toolchain_hash": "f5f0964ff1297309d095db30f5186eed30cd2adce7196c26c48b14f91fd0391d",
   "kinds": [
     {
       "id": "klotho_ir::IntentDoc",
@@ -3086,6 +3086,12 @@
           "discriminant": null,
           "payload": "unit",
           "description": "parse/module structure"
+        },
+        {
+          "name": "Quality",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "capture / numeric quality gate"
         }
       ],
       "positive_example": "Contradiction",
@@ -3279,6 +3285,130 @@
       ],
       "positive_example": "Place(locus:\"player\",place:\"hall\")",
       "negative_example": "UnknownVariant"
+    },
+    {
+      "id": "klotho_eval::CaptureKind",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "Semantic",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "snapshot / semantic hashes"
+        },
+        {
+          "name": "Presentation",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "legacy presentation umbrella"
+        },
+        {
+          "name": "Pixel",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "fixed-camera RGBA / SSIM / LPIPS"
+        },
+        {
+          "name": "Animation",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "pose / foot-slide / root samples"
+        },
+        {
+          "name": "Audio",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "mix PCM / loudness / cues"
+        },
+        {
+          "name": "Ui",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "locale × aspect × input × a11y"
+        }
+      ],
+      "positive_example": "Semantic",
+      "negative_example": "UnknownVariant"
+    },
+    {
+      "id": "klotho_eval::CapturePolicy",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "version",
+          "ty": "u32",
+          "description": "policy version",
+          "min": 1,
+          "max": 1
+        },
+        {
+          "name": "width",
+          "ty": "u32",
+          "description": "pixels",
+          "min": 1,
+          "max": 7680
+        },
+        {
+          "name": "height",
+          "ty": "u32",
+          "description": "pixels",
+          "min": 1,
+          "max": 4320
+        },
+        {
+          "name": "color_transform",
+          "ty": "Name",
+          "description": "OCIO / rec709 lock",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "camera",
+          "ty": "Name",
+          "description": "shot name",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "warmup_frames",
+          "ty": "u32",
+          "description": "discarded frames",
+          "min": 0,
+          "max": 256
+        },
+        {
+          "name": "driver",
+          "ty": "Name",
+          "description": "machine-manifest driver",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "backend",
+          "ty": "Name",
+          "description": "graphics backend",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "jitter_seq",
+          "ty": "u8",
+          "description": "temporal jitter id",
+          "min": 0,
+          "max": 255
+        },
+        {
+          "name": "metrics",
+          "ty": "MetricLock",
+          "description": "pinned SSIM/LPIPS pair",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(version:1,width:16,height:16,color_transform:\"rec709-v1\",camera:\"hero\",warmup_frames:0,driver:\"ci\",backend:\"null\",jitter_seq:0,metrics:(ssim:(id:\"klotho-ssim-v1\",lock:\"0000000000000000000000000000000000000000000000000000000000000000\"),lpips:(id:\"klotho-lpips-v1\",lock:\"0000000000000000000000000000000000000000000000000000000000000000\")))",
+      "negative_example": "(version:0,width:0,height:0)"
     },
     {
       "id": "klotho_eval::EvidenceBundle",
@@ -5628,6 +5758,15 @@
       ]
     },
     {
+      "code": "KAI-DIAG-QUALITY",
+      "source": "klotho-eval",
+      "class": "quality",
+      "retryable": false,
+      "legal_repairs": [
+        "repair owned Manifest or clip from aligned capture witness"
+      ]
+    },
+    {
       "code": "IR.Parse",
       "source": "klotho-ir",
       "class": "schema",
@@ -6125,6 +6264,27 @@
       "legal_repairs": []
     },
     {
+      "code": "EVAL.Quality",
+      "source": "klotho-eval",
+      "class": "quality",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "EVAL.Flake",
+      "source": "klotho-eval",
+      "class": "reproducibility",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "EVAL.Capture",
+      "source": "klotho-eval",
+      "class": "quality",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
       "code": "DIALOGUE.Name",
       "source": "klotho-dialogue",
       "class": "schema",
@@ -6512,6 +6672,14 @@
         "casting"
       ],
       "cost_units": 2
+    },
+    {
+      "id": "eval.capture.compare@1",
+      "input": "{reference:CaptureSet,candidate:CaptureSet}",
+      "writes": [
+        "evidence"
+      ],
+      "cost_units": 3
     }
   ]
 }

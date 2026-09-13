@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::cook::Cooked;
 use crate::error::{CompileError, check_ship_allowlist};
 use crate::warp::pack_warp;
+use crate::{WholeTitleCook, encode_whole_title_plan};
 use klotho_prove::hash_bytes;
 
 /// Locale identifiers shipped with Mini-Tapestry.
@@ -208,6 +209,38 @@ pub fn pack_desktop(
         sku: sku.id.to_owned(),
         files,
     })
+}
+
+/// Pack the proven optimized cook plus its model-free runtime layout.
+///
+/// Debug source maps, pass diagnostics, transcripts, and stripped auxiliary
+/// inputs are intentionally not serialized into the game package.
+pub fn pack_optimized_desktop(
+    cooked: &WholeTitleCook,
+    sku: &DesktopSku,
+    content: &ShipContent,
+) -> Result<DesktopPackage, CompileError> {
+    if !cooked
+        .plan
+        .skus
+        .iter()
+        .any(|planned| planned.sku.as_str() == sku.id)
+    {
+        return Err(CompileError::Optimization(format!(
+            "SKU {} was not planned",
+            sku.id
+        )));
+    }
+    let mut package = pack_desktop(&cooked.optimized, sku, content)?;
+    package.files.insert(
+        "runtime/whole-title.kopt".into(),
+        encode_whole_title_plan(&cooked.plan)?,
+    );
+    for (path, bytes) in &cooked.plan.runtime_files {
+        check_ship_allowlist(path)?;
+        package.files.insert(path.clone(), bytes.clone());
+    }
+    Ok(package)
 }
 
 /// Copy package files into `dest` and write an install record.
@@ -474,5 +507,41 @@ mod tests {
         content.locales.pop();
         let err = pack_desktop(&cooked, &DESKTOP_SKUS[2], &content).unwrap_err();
         assert!(err.to_string().contains("en, ja, and es"));
+    }
+
+    #[test]
+    fn optimized_package_has_plan_but_no_debug_or_model_inputs() {
+        let mut request = crate::WholeTitleRequest::default();
+        request.skus.push(crate::SkuPlanInput {
+            sku: klotho_ir::Name::from(DESKTOP_SKUS[0].id),
+            tier: klotho_ir::QualityTier::High,
+            used_permutations: Vec::new(),
+        });
+        request
+            .auxiliary_files
+            .insert("models/author.gguf".into(), vec![1, 2, 3]);
+        let whole = crate::cook_whole_title(&hearth_slice::hearth_doc(), &request, |_| {
+            Ok(vec![crate::TraceRun {
+                case: klotho_ir::Name::from("hearth-package"),
+                deltas: vec![klotho_trace::TraceDelta::empty(klotho_core::Tick(0))],
+                terminal_prefix: klotho_core::Hash::ZERO,
+            }])
+        })
+        .unwrap();
+        let package = pack_optimized_desktop(&whole, &DESKTOP_SKUS[0], &content()).unwrap();
+        assert!(package.files.contains_key("runtime/whole-title.kopt"));
+        assert!(package.files.keys().all(|path| !path.contains("models")));
+        assert!(
+            package
+                .files
+                .keys()
+                .all(|path| !path.contains("source-map"))
+        );
+        let unpacked = crate::unpack_warp(&package.files["game.warp"]).unwrap();
+        assert!(unpacked.optimized);
+        assert_eq!(
+            unpacked.canon.preds.len(),
+            whole.optimized.canon.preds.len()
+        );
     }
 }

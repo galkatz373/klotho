@@ -62,6 +62,10 @@ klotho-phys.workspace = true
 workspace = true
 
 [dev-dependencies]
+ash-slice = { path = "../../examples/ash-slice" }
+chorus-slice = { path = "../../examples/chorus-slice" }
+drift-slice = { path = "../../examples/drift-slice" }
+ember-slice = { path = "../../examples/ember-slice" }
 klotho-canon.workspace = true
 klotho-save.workspace = true
 klotho-trace.workspace = true

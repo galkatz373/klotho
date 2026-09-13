@@ -40,7 +40,7 @@ pub struct Binding {
 }
 
 /// Cooked warp contents: Canon, seed Intent, CAS, provenance.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Cooked {
     /// Authoring document this cook came from (seed facts + diffs).
     pub doc: IntentDoc,
@@ -60,6 +60,8 @@ pub struct Cooked {
     pub grains: BTreeMap<String, klotho_core::BlobId>,
     /// ClipSet tag → blob (`biped` is the v1 Hearth table).
     pub clips: BTreeMap<String, klotho_core::BlobId>,
+    /// Whether the runtime tables use the KAI-19 optimized layout.
+    pub optimized: bool,
 }
 
 /// Quantized glTF blobs for [`cook_with_dcc`]. Compile does not parse glTF.
@@ -266,6 +268,7 @@ pub fn cook_with(doc: &IntentDoc, kit: &Kitbash) -> Result<Cooked, CompileError>
         bindings,
         grains: grain_ids,
         clips: clip_ids,
+        optimized: false,
     })
 }
 
@@ -313,6 +316,7 @@ pub fn cook_with_dcc(doc: &IntentDoc, imports: &[DccArtifact]) -> Result<Cooked,
             bindings: Vec::new(),
             grains: BTreeMap::new(),
             clips: BTreeMap::new(),
+            optimized: false,
         });
     };
     let license = first.license.clone();
@@ -490,6 +494,7 @@ pub fn cook_with_dcc(doc: &IntentDoc, imports: &[DccArtifact]) -> Result<Cooked,
         bindings,
         grains: BTreeMap::new(),
         clips: clip_ids,
+        optimized: false,
     })
 }
 
@@ -523,6 +528,14 @@ pub(crate) fn cook_digest(doc: &IntentDoc, kit_blobs: &[klotho_core::BlobId]) ->
         buf.extend_from_slice(id.as_bytes());
     }
     hash_bytes(&buf)
+}
+
+/// Domain-separate an optimized artifact from its semantic Canon identity.
+pub(crate) fn optimized_cook_digest(reference: Hash) -> Hash {
+    let mut bytes = Vec::with_capacity(32 + 22);
+    bytes.extend_from_slice(b"klotho-optimized-v1");
+    bytes.extend_from_slice(reference.as_bytes());
+    hash_bytes(&bytes)
 }
 
 fn put_bytes(buf: &mut Vec<u8>, data: &[u8]) {

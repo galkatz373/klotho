@@ -14,14 +14,14 @@ use klotho_prove::{
 };
 
 use crate::Binding;
-use crate::cook::{COMPILER_VERSION, Cooked, cook_digest};
+use crate::cook::{COMPILER_VERSION, Cooked, cook_digest, optimized_cook_digest};
 use crate::error::CompileError;
 use crate::header::{peek_kind, validate_blob};
 
 /// Container magic. Distinct from CAS `KLTH` so a blob is not a warp.
 pub const WARP_MAGIC: [u8; 4] = *b"KWRP";
 /// Container version. Bump invalidates every file.
-pub const WARP_VERSION: u8 = 1;
+pub const WARP_VERSION: u8 = 3;
 /// HLD §4 desktop file cap. Loader applies this via `read_capped` before parse.
 pub const WARP_CAP_DESKTOP: usize = 512 * 1024 * 1024;
 /// HLD §4 mobile file cap (named; v1 loader uses desktop).
@@ -67,7 +67,7 @@ pub fn unpack_warp(bytes: &[u8]) -> Result<Cooked, CompileError> {
         return Err(warp_err("bad magic"));
     }
     let version = take_u8(&mut rest)?;
-    if version != WARP_VERSION {
+    if version != 1 && version != WARP_VERSION {
         return Err(warp_err(format!("bad version {version}")));
     }
     let pad = take(&mut rest, 3)?;
@@ -78,6 +78,7 @@ pub fn unpack_warp(bytes: &[u8]) -> Result<Cooked, CompileError> {
     if compiler != COMPILER_VERSION {
         return Err(warp_err(format!("compiler version {compiler}")));
     }
+    let optimized = version >= 3 && take_u8(&mut rest)? != 0;
     let cook_hash = take_hash(&mut rest)?;
     let canon_hash = take_hash(&mut rest)?;
 
@@ -138,9 +139,17 @@ pub fn unpack_warp(bytes: &[u8]) -> Result<Cooked, CompileError> {
         return Err(warp_err("trailing bytes"));
     }
 
-    let canon = cook_canon(&doc).map_err(CompileError::canon)?;
+    let mut canon = cook_canon(&doc).map_err(CompileError::canon)?;
+    if optimized {
+        canon.intern_predicates();
+    }
     let digest = cook_digest(&doc, &kit_blobs_from_cas(&cas));
-    if digest != cook_hash || digest != canon_hash {
+    let expected_cook = if optimized {
+        optimized_cook_digest(digest)
+    } else {
+        digest
+    };
+    if expected_cook != cook_hash || digest != canon_hash {
         return Err(warp_err("canon hash mismatch"));
     }
     Ok(Cooked {
@@ -153,6 +162,7 @@ pub fn unpack_warp(bytes: &[u8]) -> Result<Cooked, CompileError> {
         bindings,
         grains,
         clips,
+        optimized,
     })
 }
 
@@ -162,6 +172,7 @@ fn encode_warp(cooked: &Cooked) -> Result<Vec<u8>, CompileError> {
     buf.push(WARP_VERSION);
     buf.extend_from_slice(&[0, 0, 0]);
     buf.extend_from_slice(&COMPILER_VERSION.to_le_bytes());
+    buf.push(u8::from(cooked.optimized));
     buf.extend_from_slice(cooked.cook_hash.as_bytes());
     buf.extend_from_slice(cooked.canon_hash.as_bytes());
 
@@ -503,7 +514,7 @@ mod tests {
     fn caps_match_hld() {
         assert_eq!(WARP_MAGIC, *b"KWRP");
         assert_ne!(WARP_MAGIC, MAGIC);
-        assert_eq!(WARP_VERSION, 1);
+        assert_eq!(WARP_VERSION, 3);
         assert_eq!(WARP_CAP_DESKTOP, 512 * 1024 * 1024);
         assert_eq!(WARP_CAP_MOBILE, 192 * 1024 * 1024);
         assert_eq!(WARP_MAX_LOCI, 4_096);
@@ -634,7 +645,7 @@ mod tests {
     #[test]
     fn unpack_refuses_flipped_header_hash() {
         let mut bytes = pack_warp(&hearth()).unwrap();
-        bytes[12] ^= 1;
+        bytes[13] ^= 1;
         let e = unpack_warp(&bytes).unwrap_err();
         assert!(
             matches!(e, CompileError::Warp(ref s) if s.contains("hash")),

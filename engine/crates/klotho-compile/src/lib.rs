@@ -24,6 +24,7 @@ mod error;
 mod header;
 mod kit;
 mod material;
+mod optimize;
 mod package;
 mod placement;
 mod present;
@@ -60,10 +61,16 @@ pub use klotho_ir::{CastingConsent, MaterialGraph, PresentProfile, QualityTier};
 pub use klotho_manifest::MaterialTag;
 pub use klotho_prove::{Cas, LicenseSpan, MAX_BLOB_BYTES, MAX_BLOBS, ProvenanceDag};
 pub use material::{ShaderPerm, compile_material, prune_permutations};
+pub use optimize::{
+    EquivalenceReport, OptimizationPass, OptimizationReport, OptimizedSourceMap, PackedRow,
+    PassReport, PlaceBundlePlan, PlacePlanInput, SkuBundlePlan, SkuPlanInput, SourceMapEntry,
+    TraceRun, WholeTitleCook, WholeTitlePlan, WholeTitleRequest, compare_trace_runs,
+    cook_whole_project, cook_whole_title, decode_whole_title_plan, encode_whole_title_plan,
+};
 pub use package::{
     AccessibilitySettings, CreditEntry, CreditsRoll, DESKTOP_SKUS, DesktopPackage, DesktopSku,
     HudSpec, InstallRecord, LocaleTable, REQUIRED_LOCALE_KEYS, ShipContent, install_package,
-    pack_desktop, repair_package, uninstall_package,
+    pack_desktop, pack_optimized_desktop, repair_package, uninstall_package,
 };
 pub use placement::{
     ChunkKey, InstanceGroup, MAX_INSTANCE_GROUPS, MAX_PLACEMENT_RECORDS, MaterializedWorld,

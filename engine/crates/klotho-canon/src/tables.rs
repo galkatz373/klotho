@@ -104,6 +104,53 @@ impl Canon {
         let i = self.pin_names.iter().position(|n| n.as_str() == name)?;
         self.pin_sigils.get(i).copied().flatten()
     }
+
+    /// Intern byte-identical predicate programs and rewrite every internal
+    /// reference to the first stable occurrence.
+    ///
+    /// Predicate ids are a packed implementation detail; Law, Affordance, and
+    /// Rite ids are left untouched. The returned count is the number of table
+    /// rows removed. This is used only by the optimized cook.
+    pub fn intern_predicates(&mut self) -> usize {
+        let before = self.preds.len();
+        let mut unique = Vec::with_capacity(before);
+        let mut remap = Vec::with_capacity(before);
+        for pred in self.preds.drain(..) {
+            let index = unique.iter().position(|known| known == &pred);
+            let index = match index {
+                Some(index) => index,
+                None => {
+                    unique.push(pred);
+                    unique.len() - 1
+                }
+            };
+            remap.push(PredId(index as u16));
+        }
+        self.preds = unique;
+
+        let map = |id: &mut PredId| *id = remap[id.0 as usize];
+        for law in &mut self.laws {
+            map(&mut law.when);
+            match &mut law.body {
+                CookedLawBody::Pred { must, .. } => map(must),
+                CookedLawBody::Cap { mark, .. } => map(mark),
+                CookedLawBody::Ramp { .. }
+                | CookedLawBody::Spread { .. }
+                | CookedLawBody::Conserve { .. } => {}
+            }
+        }
+        for affordance in &mut self.affordances {
+            for required in &mut affordance.requires {
+                map(required);
+            }
+        }
+        for rite in &mut self.rites {
+            for guard in rite.guards.values_mut() {
+                map(guard);
+            }
+        }
+        before - self.preds.len()
+    }
 }
 
 /// One cooked Law row.
@@ -215,4 +262,40 @@ pub struct CookedRite {
     pub chunk: RiteChunk,
     /// `pc` → compiled pred for `Guard` / `Branch`.
     pub guards: BTreeMap<u16, PredId>,
+}
+
+#[cfg(test)]
+mod tests {
+    use klotho_ir::{CanonDiff, IntentDoc, Law, LawBody, Name, Pred, ProvenanceId, StyleIntent};
+
+    use super::*;
+
+    #[test]
+    fn predicate_interning_rewrites_references_without_semantic_ids() {
+        let pred = Pred::SourceIs(klotho_ir::SourceKind::Player);
+        let law = |id: &str| {
+            CanonDiff::AddLaw(Law {
+                id: Name::from(id),
+                when: pred.clone(),
+                body: LawBody::Pred {
+                    must: pred.clone(),
+                    ought: None,
+                },
+            })
+        };
+        let doc = IntentDoc {
+            style: StyleIntent::default(),
+            canon_diffs: vec![law("a"), law("b")],
+            seed: Vec::new(),
+            minds: Vec::new(),
+            provenance: ProvenanceId(klotho_core::Hash::ZERO),
+        };
+        let mut canon = crate::cook(&doc).unwrap();
+        assert_eq!(canon.preds.len(), 4);
+        assert_eq!(canon.intern_predicates(), 3);
+        assert_eq!(canon.preds.len(), 1);
+        assert_eq!(canon.law_id("a"), Some(klotho_core::LawId(0)));
+        assert_eq!(canon.law_id("b"), Some(klotho_core::LawId(1)));
+        assert!(canon.laws.iter().all(|law| law.when == PredId(0)));
+    }
 }

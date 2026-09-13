@@ -1000,6 +1000,7 @@ dependencies = [
  "klotho-manifest",
  "klotho-prove",
  "klotho-stream",
+ "klotho-trace",
  "ron",
  "serde",
 ]
@@ -1030,6 +1031,7 @@ version = "0.1.0"
 dependencies = [
  "klotho-canon",
  "klotho-commit",
+ "klotho-compile",
  "klotho-core",
  "klotho-input",
  "klotho-ir",

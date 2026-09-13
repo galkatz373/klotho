@@ -49,6 +49,10 @@ pub enum CompileError {
     PackageAllowlist(String),
     /// Placement table encode/decode or materialization failed.
     Placement(String),
+    /// Whole-title optimizer input or deterministic plan failure.
+    Optimization(String),
+    /// Reference/optimized finite corpus mismatch.
+    Equivalence(String),
 }
 
 impl CompileError {
@@ -125,6 +129,20 @@ impl CompileError {
                 "COMPILE.Placement",
                 FailureClass::Schema,
                 "placement",
+                s,
+                message,
+            ),
+            Self::Optimization(s) => diagnose_named(
+                "COMPILE.Optimization",
+                FailureClass::Schema,
+                "optimizer",
+                s,
+                message,
+            ),
+            Self::Equivalence(s) => diagnose_named(
+                "COMPILE.Equivalence",
+                FailureClass::Journey,
+                "corpus",
                 s,
                 message,
             ),
@@ -213,6 +231,8 @@ impl fmt::Display for CompileError {
             Self::Flatten(s) => write!(f, "Flatten({s})"),
             Self::PackageAllowlist(p) => write!(f, "PackageAllowlist({p})"),
             Self::Placement(s) => write!(f, "Placement({s})"),
+            Self::Optimization(s) => write!(f, "Optimization({s})"),
+            Self::Equivalence(s) => write!(f, "Equivalence({s})"),
         }
     }
 }

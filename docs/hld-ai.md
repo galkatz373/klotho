@@ -4,8 +4,8 @@
 | --- | --- |
 | Document | High-Level Design — AI-native production for Klotho's first AAA title |
 | Author | Gal Katz |
-| Date | 2026-09-13 |
-| Status | Active successor plan (KAI-00–18 landed; KAI-19–24 not landed) |
+| Date | 2026-09-14 |
+| Status | Active successor plan (KAI-00–19 landed; KAI-20–24 not landed) |
 | Baseline | `docs/hld.md` rev 6; AAA-01–27 landed |
 | Audience | Engine, tools, gameplay, content, AI platform, build, QA, and production leads |
 | Language | Rust (edition 2024; 2021-compatible crates OK) |
@@ -1911,7 +1911,7 @@ managers.
 
 ## PR plan
 
-Landed baseline: AAA-01–27 and KAI-00–18 (2026-09-13). KAI-19–24 remain planned.
+Landed baseline: AAA-01–27 and KAI-00–19 (2026-09-14). KAI-20–24 remain planned.
 Each header gains `— landed` only with its implementation, tests, date bump, and
 this section's landed list update.
 
@@ -2238,7 +2238,7 @@ flowchart TB
 
 ### Performance, scale, and ship
 
-#### KAI-19 — Reference and equivalent optimized whole-title cook
+#### KAI-19 — Reference and equivalent optimized whole-title cook — **landed 2026-09-14**
 
 - **Files:** `klotho-compile`, optimizer passes, debug source maps, package strip,
   equivalence runner.

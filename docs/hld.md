@@ -45,7 +45,7 @@ This table records the floor from which the successor plan started. Rows that na
 | Kernel budget | `Budget::HEARTH.us_sim = 4_000` µs; `FrameReport.over_budget` reports misses while deterministic `pred_ops` / `rite_steps` remain admission gates; `klotho-debug` gates 64-awake | 4 ms for 4k loci is Hearth theater; AAA admit target is 5–8 ms of a 30/60 Hz tick. Hearth 4 ms is **not** retired |
 | Space | `klotho-space::Space` is ZST; `propose` walks `view.loci()`; 2.5D AABB + swept capsule; Actors skipped | O(n) locus walk; no gravity, stacking, joints, 6DOF, destruction |
 | Motion | `klotho-motion`: verb→clip, debug T-pose, `WALK_MM_PER_TICK = 20`; clip time from `WorldView::tick` | Not skeletal, not motion matching, not hit-frame accurate |
-| Mind | `klotho-mind::Mind` GOAP over a **hardcoded** `match goal` (`stay_near_forge`, `fetch_bucket`, …) | 3 Hearth NPCs; not 200–2,000 agents |
+| Mind | `klotho-mind::Mind` compiles hash-interned fact/operator/utility programs with fixed GOAP caps and a table-only Far lane | KAI-12 scale gate covers 2,000 Far + 200 Full agents |
 | Infer | `klotho-infer::InferHost` in-process stub; `fill` emits `Verb::Look` | Isolation is the contract; the model is not |
 | Render | wgpu clustered static meshes; one unlit+lambert family (`shader.wgsl`); `RenderThread` via `mpsc` | No PBR, shadows, GI, skinning, post, virtualized geo |
 | Audio | Integer mix to i16 stereo PCM; **no device output** | No spatial HRTF, no voices-at-scale, no middleware presenter |
@@ -510,7 +510,7 @@ New crates (named, implementable):
 | `klotho-cinematic` | Observer tracks from Beats | No | Deps: **manifest + ir**, not world |
 | `klotho-editor` | Distaff GUI (egui or native) | No | Depends on author + render; **joins forbidden-imports** |
 
-**Stub honesty:** `klotho-infer` remains a stub and `klotho-mind` still uses a hardcoded goal table. Audio device output, PBR rendering, and the editor viewport have landed as their first production-shaped implementations; their remaining limits belong in subsystem gates rather than this historical stub list.
+**Stub honesty:** `klotho-infer` remains a stub. Compiled Mind, audio device output, PBR rendering, and the editor viewport have landed as production-shaped implementations; their remaining limits belong in subsystem gates rather than this historical stub list.
 
 ### Threading model
 

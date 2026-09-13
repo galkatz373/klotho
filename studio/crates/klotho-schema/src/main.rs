@@ -28,7 +28,17 @@ fn main() -> ExitCode {
             }
             Err(error) => fail(&error),
         },
-        _ => fail("usage: klotho-schema [check|print]"),
+        "update" => match klotho_schema::to_pretty_json(&catalog) {
+            Ok(json) => match std::fs::write(&golden, json) {
+                Ok(()) => {
+                    println!("updated {}", golden.display());
+                    ExitCode::SUCCESS
+                }
+                Err(error) => fail(&error.to_string()),
+            },
+            Err(error) => fail(&error.to_string()),
+        },
+        _ => fail("usage: klotho-schema [check|print|update]"),
     }
 }
 

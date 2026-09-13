@@ -5,8 +5,9 @@ use std::collections::BTreeMap;
 use klotho_core::LocusKind;
 use klotho_ir::{
     Affordance, AnchorId, AnchorKind, Beat, BindSrc, CanonDiff, IntentModule, Law, LawBody,
-    MindSpec, Name, ObjectAnchor, ParameterType, ParameterValue, PatternInstance, Pred,
-    ProjectBundle, Rel, RiteGraph, RiteNode, RiteOp, SeedFact, Slot, Status, Verb,
+    MindFact, MindGoal, MindOperator, MindProgram, MindQuery, MindSpec, MindTarget, Name,
+    ObjectAnchor, ParameterType, ParameterValue, PatternInstance, Pred, ProjectBundle, Rel,
+    RiteGraph, RiteNode, RiteOp, SeedFact, Slot, Status, Verb,
 };
 
 use crate::def::{
@@ -595,11 +596,51 @@ fn emit_boundary(ctx: &Ctx<'_>) -> Result<Expansion, PatternError> {
 fn emit_mind(ctx: &Ctx<'_>) -> Result<Expansion, PatternError> {
     let actor = ctx.arg_name("actor")?;
     let mut b = Builder::new(ctx);
-    let goals: Vec<Name> = ctx.spec.journeys.iter().map(|g| Name::from(*g)).collect();
+    let facts: Vec<MindFact> = ctx
+        .spec
+        .journeys
+        .iter()
+        .map(|id| MindFact {
+            id: Name(format!("{id}_done")),
+            query: MindQuery::Never,
+            far_safe: false,
+        })
+        .collect();
+    let operators: Vec<MindOperator> = ctx
+        .spec
+        .journeys
+        .iter()
+        .map(|id| MindOperator {
+            id: Name::from(*id),
+            requires: Vec::new(),
+            sets: vec![Name(format!("{id}_done"))],
+            clears: Vec::new(),
+            cost: 1,
+            verb: Verb::Investigate,
+            target: MindTarget::None,
+        })
+        .collect();
+    let goals: Vec<MindGoal> = ctx
+        .spec
+        .journeys
+        .iter()
+        .enumerate()
+        .map(|(i, id)| MindGoal {
+            id: Name::from(*id),
+            desired: vec![Name(format!("{id}_done"))],
+            utility: u16::try_from(ctx.spec.journeys.len() - i).unwrap_or(1),
+        })
+        .collect();
     b.push_anchor(ctx, AnchorKind::Mind, actor.clone(), "mind");
     b.minds.push(MindSpec {
         locus: actor,
-        goals,
+        program: MindProgram {
+            beat: Some(Name::from(ctx.spec.id)),
+            facts,
+            operators,
+            goals,
+            far: Vec::new(),
+        },
         templates: Vec::new(),
     });
     b.rite(ctx, "policy", "Acted");
@@ -638,7 +679,29 @@ fn emit_narrative(ctx: &Ctx<'_>) -> Result<Expansion, PatternError> {
         b.push_anchor(ctx, AnchorKind::Mind, actor.clone(), "voice");
         b.minds.push(MindSpec {
             locus: actor,
-            goals: vec![Name::from("talk")],
+            program: MindProgram {
+                beat: Some(Name::from("conversation")),
+                facts: vec![MindFact {
+                    id: Name::from("talked"),
+                    query: MindQuery::Never,
+                    far_safe: false,
+                }],
+                operators: vec![MindOperator {
+                    id: Name::from("talk"),
+                    requires: Vec::new(),
+                    sets: vec![Name::from("talked")],
+                    clears: Vec::new(),
+                    cost: 1,
+                    verb: Verb::Talk,
+                    target: MindTarget::None,
+                }],
+                goals: vec![MindGoal {
+                    id: Name::from("talk"),
+                    desired: vec![Name::from("talked")],
+                    utility: 1,
+                }],
+                far: Vec::new(),
+            },
             templates: vec![format!("{{name}} : {}", topic.as_str())],
         });
     }

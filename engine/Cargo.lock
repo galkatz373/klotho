@@ -1236,11 +1236,13 @@ dependencies = [
 name = "klotho-mind"
 version = "0.1.0"
 dependencies = [
+ "blake3",
  "klotho-canon",
  "klotho-commit",
  "klotho-core",
  "klotho-ir",
  "klotho-world",
+ "ron",
 ]
 
 [[package]]

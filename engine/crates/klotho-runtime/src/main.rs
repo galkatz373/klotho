@@ -157,10 +157,10 @@ fn load_intents(script: Option<&str>) -> Result<Vec<PlayerIntent>, String> {
 }
 
 fn bind_mind(kernel: &klotho_commit::CommitKernel, minds: Vec<MindSpec>) -> Mind {
-    Mind::bind(
+    Mind::bind_with(
         minds,
         |n| kernel.canon().pin(n),
-        kernel.canon().resource_id("heat"),
+        |n| kernel.canon().resource_id(n),
     )
 }
 

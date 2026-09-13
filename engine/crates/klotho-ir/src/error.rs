@@ -61,6 +61,26 @@ pub enum IrError {
         /// Why it failed.
         reason: String,
     },
+    /// A compiled Mind program exceeds a K90 content-independent cap.
+    MindProgramCap {
+        /// Actor anchor/name.
+        locus: String,
+        /// Capped table.
+        resource: String,
+        /// Authored count.
+        actual: usize,
+        /// Hard cap.
+        cap: usize,
+    },
+    /// A compiled Mind program contains an invalid local reference.
+    InvalidMindProgram(String),
+    /// A Far table reads or affects a protected fact.
+    UnsafeFarFact {
+        /// Actor anchor/name.
+        locus: String,
+        /// Protected fact id.
+        fact: String,
+    },
 }
 
 impl fmt::Display for IrError {
@@ -92,6 +112,16 @@ impl fmt::Display for IrError {
             Self::ParameterTypeMismatch(name) => write!(f, "ParameterTypeMismatch({name})"),
             Self::UnexpandedPattern(id) => write!(f, "UnexpandedPattern({id})"),
             Self::InvalidFeel { field, reason } => write!(f, "InvalidFeel({field}: {reason})"),
+            Self::MindProgramCap {
+                locus,
+                resource,
+                actual,
+                cap,
+            } => {
+                write!(f, "MindProgramCap({locus}.{resource}: {actual} > {cap})")
+            }
+            Self::InvalidMindProgram(reason) => write!(f, "InvalidMindProgram({reason})"),
+            Self::UnsafeFarFact { locus, fact } => write!(f, "UnsafeFarFact({locus}.{fact})"),
         }
     }
 }

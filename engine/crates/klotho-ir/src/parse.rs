@@ -419,7 +419,10 @@ InferIntent(
             ],
             minds: vec![MindSpec {
                 locus: name("bran"),
-                goals: vec![name("stay_near_forge")],
+                program: crate::MindProgram {
+                    beat: Some(name("stay_near_forge")),
+                    ..crate::MindProgram::default()
+                },
                 templates: vec!["{name} won't sell that.".into()],
             }],
             provenance: ProvenanceId(Hash::ZERO),

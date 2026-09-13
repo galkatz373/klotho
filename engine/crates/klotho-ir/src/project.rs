@@ -905,7 +905,7 @@ mod tests {
         };
         doc.minds = vec![MindSpec {
             locus: name("bran"),
-            goals: vec![name("stay")],
+            program: crate::MindProgram::default(),
             templates: Vec::new(),
         }];
         let bundle = migrate_doc(name("hearth"), name("main"), doc.clone()).unwrap();
@@ -1218,7 +1218,7 @@ mod tests {
         da.style.palettes = vec![name("stone")];
         da.minds = vec![MindSpec {
             locus: name("a_npc"),
-            goals: vec![name("wait")],
+            program: crate::MindProgram::default(),
             templates: Vec::new(),
         }];
         let mut db = empty_doc();

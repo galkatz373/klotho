@@ -133,9 +133,9 @@ fn run() -> Result<(), String> {
 }
 
 fn bind_mind(kernel: &klotho_commit::CommitKernel, minds: Vec<MindSpec>) -> Mind {
-    Mind::bind(
+    Mind::bind_with(
         minds,
         |name| kernel.canon().pin(name),
-        kernel.canon().resource_id("heat"),
+        |name| kernel.canon().resource_id(name),
     )
 }

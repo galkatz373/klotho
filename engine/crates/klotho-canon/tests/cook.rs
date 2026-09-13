@@ -5,8 +5,8 @@ use klotho_canon::{
 };
 use klotho_core::{Hash, LocusKind, RejectReason, Sigil};
 use klotho_ir::{
-    Affordance, CanonDiff, IntentDoc, Name, Pred, ProvenanceId, Rel, SeedFact, Slot, SourceKind,
-    StyleIntent, Verb, from_ron,
+    Affordance, CanonDiff, IntentDoc, MindFact, MindProgram, MindQuery, MindRef, MindSpec, Name,
+    Pred, ProvenanceId, Rel, SeedFact, Slot, SourceKind, StyleIntent, Verb, from_ron,
 };
 
 fn relic(id: u128) -> Sigil {
@@ -15,6 +15,36 @@ fn relic(id: u128) -> Sigil {
 
 fn actor(id: u128) -> Sigil {
     Sigil::pack(LocusKind::Actor, 0, id).unwrap()
+}
+
+#[test]
+fn mind_only_resource_is_interned_by_canon_cook() {
+    let doc = IntentDoc {
+        style: StyleIntent::default(),
+        canon_diffs: Vec::new(),
+        seed: vec![SeedFact::Locus {
+            name: Name::from("seer"),
+            kind: LocusKind::Actor,
+        }],
+        minds: vec![MindSpec {
+            locus: Name::from("seer"),
+            program: MindProgram {
+                facts: vec![MindFact {
+                    id: Name::from("alert"),
+                    query: MindQuery::QtyAtLeast {
+                        of: MindRef::This,
+                        res: Name::from("alertness"),
+                        min: 1,
+                    },
+                    far_safe: false,
+                }],
+                ..MindProgram::default()
+            },
+            templates: Vec::new(),
+        }],
+        provenance: ProvenanceId(Hash::ZERO),
+    };
+    assert!(cook(&doc).unwrap().resource_id("alertness").is_some());
 }
 
 #[test]

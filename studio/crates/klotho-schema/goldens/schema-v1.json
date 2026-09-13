@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "toolchain_hash": "d410ca6f5ab31a14ade63ec43d1a2fd88123a29b749d5a07bb3bba98bd1c1954",
+  "toolchain_hash": "c579be678c30c2ad6e35a338efcfe5969f73baa64194730ebc7c1957adb9cc1d",
   "kinds": [
     {
       "id": "klotho_ir::IntentDoc",
@@ -530,6 +530,311 @@
       "negative_example": "(notes:\"\",unknown:[] )"
     },
     {
+      "id": "klotho_ir::MindProgram",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "beat",
+          "ty": "Option<Name>",
+          "description": "encounter Beat identity",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "facts",
+          "ty": "Vec<MindFact>",
+          "description": "bounded visible facts; cap 64",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "operators",
+          "ty": "Vec<MindOperator>",
+          "description": "compiled GOAP operators; cap 32",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "goals",
+          "ty": "Vec<MindGoal>",
+          "description": "integer utility goals; cap 4",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "far",
+          "ty": "Vec<FarRule>",
+          "description": "direct Far policy table; cap 16 inputs",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(beat:None,facts:[],operators:[],goals:[],far:[])",
+      "negative_example": "(beat:None,facts:[],operators:[],goals:[],far:[],unknown:1)"
+    },
+    {
+      "id": "klotho_ir::MindFact",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "id",
+          "ty": "Name",
+          "description": "program-local fact id",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "query",
+          "ty": "MindQuery",
+          "description": "Projection-derived input",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "far_safe",
+          "ty": "bool",
+          "description": "Far refinement permission",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(id:\"ready\",query:Always,far_safe:true)",
+      "negative_example": "(id:\"\",query:Always,far_safe:true)"
+    },
+    {
+      "id": "klotho_ir::MindRef",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "This",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "program owner"
+        },
+        {
+          "name": "Pin",
+          "discriminant": null,
+          "payload": "Name",
+          "description": "immutable seed pin"
+        },
+        {
+          "name": "Related",
+          "discriminant": null,
+          "payload": "Rel",
+          "description": "first relation target"
+        }
+      ],
+      "positive_example": "This",
+      "negative_example": "UnknownVariant"
+    },
+    {
+      "id": "klotho_ir::MindQuery",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "Never",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "constant false"
+        },
+        {
+          "name": "Always",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "constant true"
+        },
+        {
+          "name": "Related",
+          "discriminant": null,
+          "payload": "{a:MindRef,rel:Rel,b:MindRef}",
+          "description": "relation membership"
+        },
+        {
+          "name": "QtyAtLeast",
+          "discriminant": null,
+          "payload": "{of:MindRef,res:Name,min:i32}",
+          "description": "quantity threshold"
+        },
+        {
+          "name": "AnyQtyAtLeast",
+          "discriminant": null,
+          "payload": "{res:Name,min:i32}",
+          "description": "global quantity threshold"
+        },
+        {
+          "name": "Near",
+          "discriminant": null,
+          "payload": "{a:MindRef,b:MindRef,within:Mm}",
+          "description": "integer XZ distance"
+        },
+        {
+          "name": "TickModulo",
+          "discriminant": null,
+          "payload": "{period:u16,phase:u16}",
+          "description": "deterministic Beat clock"
+        }
+      ],
+      "positive_example": "Always",
+      "negative_example": "UnknownVariant"
+    },
+    {
+      "id": "klotho_ir::MindTarget",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "None",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "no target"
+        },
+        {
+          "name": "Ref",
+          "discriminant": null,
+          "payload": "MindRef",
+          "description": "resolved locus target"
+        }
+      ],
+      "positive_example": "None",
+      "negative_example": "UnknownVariant"
+    },
+    {
+      "id": "klotho_ir::MindOperator",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "id",
+          "ty": "Name",
+          "description": "operator id",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "requires",
+          "ty": "Vec<Name>",
+          "description": "required fact ids",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "sets",
+          "ty": "Vec<Name>",
+          "description": "facts made true",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "clears",
+          "ty": "Vec<Name>",
+          "description": "facts made false",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "cost",
+          "ty": "u16",
+          "description": "non-zero integer cost",
+          "min": 1,
+          "max": 65535
+        },
+        {
+          "name": "verb",
+          "ty": "Verb",
+          "description": "emitted action",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "target",
+          "ty": "MindTarget",
+          "description": "action target",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(id:\"act\",requires:[],sets:[\"done\"],clears:[],cost:1,verb:Investigate,target:None)",
+      "negative_example": "(id:\"act\",requires:[],sets:[],clears:[],cost:0,verb:Time,target:None)"
+    },
+    {
+      "id": "klotho_ir::MindGoal",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "id",
+          "ty": "Name",
+          "description": "goal id",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "desired",
+          "ty": "Vec<Name>",
+          "description": "desired fact ids",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "utility",
+          "ty": "u16",
+          "description": "integer rank",
+          "min": 0,
+          "max": 65535
+        }
+      ],
+      "variants": [],
+      "positive_example": "(id:\"work\",desired:[\"done\"],utility:10)",
+      "negative_example": "(id:\"work\",desired:[],utility:10)"
+    },
+    {
+      "id": "klotho_ir::FarRule",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "requires",
+          "ty": "Vec<Name>",
+          "description": "FarSafe table inputs",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "effects",
+          "ty": "Vec<Name>",
+          "description": "FarSafe affected facts",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "verb",
+          "ty": "Verb",
+          "description": "emitted action",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "target",
+          "ty": "MindTarget",
+          "description": "action target",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "utility",
+          "ty": "u16",
+          "description": "integer rank",
+          "min": 0,
+          "max": 65535
+        }
+      ],
+      "variants": [],
+      "positive_example": "(requires:[\"ready\"],effects:[\"wandered\"],verb:Move,target:None,utility:1)",
+      "negative_example": "(requires:[\"protected\"],effects:[],verb:Move,target:None,utility:1)"
+    },
+    {
       "id": "klotho_ir::MindSpec",
       "shape": "struct",
       "fields": [
@@ -541,9 +846,9 @@
           "max": null
         },
         {
-          "name": "goals",
-          "ty": "Vec<Name>",
-          "description": "goal ids",
+          "name": "program",
+          "ty": "MindProgram",
+          "description": "compiled Mind tables",
           "min": null,
           "max": null
         },
@@ -556,8 +861,8 @@
         }
       ],
       "variants": [],
-      "positive_example": "(locus:\"smith\",goals:[\"work\"],templates:[])",
-      "negative_example": "(locus:\"\",goals:[],templates:[] )"
+      "positive_example": "(locus:\"smith\",program:(beat:None,facts:[],operators:[],goals:[],far:[]),templates:[])",
+      "negative_example": "(locus:\"\",program:(beat:None,facts:[],operators:[],goals:[],far:[]),templates:[])"
     },
     {
       "id": "klotho_ir::Law",
@@ -3874,6 +4179,27 @@
     },
     {
       "code": "IR.InvalidFeel",
+      "source": "klotho-ir",
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "IR.MindProgramCap",
+      "source": "klotho-ir",
+      "class": "cap",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "IR.InvalidMindProgram",
+      "source": "klotho-ir",
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "IR.UnsafeFarFact",
       "source": "klotho-ir",
       "class": "schema",
       "retryable": false,

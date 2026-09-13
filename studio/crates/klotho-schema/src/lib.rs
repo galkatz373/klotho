@@ -478,14 +478,135 @@ fn type_schemas() -> Vec<TypeSchema> {
             "(notes:\"\",unknown:[] )",
         ),
         structure(
+            "klotho_ir::MindProgram",
+            vec![
+                field("beat", "Option<Name>", "encounter Beat identity"),
+                field("facts", "Vec<MindFact>", "bounded visible facts; cap 64"),
+                field(
+                    "operators",
+                    "Vec<MindOperator>",
+                    "compiled GOAP operators; cap 32",
+                ),
+                field("goals", "Vec<MindGoal>", "integer utility goals; cap 4"),
+                field(
+                    "far",
+                    "Vec<FarRule>",
+                    "direct Far policy table; cap 16 inputs",
+                ),
+            ],
+            "(beat:None,facts:[],operators:[],goals:[],far:[])",
+            "(beat:None,facts:[],operators:[],goals:[],far:[],unknown:1)",
+        ),
+        structure(
+            "klotho_ir::MindFact",
+            vec![
+                field("id", "Name", "program-local fact id"),
+                field("query", "MindQuery", "Projection-derived input"),
+                field("far_safe", "bool", "Far refinement permission"),
+            ],
+            "(id:\"ready\",query:Always,far_safe:true)",
+            "(id:\"\",query:Always,far_safe:true)",
+        ),
+        enumeration(
+            "klotho_ir::MindRef",
+            vec![
+                variant("This", None, "unit", "program owner"),
+                variant("Pin", None, "Name", "immutable seed pin"),
+                variant("Related", None, "Rel", "first relation target"),
+            ],
+            "This",
+        ),
+        enumeration(
+            "klotho_ir::MindQuery",
+            vec![
+                variant("Never", None, "unit", "constant false"),
+                variant("Always", None, "unit", "constant true"),
+                variant(
+                    "Related",
+                    None,
+                    "{a:MindRef,rel:Rel,b:MindRef}",
+                    "relation membership",
+                ),
+                variant(
+                    "QtyAtLeast",
+                    None,
+                    "{of:MindRef,res:Name,min:i32}",
+                    "quantity threshold",
+                ),
+                variant(
+                    "AnyQtyAtLeast",
+                    None,
+                    "{res:Name,min:i32}",
+                    "global quantity threshold",
+                ),
+                variant(
+                    "Near",
+                    None,
+                    "{a:MindRef,b:MindRef,within:Mm}",
+                    "integer XZ distance",
+                ),
+                variant(
+                    "TickModulo",
+                    None,
+                    "{period:u16,phase:u16}",
+                    "deterministic Beat clock",
+                ),
+            ],
+            "Always",
+        ),
+        enumeration(
+            "klotho_ir::MindTarget",
+            vec![
+                variant("None", None, "unit", "no target"),
+                variant("Ref", None, "MindRef", "resolved locus target"),
+            ],
+            "None",
+        ),
+        structure(
+            "klotho_ir::MindOperator",
+            vec![
+                field("id", "Name", "operator id"),
+                field("requires", "Vec<Name>", "required fact ids"),
+                field("sets", "Vec<Name>", "facts made true"),
+                field("clears", "Vec<Name>", "facts made false"),
+                bounded("cost", "u16", "non-zero integer cost", 1, 65535),
+                field("verb", "Verb", "emitted action"),
+                field("target", "MindTarget", "action target"),
+            ],
+            "(id:\"act\",requires:[],sets:[\"done\"],clears:[],cost:1,verb:Investigate,target:None)",
+            "(id:\"act\",requires:[],sets:[],clears:[],cost:0,verb:Time,target:None)",
+        ),
+        structure(
+            "klotho_ir::MindGoal",
+            vec![
+                field("id", "Name", "goal id"),
+                field("desired", "Vec<Name>", "desired fact ids"),
+                bounded("utility", "u16", "integer rank", 0, 65535),
+            ],
+            "(id:\"work\",desired:[\"done\"],utility:10)",
+            "(id:\"work\",desired:[],utility:10)",
+        ),
+        structure(
+            "klotho_ir::FarRule",
+            vec![
+                field("requires", "Vec<Name>", "FarSafe table inputs"),
+                field("effects", "Vec<Name>", "FarSafe affected facts"),
+                field("verb", "Verb", "emitted action"),
+                field("target", "MindTarget", "action target"),
+                bounded("utility", "u16", "integer rank", 0, 65535),
+            ],
+            "(requires:[\"ready\"],effects:[\"wandered\"],verb:Move,target:None,utility:1)",
+            "(requires:[\"protected\"],effects:[],verb:Move,target:None,utility:1)",
+        ),
+        structure(
             "klotho_ir::MindSpec",
             vec![
                 field("locus", "Name", "seed actor"),
-                field("goals", "Vec<Name>", "goal ids"),
+                field("program", "MindProgram", "compiled Mind tables"),
                 field("templates", "Vec<String>", "dialogue templates"),
             ],
-            "(locus:\"smith\",goals:[\"work\"],templates:[])",
-            "(locus:\"\",goals:[],templates:[] )",
+            "(locus:\"smith\",program:(beat:None,facts:[],operators:[],goals:[],far:[]),templates:[])",
+            "(locus:\"\",program:(beat:None,facts:[],operators:[],goals:[],far:[]),templates:[])",
         ),
         structure(
             "klotho_ir::Law",
@@ -1215,8 +1336,8 @@ mod tests {
     use super::*;
     use klotho_core::{Mm, PoseMm, YawMd};
     use klotho_ir::{
-        Agency, Analog, AssistLevel, Beat, CanonDiff, Channel, Cost, IntentDoc, MindSpec, Name,
-        Pred, SeedFact, Slot, StyleIntent,
+        Agency, Analog, AssistLevel, Beat, CanonDiff, Channel, Cost, IntentDoc, MindProgram,
+        MindSpec, Name, Pred, SeedFact, Slot, StyleIntent,
     };
     use klotho_prove::ProvenanceId;
     use serde::de::DeserializeOwned;
@@ -1286,7 +1407,7 @@ mod tests {
         });
         round_trip(&MindSpec {
             locus: name.clone(),
-            goals: vec![Name::from("survive")],
+            program: MindProgram::default(),
             templates: vec!["Wait.".to_owned()],
         });
         round_trip(&Pred::AabbNear(Slot::This, Slot::Target, Mm(10)));

@@ -64,7 +64,10 @@ pub use feel::{
 pub use infer::{FactId, InferIntent, ModelId};
 pub use klotho_core::{LocusKind, PlayerId, PoseMm, Sigil, SimLod, Tick};
 pub use klotho_prove::ProvenanceId;
-pub use mind::{MindIntent, MindSpec};
+pub use mind::{
+    FarRule, MAX_FAR_INPUTS, MAX_MIND_FACTS, MAX_MIND_GOALS, MAX_MIND_OPERATORS, MindFact,
+    MindGoal, MindIntent, MindOperator, MindProgram, MindQuery, MindRef, MindSpec, MindTarget,
+};
 pub use name::Name;
 pub use parse::{from_ron, to_ron};
 pub use player::PlayerIntent;

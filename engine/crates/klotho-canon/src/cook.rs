@@ -4,8 +4,8 @@ use std::collections::BTreeMap;
 
 use klotho_core::{AffordanceId, LawId, LocusKind, Sigil};
 use klotho_ir::{
-    Affordance, Beat, CanonDiff, IntentDoc, Law, LawBody, Name, RiteGraph, RiteNode, RiteOp,
-    SeedFact,
+    Affordance, Beat, CanonDiff, IntentDoc, Law, LawBody, MindProgram, MindQuery, MindRef,
+    MindSpec, MindTarget, Name, RiteGraph, RiteNode, RiteOp, SeedFact,
 };
 
 use crate::ast::{PredId, PredProgram, RiteChunk, RiteId, RiteInstr};
@@ -21,15 +21,19 @@ use crate::tables::{
 pub fn cook(doc: &IntentDoc) -> Result<Canon, CookError> {
     doc.validate()
         .map_err(|e| CookError::InvalidDoc(e.to_string()))?;
-    cook_inner(&doc.canon_diffs, &doc.seed)
+    cook_inner(&doc.canon_diffs, &doc.seed, &doc.minds)
 }
 
 /// Cook diffs without seed. `Slot::Name` pins intern without Sigils.
 pub fn cook_diffs(diffs: &[CanonDiff]) -> Result<Canon, CookError> {
-    cook_inner(diffs, &[])
+    cook_inner(diffs, &[], &[])
 }
 
-fn cook_inner(diffs: &[CanonDiff], seed: &[SeedFact]) -> Result<Canon, CookError> {
+fn cook_inner(
+    diffs: &[CanonDiff],
+    seed: &[SeedFact],
+    minds: &[MindSpec],
+) -> Result<Canon, CookError> {
     let draft = Draft::apply(diffs)?;
     let has_lockable = draft
         .affordances
@@ -79,6 +83,10 @@ fn cook_inner(diffs: &[CanonDiff], seed: &[SeedFact]) -> Result<Canon, CookError
                 SeedFact::Locus { .. } => {}
             }
         }
+    }
+    for mind in minds {
+        require_pin(&intern, &mind.locus)?;
+        cook_mind_names(&mind.program, &mut intern)?;
     }
 
     let mut preds: Vec<PredProgram> = Vec::new();
@@ -191,6 +199,43 @@ fn cook_inner(diffs: &[CanonDiff], seed: &[SeedFact]) -> Result<Canon, CookError
         rite_by_name,
         resource_by_name,
     ))
+}
+
+fn cook_mind_names(program: &MindProgram, intern: &mut Interner) -> Result<(), CookError> {
+    for fact in &program.facts {
+        match &fact.query {
+            MindQuery::Related { a, b, .. } | MindQuery::Near { a, b, .. } => {
+                cook_mind_ref(a, intern)?;
+                cook_mind_ref(b, intern)?;
+            }
+            MindQuery::QtyAtLeast { of, res, .. } => {
+                cook_mind_ref(of, intern)?;
+                intern.intern_resource(res)?;
+            }
+            MindQuery::AnyQtyAtLeast { res, .. } => {
+                intern.intern_resource(res)?;
+            }
+            MindQuery::Never | MindQuery::Always | MindQuery::TickModulo { .. } => {}
+        }
+    }
+    for target in program
+        .operators
+        .iter()
+        .map(|op| &op.target)
+        .chain(program.far.iter().map(|row| &row.target))
+    {
+        if let MindTarget::Ref(reference) = target {
+            cook_mind_ref(reference, intern)?;
+        }
+    }
+    Ok(())
+}
+
+fn cook_mind_ref(reference: &MindRef, intern: &Interner) -> Result<(), CookError> {
+    if let MindRef::Pin(name) = reference {
+        require_pin(intern, name)?;
+    }
+    Ok(())
 }
 
 fn require_pin(intern: &Interner, n: &Name) -> Result<(), CookError> {

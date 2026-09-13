@@ -15,7 +15,8 @@ use klotho_canon::cook;
 use klotho_commit::{CommitKernel, Proposal};
 use klotho_core::{Budget, Hash, LocusKind, MAX_LOCI_HEARTH, PlayerId, Tick};
 use klotho_ir::{
-    CanonDiff, IntentDoc, MindSpec, Name, ProvenanceId, Rel, SeedFact, StyleIntent, from_ron,
+    CanonDiff, IntentDoc, MindFact, MindGoal, MindOperator, MindProgram, MindQuery, MindRef,
+    MindSpec, MindTarget, Name, ProvenanceId, Rel, SeedFact, StyleIntent, Verb, from_ron,
 };
 use klotho_world::World;
 
@@ -83,24 +84,137 @@ fn hearth_minds() -> Vec<MindSpec> {
     vec![
         MindSpec {
             locus: Name::from("bran"),
-            goals: vec![Name::from("stay_near_forge"), Name::from("investigate")],
+            program: MindProgram {
+                beat: Some(Name::from("forge_watch")),
+                facts: vec![
+                    fact(
+                        "near_forge",
+                        MindQuery::Near {
+                            a: MindRef::This,
+                            b: MindRef::Pin(Name::from("hearth")),
+                            within: klotho_core::Mm(2_500),
+                        },
+                    ),
+                    fact("investigated", MindQuery::Never),
+                ],
+                operators: vec![
+                    op(
+                        "return_to_forge",
+                        &[],
+                        &["near_forge"],
+                        Verb::Move,
+                        MindTarget::Ref(MindRef::Pin(Name::from("hearth"))),
+                    ),
+                    op(
+                        "investigate",
+                        &[],
+                        &["investigated"],
+                        Verb::Investigate,
+                        MindTarget::None,
+                    ),
+                ],
+                goals: vec![
+                    goal("stay_near_forge", &["near_forge"], 40),
+                    goal("investigate", &["investigated"], 10),
+                ],
+                far: Vec::new(),
+            },
             templates: vec!["{name} won't sell that.".into()],
         },
         MindSpec {
             locus: Name::from("mira"),
-            goals: vec![
-                Name::from("fetch_bucket"),
-                Name::from("pump_bellows"),
-                Name::from("investigate"),
-            ],
+            program: MindProgram {
+                beat: Some(Name::from("forge_emergency")),
+                facts: vec![
+                    fact(
+                        "burning",
+                        MindQuery::AnyQtyAtLeast {
+                            res: Name::from("heat"),
+                            min: 400,
+                        },
+                    ),
+                    fact(
+                        "has_bucket",
+                        MindQuery::Related {
+                            a: MindRef::Pin(Name::from("bucket")),
+                            rel: Rel::WieldedBy,
+                            b: MindRef::This,
+                        },
+                    ),
+                    fact("bellows_pumped", MindQuery::Never),
+                ],
+                operators: vec![
+                    MindOperator {
+                        id: Name::from("fetch_bucket"),
+                        requires: vec![Name::from("burning")],
+                        sets: vec![Name::from("has_bucket")],
+                        clears: Vec::new(),
+                        cost: 1,
+                        verb: Verb::Carry,
+                        target: MindTarget::Ref(MindRef::Pin(Name::from("bucket"))),
+                    },
+                    op(
+                        "pump_bellows",
+                        &[],
+                        &["bellows_pumped"],
+                        Verb::Investigate,
+                        MindTarget::None,
+                    ),
+                ],
+                goals: vec![
+                    goal("fetch_bucket", &["has_bucket"], 80),
+                    goal("pump_bellows", &["bellows_pumped"], 30),
+                ],
+                far: Vec::new(),
+            },
             templates: Vec::new(),
         },
         MindSpec {
             locus: Name::from("kel"),
-            goals: vec![Name::from("evening_trade")],
+            program: MindProgram {
+                beat: Some(Name::from("evening_trade")),
+                facts: vec![fact("traded", MindQuery::Never)],
+                operators: vec![op(
+                    "trade",
+                    &[],
+                    &["traded"],
+                    Verb::Talk,
+                    MindTarget::Ref(MindRef::Pin(Name::from("ingot"))),
+                )],
+                goals: vec![goal("evening_trade", &["traded"], 70)],
+                far: Vec::new(),
+            },
             templates: Vec::new(),
         },
     ]
+}
+
+fn fact(id: &str, query: MindQuery) -> MindFact {
+    MindFact {
+        id: Name::from(id),
+        query,
+        far_safe: false,
+    }
+}
+
+fn op(id: &str, requires: &[&str], sets: &[&str], verb: Verb, target: MindTarget) -> MindOperator {
+    MindOperator {
+        id: Name::from(id),
+        requires: requires.iter().map(|n| Name::from(*n)).collect(),
+        sets: sets.iter().map(|n| Name::from(*n)).collect(),
+        clears: Vec::new(),
+        cost: 1,
+        verb,
+        target,
+    }
+}
+
+fn goal(id: &str, desired: &[&str], utility: u16) -> MindGoal {
+    MindGoal {
+        id: Name::from(id),
+        desired: desired.iter().map(|n| Name::from(*n)).collect(),
+        utility,
+    }
 }
 
 /// Replay recorded player packets, one tick each. Stamps `at` to the live tick.

@@ -283,6 +283,9 @@ pub fn diagnostic_catalog() -> &'static [DiagnosticCatalogEntry] {
         "IR.ParameterTypeMismatch",
         "IR.UnexpandedPattern",
         "IR.InvalidFeel",
+        "IR.MindProgramCap",
+        "IR.InvalidMindProgram",
+        "IR.UnsafeFarFact",
     ];
     const PATTERN: &[&str] = &[
         "PATTERN.Unknown",
@@ -482,9 +485,8 @@ fn class_for_detail(code: &str) -> FailureClass {
         "IR.HashDrift" | "COMPILE.LockMismatch" | "COMPILE.Flatten" => {
             FailureClass::Reproducibility
         }
-        "IR.InvalidRiteCap" | "CANON.PredTooLarge" | "CANON.TableFull" | "COMPILE.Header" => {
-            FailureClass::Cap
-        }
+        "IR.InvalidRiteCap" | "IR.MindProgramCap" | "CANON.PredTooLarge" | "CANON.TableFull"
+        | "COMPILE.Header" => FailureClass::Cap,
         "CANON.MixedLabeling"
         | "CANON.DuplicatePc"
         | "CANON.MissingEntry"
@@ -877,6 +879,13 @@ impl IrError {
             }
             Self::UnexpandedPattern(id) => schema_diag("IR.UnexpandedPattern", id, message),
             Self::InvalidFeel { field, .. } => schema_diag("IR.InvalidFeel", field, message),
+            Self::MindProgramCap {
+                locus, actual, cap, ..
+            } => diagnose_cap(locus, *actual as u32, *cap as u32, message),
+            Self::InvalidMindProgram(reason) => {
+                schema_diag("IR.InvalidMindProgram", reason, message)
+            }
+            Self::UnsafeFarFact { locus, .. } => schema_diag("IR.UnsafeFarFact", locus, message),
         }
     }
 }

@@ -10,10 +10,12 @@ readme = false
 publish = false
 
 [dependencies]
+blake3.workspace = true
 klotho-commit.workspace = true
 klotho-core.workspace = true
 klotho-ir.workspace = true
 klotho-world.workspace = true
+ron.workspace = true
 
 [dev-dependencies]
 klotho-canon.workspace = true

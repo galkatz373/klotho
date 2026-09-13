@@ -1017,6 +1017,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "klotho-dialogue"
+version = "0.1.0"
+dependencies = [
+ "klotho-core",
+ "klotho-ir",
+ "klotho-manifest",
+ "klotho-prove",
+ "ron",
+ "serde",
+]
+
+[[package]]
 name = "klotho-editor"
 version = "0.1.0"
 dependencies = [
@@ -1026,6 +1038,7 @@ dependencies = [
  "klotho-commit",
  "klotho-compile",
  "klotho-core",
+ "klotho-dialogue",
  "klotho-eval",
  "klotho-input",
  "klotho-ir",
@@ -1045,6 +1058,7 @@ version = "0.1.0"
 dependencies = [
  "klotho-core",
  "klotho-debug",
+ "klotho-dialogue",
  "klotho-input",
  "klotho-ir",
  "klotho-pattern",
@@ -1155,6 +1169,7 @@ dependencies = [
  "klotho-canon",
  "klotho-core",
  "klotho-dcc",
+ "klotho-dialogue",
  "klotho-ir",
  "klotho-pattern",
  "klotho-prove",

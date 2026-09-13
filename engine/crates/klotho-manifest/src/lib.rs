@@ -1,4 +1,5 @@
-//! Disposable presentation: [`VisualManifest`], [`SonicManifest`], [`UiManifest`].
+//! Disposable presentation: [`VisualManifest`], [`SonicManifest`], [`UiManifest`],
+//! [`LocManifest`].
 //!
 //! The renderer is a pure function of `VisualManifest` + [`Observer`] +
 //! [`GpuBudget`]. No Sigils on the hot path except [`VisualManifest::debug_sigils`].
@@ -16,6 +17,7 @@
 pub(crate) mod tables;
 
 mod feel;
+mod loc;
 mod material;
 mod observer;
 mod sonic;
@@ -23,6 +25,7 @@ mod ui;
 mod visual;
 
 pub use feel::FeelManifest;
+pub use loc::{ClosedCaptionCue, LocManifest, SubtitleCue, VoCue};
 pub use material::MaterialTag;
 pub use observer::{EYE_HEIGHT_MM, GpuBudget, Observer};
 pub use sonic::{BedRef, GrainVoice, SonicManifest};

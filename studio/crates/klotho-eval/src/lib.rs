@@ -11,6 +11,7 @@
 
 mod bot;
 mod contract;
+mod dialogue;
 mod error;
 mod evidence;
 mod host;
@@ -27,6 +28,7 @@ pub use bot::{AutomatedPlayer, BotManifest};
 pub use contract::{
     AcceptanceContract, BudgetTarget, ChangeScope, InvariantRef, QualityTarget, SemanticClaim,
 };
+pub use dialogue::{ConversationHost, conversation_journey};
 pub use error::EvalError;
 pub use evidence::{
     ApprovalRef, ArtifactRef, CheckEvidence, CheckLayer, EvidenceBuilder, EvidenceBundle,

@@ -14,6 +14,7 @@ mod error;
 mod feel;
 mod inspector;
 mod kernel;
+mod narrative;
 mod outliner;
 mod session;
 mod transaction;
@@ -27,6 +28,7 @@ pub use dashboard::CookDashboard;
 pub use error::EditorError;
 pub use feel::{FeelAbSession, FeelCandidate, FeelSweep, evidence_copy};
 pub use inspector::InspectorView;
+pub use narrative::{LineRow, QuestRow, WriterRoomView, review_narrative};
 pub use outliner::{LocusEntry, Outliner, PlaceGroup};
 pub use session::EditorSession;
 pub use transaction::EditorTransaction;
@@ -50,5 +52,7 @@ mod kai10_tests;
 mod kai11_tests;
 #[cfg(test)]
 mod kai14_tests;
+#[cfg(test)]
+mod kai15_tests;
 #[cfg(test)]
 mod tests;

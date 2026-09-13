@@ -9,6 +9,7 @@ members = [
     "crates/klotho-ai",
     "crates/klotho-pattern",
     "crates/klotho-eval",
+    "crates/klotho-dialogue",
     "crates/klotho-worker",
 ]
 
@@ -38,6 +39,7 @@ klotho-author = { path = "crates/klotho-author" }
 klotho-ai = { path = "crates/klotho-ai" }
 klotho-pattern = { path = "crates/klotho-pattern" }
 klotho-eval = { path = "crates/klotho-eval" }
+klotho-dialogue = { path = "crates/klotho-dialogue" }
 klotho-kai-bench = { path = "crates/klotho-kai-bench" }
 klotho-debug = { path = "../engine/crates/klotho-debug" }
 klotho-input = { path = "../engine/crates/klotho-input" }

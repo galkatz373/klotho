@@ -5,7 +5,7 @@
 | Document | High-Level Design — AI-native production for Klotho's first AAA title |
 | Author | Gal Katz |
 | Date | 2026-09-13 |
-| Status | Active successor plan (KAI-00–14 landed; KAI-15–24 not landed) |
+| Status | Active successor plan (KAI-00–15 landed; KAI-16–24 not landed) |
 | Baseline | `docs/hld.md` rev 6; AAA-01–27 landed |
 | Audience | Engine, tools, gameplay, content, AI platform, build, QA, and production leads |
 | Language | Rust (edition 2024; 2021-compatible crates OK) |
@@ -108,7 +108,7 @@ The repository makes the remaining gap concrete:
 | Authoring IR | Canonical RON; partial kdown sugar | Models must know low-level enum shapes and hand-coordinate many files |
 | Distaff | Headless document/session model with outliner, Pin, cook, and preview boundaries | No conversational change planning, semantic diff, branchable transaction, or evidence review loop |
 | Canon/Rites | Strong validator and bounded VM | No reusable, typed title-pattern library or example-driven assembly |
-| Mind | KAI-12 compiled hash-interned operators, integer utilities, relation targets, Beat clocks, and a table-only Far lane | Production dialogue policy remains KAI-15 scope |
+| Mind | KAI-12 compiled hash-interned operators, integer utilities, relation targets, Beat clocks, and a table-only Far lane | Production dialogue is compiled in KAI-15; runtime Infer fill stays research |
 | Infer | Safe OS-process protocol; placeholder behavior; runtime default-off | It is the wrong surface for authoring and cannot produce project artifacts |
 | DCC/cook | KAI-13 typed asset requests, signed privileged-worker registry, semantic/visual split, release-rights gates, quarantine, and pinned DCC/color/interchange locks | Multimodal reference-quality scoring and advisory repair remain KAI-18 scope |
 | Tests | Strong subsystem goldens | No title journey graph, visual-quality rubric, automated play exploration, or release evidence roll-up |
@@ -1911,7 +1911,7 @@ managers.
 
 ## PR plan
 
-Landed baseline: AAA-01–27 and KAI-00–14 (2026-09-13). KAI-15–24 remain planned.
+Landed baseline: AAA-01–27 and KAI-00–15 (2026-09-13). KAI-16–24 remain planned.
 Each header gains `— landed` only with its implementation, tests, date bump, and
 this section's landed list update.
 
@@ -2183,7 +2183,7 @@ flowchart TB
   blobs are not packaged; one dressing edit invalidates only owning placement
   chunks and does not add runtime generation.
 
-#### KAI-15 — Story bible, quest coherence, dialogue, and localization
+#### KAI-15 — Story bible, quest coherence, dialogue, and localization — **landed 2026-09-13**
 
 - **Files:** new `klotho-dialogue`, story/quest schemas, IR/Manifest descriptors,
   writer-room editor, impact graph, audio/UI hooks, localization tooling.

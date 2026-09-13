@@ -1167,6 +1167,169 @@ fn type_schemas() -> Vec<TypeSchema> {
             "(route:vendor,origin:\"1111111111111111111111111111111111111111111111111111111111111111\",terms:\"2222222222222222222222222222222222222222222222222222222222222222\",ownership:\"3333333333333333333333333333333333333333333333333333333333333333\",indemnity:\"4444444444444444444444444444444444444444444444444444444444444444\",source_permission:\"5555555555555555555555555555555555555555555555555555555555555555\",consent:\"6666666666666666666666666666666666666666666666666666666666666666\",restrictions:\"7777777777777777777777777777777777777777777777777777777777777777\",approved_by:\"legal.owner\",approval:\"8888888888888888888888888888888888888888888888888888888888888888\")",
             "(route:vendor,origin:\"0000000000000000000000000000000000000000000000000000000000000000\")",
         ),
+        structure(
+            "klotho_dialogue::StoryBible",
+            vec![
+                field("anchor", "AnchorId", "immutable bible identity"),
+                field(
+                    "version",
+                    "u32",
+                    "explicit version; bump invalidates evidence",
+                ),
+                field("characters", "Vec<CharacterFact>", "voice and facts"),
+                field("timeline", "Vec<TimelineBeat>", "ordered beats"),
+                field("locations", "Vec<LocationFact>", "named places"),
+                field("glossary", "Vec<GlossaryEntry>", "terms loc must cite"),
+                field("secrets", "Vec<SecretFact>", "Knows-gated secrets"),
+                field("themes", "Vec<ThemeFact>", "writing themes"),
+                field("rating", "RatingLimits", "content limits"),
+                field("unresolved", "Vec<UnresolvedQuestion>", "open questions"),
+                field("exceptions", "Vec<ApprovedException>", "named exceptions"),
+                field("presence", "Vec<Presence>", "character location per beat"),
+            ],
+            "(anchor:\"00000000000000000000000000000000\",version:1,characters:[],timeline:[],locations:[],glossary:[],secrets:[],themes:[],rating:(board:\"esrb_t\",forbid:[]),unresolved:[],exceptions:[],presence:[])",
+            "(anchor:\"00\",version:0,characters:[],timeline:[],locations:[],glossary:[],secrets:[],themes:[],rating:(board:\"\",forbid:[]),unresolved:[],exceptions:[],presence:[])",
+        ),
+        structure(
+            "klotho_dialogue::QuestGraph",
+            vec![
+                field("anchor", "AnchorId", "immutable graph identity"),
+                field("quests", "Vec<QuestNode>", "nodes; validate sorts by id"),
+                field("exclusions", "Vec<QuestExclusion>", "mutual exclusions"),
+            ],
+            "(anchor:\"00000000000000000000000000000000\",quests:[],exclusions:[])",
+            "(anchor:\"00\",quests:(),exclusions:[])",
+        ),
+        structure(
+            "klotho_dialogue::QuestNode",
+            vec![
+                field("anchor", "AnchorId", "immutable identity"),
+                field("id", "Name", "quest id"),
+                field("prerequisites", "Vec<Name>", "quests or Knows facts"),
+                field("grants", "Vec<Name>", "Knows grants"),
+                field("failure", "Option<Name>", "failure successor"),
+                field("cancel", "Option<Name>", "cancel successor"),
+                field("reentry", "ReentryKind", "save/re-entry"),
+                field("critical", "bool", "critical-path membership"),
+                field("available_at_start", "bool", "offered with no prereq"),
+                field("escape", "bool", "authored cycle escape"),
+                field("ending", "bool", "terminal node"),
+            ],
+            "(anchor:\"00000000000000000000000000000000\",id:\"decode_plates\",prerequisites:[],grants:[\"plates_decoded\"],failure:None,cancel:None,reentry:checkpoint,critical:true,available_at_start:true,escape:false,ending:false)",
+            "(anchor:\"00\",id:\"\",prerequisites:[],grants:[],failure:None,cancel:None,reentry:never,critical:false,available_at_start:false,escape:false,ending:false)",
+        ),
+        structure(
+            "klotho_dialogue::DialogueModule",
+            vec![
+                field("anchor", "AnchorId", "immutable module identity"),
+                field("id", "Name", "conversation id"),
+                field("entry", "Name", "entry line key"),
+                field(
+                    "lines",
+                    "Vec<DialogueLine>",
+                    "stable keys; review is narrative order",
+                ),
+            ],
+            "(anchor:\"00000000000000000000000000000000\",id:\"mira_observatory\",entry:\"mira.greet\",lines:[])",
+            "(anchor:\"00\",id:\"\",entry:\"\",lines:[])",
+        ),
+        structure(
+            "klotho_dialogue::DialogueLine",
+            vec![
+                field("anchor", "AnchorId", "immutable identity"),
+                field("key", "Name", "stable localization key"),
+                field("speaker", "Name", "bible character"),
+                field("beat", "Name", "timeline beat"),
+                field("condition", "DialogueCond", "Knows/quest condition"),
+                field("grants", "Vec<Name>", "Knows granted on play"),
+                field("choices", "Vec<DialogueChoice>", "player choices"),
+                field("timing", "LineTiming", "VO/subtitle ticks"),
+                field("performance", "String", "notes; never executed"),
+                field("cc", "ClosedCaption", "required SDH/CC"),
+                field("source_text", "String", "source-locale body"),
+                field("vo", "Option<VoBinding>", "approved grain + rights"),
+                field("vo_required", "bool", "release requires VO"),
+                field("next", "Option<Name>", "linear successor"),
+            ],
+            "(anchor:\"00000000000000000000000000000000\",key:\"mira.greet\",speaker:\"mira\",beat:\"arrival\",condition:always,grants:[],choices:[],timing:(start:0,duration:12),performance:\"\",cc:(speaker:\"mira\",body:\"Hi\",sdh:true),source_text:\"Hi\",vo:None,vo_required:false,next:None)",
+            "(anchor:\"00\",key:\"\",speaker:\"\",beat:\"\",condition:always,grants:[],choices:[],timing:(start:0,duration:0),performance:\"\",cc:(speaker:\"\",body:\"\",sdh:false),source_text:\"\",vo:None,vo_required:true,next:None)",
+        ),
+        structure(
+            "klotho_dialogue::LocaleCatalog",
+            vec![
+                field("locale", "LocaleId", "BCP-47 like id"),
+                field("strings", "BTreeMap<Name,Message>", "ICU-style messages"),
+                field(
+                    "approval",
+                    "Option<LinguisticApproval>",
+                    "shipping approval",
+                ),
+                field("font", "FontContract", "shaping and fallbacks"),
+            ],
+            "(locale:\"en\",strings:{},approval:None,font:(locale:\"en\",family:\"klotho-sans\",shaping:ltr,fallbacks:[],controller_glyphs:\"xbox\"))",
+            "(locale:\"\",strings:{},approval:None,font:(locale:\"\",family:\"\",shaping:ltr,fallbacks:[],controller_glyphs:\"\"))",
+        ),
+        structure(
+            "klotho_dialogue::Message",
+            vec![
+                field("key", "Name", "line or choice key"),
+                field("pattern", "String", "named {placeholders} only"),
+                field("gender", "Option<Gender>", "agreement metadata"),
+                field("plural", "Option<PluralForm>", "plural metadata"),
+                field("context", "String", "translator context"),
+            ],
+            "(key:\"mira.greet\",pattern:\"Hello\",gender:Some(neutral),plural:Some(other),context:\"observatory\")",
+            "(key:\"\",pattern:\"${eval}\",gender:None,plural:None,context:\"\")",
+        ),
+        structure(
+            "klotho_dialogue::FontContract",
+            vec![
+                field("locale", "LocaleId", "covered locale"),
+                field("family", "Name", "primary family"),
+                field("shaping", "ShapingScript", "ltr/rtl/cjk/complex"),
+                field("fallbacks", "Vec<Name>", "ordered fallbacks"),
+                field("controller_glyphs", "Name", "glyph set"),
+            ],
+            "(locale:\"ja\",family:\"klotho-sans\",shaping:cjk,fallbacks:[\"klotho-fallback\"],controller_glyphs:\"xbox\")",
+            "(locale:\"\",family:\"\",shaping:ltr,fallbacks:[],controller_glyphs:\"\")",
+        ),
+        enumeration(
+            "klotho_dialogue::ReentryKind",
+            [
+                ("never", 0, "no re-entry"),
+                ("checkpoint", 1, "last checkpoint"),
+                ("always", 2, "always after cancel"),
+            ]
+            .into_iter()
+            .map(|(n, d, desc)| variant(n, Some(d), "unit", desc))
+            .collect(),
+            "checkpoint",
+        ),
+        enumeration(
+            "klotho_dialogue::ShapingScript",
+            [
+                ("ltr", 0, "left-to-right"),
+                ("rtl", 1, "right-to-left"),
+                ("cjk", 2, "CJK"),
+                ("complex", 3, "complex shaping"),
+            ]
+            .into_iter()
+            .map(|(n, d, desc)| variant(n, Some(d), "unit", desc))
+            .collect(),
+            "ltr",
+        ),
+        enumeration(
+            "klotho_dialogue::DialogueCond",
+            vec![
+                variant("always", None, "unit", "unconditional"),
+                variant("knows", None, "Name", "Knows fact"),
+                variant("quest", None, "Name", "completed quest"),
+                variant("all", None, "Vec<DialogueCond>", "conjunction"),
+                variant("any", None, "Vec<DialogueCond>", "disjunction"),
+                variant("not", None, "DialogueCond", "negation"),
+            ],
+            "always",
+        ),
     ]
 }
 
@@ -1477,6 +1640,15 @@ fn operations() -> Vec<OperationSchema> {
         ),
         ("world.plan@1", "WorldPlan", &["places", "graph"], 4),
         ("world.dress@1", "Vec<DressingInstance>", &["dressing"], 2),
+        ("narrative.bible.set@1", "StoryBible", &["bible"], 3),
+        ("narrative.quest.graph@1", "QuestGraph", &["quests"], 3),
+        (
+            "narrative.dialogue.module@1",
+            "DialogueModule",
+            &["dialogue"],
+            4,
+        ),
+        ("narrative.loc.catalog@1", "LocaleCatalog", &["locales"], 2),
     ]
     .into_iter()
     .map(|(id, input, writes, cost_units)| OperationSchema {
@@ -1534,6 +1706,18 @@ mod tests {
             catalog
                 .kinds
                 .iter()
+                .any(|k| k.id == "klotho_dialogue::StoryBible")
+        );
+        assert!(
+            catalog
+                .operations
+                .iter()
+                .any(|o| o.id == "narrative.dialogue.module@1")
+        );
+        assert!(
+            catalog
+                .kinds
+                .iter()
                 .all(|kind| !kind.positive_example.is_empty() && !kind.negative_example.is_empty())
         );
     }
@@ -1560,6 +1744,9 @@ mod tests {
         round_trip(&klotho_ir::FeelContract::spindle_use());
         round_trip(&klotho_pattern::greybox_route());
         round_trip(&klotho_pattern::PlaceBudgets::greybox());
+        round_trip(&klotho_dialogue::observatory());
+        round_trip(&klotho_dialogue::ReentryKind::Checkpoint);
+        round_trip(&klotho_dialogue::ShapingScript::Cjk);
         round_trip(&Cost {
             res: Name::from("stamina"),
             amount: 1,

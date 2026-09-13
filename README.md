@@ -102,6 +102,7 @@ klotho/
   studio/crates/klotho-schema/ # Generated machine-readable authoring catalog
   studio/crates/klotho-ai/    # Built-in authoring AI, model fabric, typed tools, transactions, evidence broker
   studio/crates/klotho-eval/  # Journeys, evidence bundles, affected-test selection
+  studio/crates/klotho-dialogue/ # Story bible, quest graph, compiled dialogue, localization
   studio/crates/klotho-pattern/ # Deterministic pattern expansion and standard library v1
   studio/examples/spindle-slice/ # KAI-09 data-only request, approved kit, and journeys
   studio/crates/klotho-dcc/ # glTF 2.0 cook → quantized KLTH mesh/hull/clip

@@ -112,6 +112,52 @@ check_no_dcc studio/crates/klotho-eval
 check_no_dcc engine/crates/klotho-sim
 check_no_dcc engine/crates/klotho-commit
 
+# klotho-dialogue lowers at cook and cannot be imported by gameplay slices.
+check_no_dialogue() {
+  local dir="$1"
+  if [[ ! -d "$dir" ]]; then
+    return 0
+  fi
+  if command -v rg >/dev/null 2>&1; then
+    if rg -n --glob '!target/**' 'klotho_dialogue::|klotho-dialogue' "$dir"; then
+      echo "forbidden_imports: $dir must not import klotho-dialogue" >&2
+      fail=1
+    fi
+  else
+    if grep -RIn -E 'klotho_dialogue::|klotho-dialogue' "$dir" >/dev/null 2>&1; then
+      echo "forbidden_imports: $dir must not import klotho-dialogue" >&2
+      fail=1
+    fi
+  fi
+}
+check_no_dialogue engine/examples/hearth-slice
+check_no_dialogue engine/examples/ash-slice
+check_no_dialogue engine/examples/ember-slice
+check_no_dialogue engine/examples/drift-slice
+check_no_dialogue engine/examples/chorus-slice
+check_no_dialogue engine/examples/netlock-slice
+check_no_dialogue engine/crates/klotho-sim
+check_no_dialogue engine/crates/klotho-commit
+check_no_dialogue engine/crates/klotho-runtime
+
+if [[ -d studio/crates/klotho-dialogue ]]; then
+  if command -v rg >/dev/null 2>&1; then
+    if rg -n --glob '!target/**' --glob '!**/tests.rs' 'klotho_commit::|klotho_world::|klotho_infer::|klotho_ai::' studio/crates/klotho-dialogue; then
+      echo "klotho-dialogue must not import commit, world, infer, or ai" >&2
+      fail=1
+    fi
+  else
+    if grep -RIn -E 'klotho_commit::|klotho_world::|klotho_infer::|klotho_ai::' studio/crates/klotho-dialogue --exclude=tests.rs >/dev/null 2>&1; then
+      echo "klotho-dialogue must not import commit, world, infer, or ai" >&2
+      fail=1
+    fi
+  fi
+  if grep -E 'klotho-commit|klotho-world|klotho-infer|klotho-ai|mutate' studio/crates/klotho-dialogue/Cargo.toml >/dev/null 2>&1; then
+    echo "klotho-dialogue must not depend on commit, world, infer, or ai" >&2
+    fail=1
+  fi
+fi
+
 # Gameplay, motion, and sim must not import phys internals.
 check_no_phys() {
   local dir="$1"

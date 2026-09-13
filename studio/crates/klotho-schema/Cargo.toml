@@ -20,6 +20,7 @@ klotho-core.workspace = true
 klotho-dcc.workspace = true
 klotho-ir.workspace = true
 klotho-pattern.workspace = true
+klotho-dialogue.workspace = true
 klotho-prove.workspace = true
 ron.workspace = true
 serde.workspace = true

@@ -1,21 +1,18 @@
 [package]
-name = "klotho-eval"
+name = "klotho-dialogue"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Journeys, public-input execution, evidence bundles, affected-test selection"
+description = "Story bible, quest coherence, compiled dialogue, and localization (KAI-15)"
 readme = false
 publish = false
 
 [dependencies]
 klotho-core.workspace = true
-klotho-debug.workspace = true
-klotho-input.workspace = true
 klotho-ir.workspace = true
-klotho-pattern.workspace = true
-klotho-dialogue.workspace = true
+klotho-manifest.workspace = true
 klotho-prove.workspace = true
 ron.workspace = true
 serde.workspace = true

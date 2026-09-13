@@ -302,6 +302,16 @@ pub fn diagnostic_catalog() -> &'static [DiagnosticCatalogEntry] {
         "EVAL.Agency",
         "EVAL.Replay",
     ];
+    const DIALOGUE: &[&str] = &[
+        "DIALOGUE.Name",
+        "DIALOGUE.Continuity",
+        "DIALOGUE.Quest",
+        "DIALOGUE.Line",
+        "DIALOGUE.Loc",
+        "DIALOGUE.Release",
+        "DIALOGUE.Stale",
+        "DIALOGUE.Replay",
+    ];
     const CANON: &[&str] = &[
         "CANON.MixedLabeling",
         "CANON.DuplicatePc",
@@ -468,6 +478,15 @@ pub fn diagnostic_catalog() -> &'static [DiagnosticCatalogEntry] {
                 legal_repairs: NONE,
             });
         }
+        for code in DIALOGUE {
+            out.push(DiagnosticCatalogEntry {
+                code,
+                source: "klotho-dialogue",
+                class: class_for_detail(code),
+                retryable: false,
+                legal_repairs: NONE,
+            });
+        }
         out.push(DiagnosticCatalogEntry {
             code: "DEBUG.Budget",
             source: "klotho-debug",
@@ -496,9 +515,11 @@ fn class_for_detail(code: &str) -> FailureClass {
         | "CANON.Cycle" => FailureClass::Cfg,
         "CANON.Contradiction" | "CANON.LockableNeedsKeyOrRite" => FailureClass::Contradiction,
         "PATTERN.Budget" => FailureClass::Budget,
-        "EVAL.Stale" => FailureClass::Reproducibility,
-        "EVAL.Select" | "EVAL.Replay" => FailureClass::Journey,
+        "EVAL.Stale" | "DIALOGUE.Stale" => FailureClass::Reproducibility,
+        "EVAL.Select" | "EVAL.Replay" | "DIALOGUE.Replay" => FailureClass::Journey,
         "EVAL.Projection" | "EVAL.Agency" => FailureClass::Agency,
+        "DIALOGUE.Continuity" | "DIALOGUE.Quest" => FailureClass::Contradiction,
+        "DIALOGUE.Release" => FailureClass::Provenance,
         "COMPILE.Warp" | "COMPILE.PackageAllowlist" | "COMPILE.MissingLockFile" => {
             FailureClass::Package
         }

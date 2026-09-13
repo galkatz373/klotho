@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "toolchain_hash": "09f19b8b678c0031691bc348e31e7ea0d697614e45b7a40ef5d7dec45abe8225",
+  "toolchain_hash": "2041467f87bea4b557a70f4be18ee66eb5d92091775c0b7a07f693c00f4b0960",
   "kinds": [
     {
       "id": "klotho_ir::IntentDoc",
@@ -3224,6 +3224,589 @@
       "variants": [],
       "positive_example": "(route:vendor,origin:\"1111111111111111111111111111111111111111111111111111111111111111\",terms:\"2222222222222222222222222222222222222222222222222222222222222222\",ownership:\"3333333333333333333333333333333333333333333333333333333333333333\",indemnity:\"4444444444444444444444444444444444444444444444444444444444444444\",source_permission:\"5555555555555555555555555555555555555555555555555555555555555555\",consent:\"6666666666666666666666666666666666666666666666666666666666666666\",restrictions:\"7777777777777777777777777777777777777777777777777777777777777777\",approved_by:\"legal.owner\",approval:\"8888888888888888888888888888888888888888888888888888888888888888\")",
       "negative_example": "(route:vendor,origin:\"0000000000000000000000000000000000000000000000000000000000000000\")"
+    },
+    {
+      "id": "klotho_dialogue::StoryBible",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "anchor",
+          "ty": "AnchorId",
+          "description": "immutable bible identity",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "version",
+          "ty": "u32",
+          "description": "explicit version; bump invalidates evidence",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "characters",
+          "ty": "Vec<CharacterFact>",
+          "description": "voice and facts",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "timeline",
+          "ty": "Vec<TimelineBeat>",
+          "description": "ordered beats",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "locations",
+          "ty": "Vec<LocationFact>",
+          "description": "named places",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "glossary",
+          "ty": "Vec<GlossaryEntry>",
+          "description": "terms loc must cite",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "secrets",
+          "ty": "Vec<SecretFact>",
+          "description": "Knows-gated secrets",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "themes",
+          "ty": "Vec<ThemeFact>",
+          "description": "writing themes",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "rating",
+          "ty": "RatingLimits",
+          "description": "content limits",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "unresolved",
+          "ty": "Vec<UnresolvedQuestion>",
+          "description": "open questions",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "exceptions",
+          "ty": "Vec<ApprovedException>",
+          "description": "named exceptions",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "presence",
+          "ty": "Vec<Presence>",
+          "description": "character location per beat",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(anchor:\"00000000000000000000000000000000\",version:1,characters:[],timeline:[],locations:[],glossary:[],secrets:[],themes:[],rating:(board:\"esrb_t\",forbid:[]),unresolved:[],exceptions:[],presence:[])",
+      "negative_example": "(anchor:\"00\",version:0,characters:[],timeline:[],locations:[],glossary:[],secrets:[],themes:[],rating:(board:\"\",forbid:[]),unresolved:[],exceptions:[],presence:[])"
+    },
+    {
+      "id": "klotho_dialogue::QuestGraph",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "anchor",
+          "ty": "AnchorId",
+          "description": "immutable graph identity",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "quests",
+          "ty": "Vec<QuestNode>",
+          "description": "nodes; validate sorts by id",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "exclusions",
+          "ty": "Vec<QuestExclusion>",
+          "description": "mutual exclusions",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(anchor:\"00000000000000000000000000000000\",quests:[],exclusions:[])",
+      "negative_example": "(anchor:\"00\",quests:(),exclusions:[])"
+    },
+    {
+      "id": "klotho_dialogue::QuestNode",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "anchor",
+          "ty": "AnchorId",
+          "description": "immutable identity",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "id",
+          "ty": "Name",
+          "description": "quest id",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "prerequisites",
+          "ty": "Vec<Name>",
+          "description": "quests or Knows facts",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "grants",
+          "ty": "Vec<Name>",
+          "description": "Knows grants",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "failure",
+          "ty": "Option<Name>",
+          "description": "failure successor",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "cancel",
+          "ty": "Option<Name>",
+          "description": "cancel successor",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "reentry",
+          "ty": "ReentryKind",
+          "description": "save/re-entry",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "critical",
+          "ty": "bool",
+          "description": "critical-path membership",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "available_at_start",
+          "ty": "bool",
+          "description": "offered with no prereq",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "escape",
+          "ty": "bool",
+          "description": "authored cycle escape",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "ending",
+          "ty": "bool",
+          "description": "terminal node",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(anchor:\"00000000000000000000000000000000\",id:\"decode_plates\",prerequisites:[],grants:[\"plates_decoded\"],failure:None,cancel:None,reentry:checkpoint,critical:true,available_at_start:true,escape:false,ending:false)",
+      "negative_example": "(anchor:\"00\",id:\"\",prerequisites:[],grants:[],failure:None,cancel:None,reentry:never,critical:false,available_at_start:false,escape:false,ending:false)"
+    },
+    {
+      "id": "klotho_dialogue::DialogueModule",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "anchor",
+          "ty": "AnchorId",
+          "description": "immutable module identity",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "id",
+          "ty": "Name",
+          "description": "conversation id",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "entry",
+          "ty": "Name",
+          "description": "entry line key",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "lines",
+          "ty": "Vec<DialogueLine>",
+          "description": "stable keys; review is narrative order",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(anchor:\"00000000000000000000000000000000\",id:\"mira_observatory\",entry:\"mira.greet\",lines:[])",
+      "negative_example": "(anchor:\"00\",id:\"\",entry:\"\",lines:[])"
+    },
+    {
+      "id": "klotho_dialogue::DialogueLine",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "anchor",
+          "ty": "AnchorId",
+          "description": "immutable identity",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "key",
+          "ty": "Name",
+          "description": "stable localization key",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "speaker",
+          "ty": "Name",
+          "description": "bible character",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "beat",
+          "ty": "Name",
+          "description": "timeline beat",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "condition",
+          "ty": "DialogueCond",
+          "description": "Knows/quest condition",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "grants",
+          "ty": "Vec<Name>",
+          "description": "Knows granted on play",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "choices",
+          "ty": "Vec<DialogueChoice>",
+          "description": "player choices",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "timing",
+          "ty": "LineTiming",
+          "description": "VO/subtitle ticks",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "performance",
+          "ty": "String",
+          "description": "notes; never executed",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "cc",
+          "ty": "ClosedCaption",
+          "description": "required SDH/CC",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "source_text",
+          "ty": "String",
+          "description": "source-locale body",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "vo",
+          "ty": "Option<VoBinding>",
+          "description": "approved grain + rights",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "vo_required",
+          "ty": "bool",
+          "description": "release requires VO",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "next",
+          "ty": "Option<Name>",
+          "description": "linear successor",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(anchor:\"00000000000000000000000000000000\",key:\"mira.greet\",speaker:\"mira\",beat:\"arrival\",condition:always,grants:[],choices:[],timing:(start:0,duration:12),performance:\"\",cc:(speaker:\"mira\",body:\"Hi\",sdh:true),source_text:\"Hi\",vo:None,vo_required:false,next:None)",
+      "negative_example": "(anchor:\"00\",key:\"\",speaker:\"\",beat:\"\",condition:always,grants:[],choices:[],timing:(start:0,duration:0),performance:\"\",cc:(speaker:\"\",body:\"\",sdh:false),source_text:\"\",vo:None,vo_required:true,next:None)"
+    },
+    {
+      "id": "klotho_dialogue::LocaleCatalog",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "locale",
+          "ty": "LocaleId",
+          "description": "BCP-47 like id",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "strings",
+          "ty": "BTreeMap<Name,Message>",
+          "description": "ICU-style messages",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "approval",
+          "ty": "Option<LinguisticApproval>",
+          "description": "shipping approval",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "font",
+          "ty": "FontContract",
+          "description": "shaping and fallbacks",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(locale:\"en\",strings:{},approval:None,font:(locale:\"en\",family:\"klotho-sans\",shaping:ltr,fallbacks:[],controller_glyphs:\"xbox\"))",
+      "negative_example": "(locale:\"\",strings:{},approval:None,font:(locale:\"\",family:\"\",shaping:ltr,fallbacks:[],controller_glyphs:\"\"))"
+    },
+    {
+      "id": "klotho_dialogue::Message",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "key",
+          "ty": "Name",
+          "description": "line or choice key",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "pattern",
+          "ty": "String",
+          "description": "named {placeholders} only",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "gender",
+          "ty": "Option<Gender>",
+          "description": "agreement metadata",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "plural",
+          "ty": "Option<PluralForm>",
+          "description": "plural metadata",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "context",
+          "ty": "String",
+          "description": "translator context",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(key:\"mira.greet\",pattern:\"Hello\",gender:Some(neutral),plural:Some(other),context:\"observatory\")",
+      "negative_example": "(key:\"\",pattern:\"${eval}\",gender:None,plural:None,context:\"\")"
+    },
+    {
+      "id": "klotho_dialogue::FontContract",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "locale",
+          "ty": "LocaleId",
+          "description": "covered locale",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "family",
+          "ty": "Name",
+          "description": "primary family",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "shaping",
+          "ty": "ShapingScript",
+          "description": "ltr/rtl/cjk/complex",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "fallbacks",
+          "ty": "Vec<Name>",
+          "description": "ordered fallbacks",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "controller_glyphs",
+          "ty": "Name",
+          "description": "glyph set",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(locale:\"ja\",family:\"klotho-sans\",shaping:cjk,fallbacks:[\"klotho-fallback\"],controller_glyphs:\"xbox\")",
+      "negative_example": "(locale:\"\",family:\"\",shaping:ltr,fallbacks:[],controller_glyphs:\"\")"
+    },
+    {
+      "id": "klotho_dialogue::ReentryKind",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "never",
+          "discriminant": 0,
+          "payload": "unit",
+          "description": "no re-entry"
+        },
+        {
+          "name": "checkpoint",
+          "discriminant": 1,
+          "payload": "unit",
+          "description": "last checkpoint"
+        },
+        {
+          "name": "always",
+          "discriminant": 2,
+          "payload": "unit",
+          "description": "always after cancel"
+        }
+      ],
+      "positive_example": "checkpoint",
+      "negative_example": "UnknownVariant"
+    },
+    {
+      "id": "klotho_dialogue::ShapingScript",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "ltr",
+          "discriminant": 0,
+          "payload": "unit",
+          "description": "left-to-right"
+        },
+        {
+          "name": "rtl",
+          "discriminant": 1,
+          "payload": "unit",
+          "description": "right-to-left"
+        },
+        {
+          "name": "cjk",
+          "discriminant": 2,
+          "payload": "unit",
+          "description": "CJK"
+        },
+        {
+          "name": "complex",
+          "discriminant": 3,
+          "payload": "unit",
+          "description": "complex shaping"
+        }
+      ],
+      "positive_example": "ltr",
+      "negative_example": "UnknownVariant"
+    },
+    {
+      "id": "klotho_dialogue::DialogueCond",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "always",
+          "discriminant": null,
+          "payload": "unit",
+          "description": "unconditional"
+        },
+        {
+          "name": "knows",
+          "discriminant": null,
+          "payload": "Name",
+          "description": "Knows fact"
+        },
+        {
+          "name": "quest",
+          "discriminant": null,
+          "payload": "Name",
+          "description": "completed quest"
+        },
+        {
+          "name": "all",
+          "discriminant": null,
+          "payload": "Vec<DialogueCond>",
+          "description": "conjunction"
+        },
+        {
+          "name": "any",
+          "discriminant": null,
+          "payload": "Vec<DialogueCond>",
+          "description": "disjunction"
+        },
+        {
+          "name": "not",
+          "discriminant": null,
+          "payload": "DialogueCond",
+          "description": "negation"
+        }
+      ],
+      "positive_example": "always",
+      "negative_example": "UnknownVariant"
     }
   ],
   "verbs": [
@@ -5081,6 +5664,62 @@
       "legal_repairs": []
     },
     {
+      "code": "DIALOGUE.Name",
+      "source": "klotho-dialogue",
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "DIALOGUE.Continuity",
+      "source": "klotho-dialogue",
+      "class": "contradiction",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "DIALOGUE.Quest",
+      "source": "klotho-dialogue",
+      "class": "contradiction",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "DIALOGUE.Line",
+      "source": "klotho-dialogue",
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "DIALOGUE.Loc",
+      "source": "klotho-dialogue",
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "DIALOGUE.Release",
+      "source": "klotho-dialogue",
+      "class": "provenance",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "DIALOGUE.Stale",
+      "source": "klotho-dialogue",
+      "class": "reproducibility",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "DIALOGUE.Replay",
+      "source": "klotho-dialogue",
+      "class": "journey",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
       "code": "DEBUG.Budget",
       "source": "klotho-debug",
       "class": "budget",
@@ -5330,6 +5969,38 @@
       "input": "Vec<DressingInstance>",
       "writes": [
         "dressing"
+      ],
+      "cost_units": 2
+    },
+    {
+      "id": "narrative.bible.set@1",
+      "input": "StoryBible",
+      "writes": [
+        "bible"
+      ],
+      "cost_units": 3
+    },
+    {
+      "id": "narrative.quest.graph@1",
+      "input": "QuestGraph",
+      "writes": [
+        "quests"
+      ],
+      "cost_units": 3
+    },
+    {
+      "id": "narrative.dialogue.module@1",
+      "input": "DialogueModule",
+      "writes": [
+        "dialogue"
+      ],
+      "cost_units": 4
+    },
+    {
+      "id": "narrative.loc.catalog@1",
+      "input": "LocaleCatalog",
+      "writes": [
+        "locales"
       ],
       "cost_units": 2
     }

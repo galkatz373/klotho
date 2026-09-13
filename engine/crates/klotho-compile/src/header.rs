@@ -71,6 +71,9 @@ pub fn validate_blob(bytes: &[u8]) -> Result<(), CompileError> {
             validate_skinned_mesh(bytes)?;
         }
         ArtifactKind::Texture | ArtifactKind::AffordanceGraph | ArtifactKind::Embedding => {}
+        ArtifactKind::ProbeGrid => {
+            validate_probe_grid(bytes)?;
+        }
         ArtifactKind::Evidence => {
             return Err(CompileError::Header(
                 "evidence bundle is not a cooked blob".into(),
@@ -580,6 +583,115 @@ pub fn decode_clipset(bytes: &[u8]) -> Result<Vec<DecodedClip>, CompileError> {
     Ok(out)
 }
 
+/// Maximum probe cells in a baked volume (8×4×8 Era-2 cap).
+pub const MAX_PROBE_CELLS: u32 = 8 * 4 * 8;
+
+/// Parsed probe-grid header.
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct ProbeGridInfo {
+    /// Origin, millimetres.
+    pub origin: IVec3,
+    /// Cell size, millimetres.
+    pub spacing_mm: i32,
+    /// Cell counts along X, Y, Z.
+    pub dim: (u8, u8, u8),
+}
+
+/// Integer irradiance samples after header validation.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct DecodedProbeGrid {
+    /// Counts and transform.
+    pub info: ProbeGridInfo,
+    /// RGB milli-irradiance, `len == cells * 3`.
+    pub samples_milli: Vec<u16>,
+}
+
+fn probe_cell_count(dim: (u8, u8, u8)) -> Result<u32, CompileError> {
+    let cells = u32::from(dim.0)
+        .saturating_mul(u32::from(dim.1))
+        .saturating_mul(u32::from(dim.2));
+    if cells == 0 || cells > MAX_PROBE_CELLS {
+        return Err(CompileError::Header("probe cell count".into()));
+    }
+    Ok(cells)
+}
+
+/// Validate a baked probe-grid blob.
+pub fn validate_probe_grid(bytes: &[u8]) -> Result<ProbeGridInfo, CompileError> {
+    let rest = peek(bytes, ArtifactKind::ProbeGrid)?;
+    if rest.len() < 20 {
+        return Err(CompileError::Header("truncated probe grid".into()));
+    }
+    let origin = IVec3 {
+        x: i32_le(rest, 0)?,
+        y: i32_le(rest, 4)?,
+        z: i32_le(rest, 8)?,
+    };
+    let spacing_mm = i32_le(rest, 12)?;
+    if spacing_mm <= 0 {
+        return Err(CompileError::Header("probe spacing".into()));
+    }
+    let dim = (rest[16], rest[17], rest[18]);
+    let cells = probe_cell_count(dim)?;
+    let need = 20usize
+        .checked_add((cells as usize).saturating_mul(6))
+        .ok_or_else(|| CompileError::Header("probe size overflow".into()))?;
+    if rest.len() != need {
+        return Err(CompileError::Header("probe payload size".into()));
+    }
+    Ok(ProbeGridInfo {
+        origin,
+        spacing_mm,
+        dim,
+    })
+}
+
+/// Validate then copy milli-irradiance samples.
+pub fn decode_probe_grid(bytes: &[u8]) -> Result<DecodedProbeGrid, CompileError> {
+    let info = validate_probe_grid(bytes)?;
+    let rest = &bytes[PREFIX..];
+    let cells = probe_cell_count(info.dim)? as usize;
+    let mut samples_milli = Vec::with_capacity(cells * 3);
+    let mut off = 20usize;
+    for _ in 0..cells * 3 {
+        samples_milli.push(u16::from_le_bytes([rest[off], rest[off + 1]]));
+        off += 2;
+    }
+    Ok(DecodedProbeGrid {
+        info,
+        samples_milli,
+    })
+}
+
+/// Encode a baked probe grid. Samples must be `cells * 3` milli-RGB.
+pub fn encode_probe_grid(
+    origin: IVec3,
+    spacing_mm: i32,
+    dim: (u8, u8, u8),
+    samples_milli: &[u16],
+) -> Result<Vec<u8>, CompileError> {
+    if spacing_mm <= 0 {
+        return Err(CompileError::Header("probe spacing".into()));
+    }
+    let cells = probe_cell_count(dim)? as usize;
+    if samples_milli.len() != cells * 3 {
+        return Err(CompileError::Header("probe sample count".into()));
+    }
+    let mut b = Vec::with_capacity(PREFIX + 20 + cells * 6);
+    write_prefix(&mut b, ArtifactKind::ProbeGrid);
+    for v in [origin.x, origin.y, origin.z, spacing_mm] {
+        b.extend_from_slice(&v.to_le_bytes());
+    }
+    b.push(dim.0);
+    b.push(dim.1);
+    b.push(dim.2);
+    b.push(0);
+    for s in samples_milli {
+        b.extend_from_slice(&s.to_le_bytes());
+    }
+    Ok(b)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -595,6 +707,18 @@ mod tests {
         assert_eq!(MAX_TRIS, 200_000);
         assert_eq!(MAX_RITE_STEPS, 64);
         assert_eq!(MAGIC, *b"KLTH");
+    }
+
+    #[test]
+    fn probe_grid_round_trips() {
+        let origin = IVec3 { x: 1, y: 2, z: 3 };
+        let samples = vec![10u16, 20, 30, 40, 50, 60];
+        let bytes = encode_probe_grid(origin, 2_000, (2, 1, 1), &samples).unwrap();
+        assert_eq!(peek_kind(&bytes).unwrap(), ArtifactKind::ProbeGrid);
+        validate_blob(&bytes).unwrap();
+        let decoded = decode_probe_grid(&bytes).unwrap();
+        assert_eq!(decoded.info.origin, origin);
+        assert_eq!(decoded.samples_milli, samples);
     }
 
     #[test]

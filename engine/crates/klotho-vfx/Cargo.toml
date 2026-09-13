@@ -5,13 +5,14 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Klotho VFX: Trace-driven decals and one-shot meshes"
+description = "Klotho VFX: Trace-driven decals, one-shot meshes, GPU particles and ribbons"
 readme = false
 publish = false
 
 [dependencies]
 klotho-core.workspace = true
 klotho-manifest.workspace = true
+klotho-prove.workspace = true
 klotho-trace.workspace = true
 
 [lints]

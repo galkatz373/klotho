@@ -5,6 +5,8 @@ use std::collections::BTreeMap;
 
 use klotho_core::{AabbMm, BlobId, Epoch, IVec3, Sigil};
 use klotho_manifest::{BedRef, GrainVoice, Observer, SonicManifest};
+
+use crate::music::{cue_from_events, stems_for};
 use klotho_trace::{PoseReason, RelTag, TraceBody, TraceEvent};
 
 const KNOCK: &str = "grain.wood.knock";
@@ -49,7 +51,12 @@ pub fn extract_sonic(
             occluded: grain_occluded(pos, eye, opaque),
         });
     }
-    SonicManifest::from_voices(epoch, grains, bed)
+    let cue = cue_from_events(events);
+    let music = match cue {
+        klotho_manifest::MusicCue::Explore => None,
+        _ => Some(stems_for(cue)),
+    };
+    SonicManifest::from_voices_music(epoch, grains, bed, music)
 }
 
 fn cue(body: &TraceBody) -> Option<(&'static str, CuePos)> {

@@ -284,6 +284,7 @@ pub fn diagnostic_catalog() -> &'static [DiagnosticCatalogEntry] {
         "IR.UnexpandedPattern",
         "IR.InvalidFeel",
         "IR.InvalidA11y",
+        "IR.InvalidPresent",
         "IR.MindProgramCap",
         "IR.InvalidMindProgram",
         "IR.UnsafeFarFact",
@@ -909,6 +910,7 @@ impl IrError {
                 schema_diag("IR.InvalidMindProgram", reason, message)
             }
             Self::UnsafeFarFact { locus, .. } => schema_diag("IR.UnsafeFarFact", locus, message),
+            Self::InvalidPresent { field, .. } => schema_diag("IR.InvalidPresent", field, message),
         }
     }
 }

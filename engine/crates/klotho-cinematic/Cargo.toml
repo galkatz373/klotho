@@ -10,6 +10,7 @@ readme = false
 publish = false
 
 [dependencies]
+klotho-anim.workspace = true
 klotho-core.workspace = true
 klotho-ir.workspace = true
 klotho-manifest.workspace = true

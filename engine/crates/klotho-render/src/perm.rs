@@ -1,6 +1,7 @@
 //! Presenter permutation from [`PostFlags`]. Competitive wins over GI.
 
-use klotho_manifest::{GpuBudget, PostFlags};
+use klotho_compile::{PresentProfile, QualityTier, TapestryStress, estimate_cost, gpu_budget};
+use klotho_manifest::{GpuBudget, PostFlags, VisualManifest};
 
 /// Which presenter path a frame takes.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
@@ -86,6 +87,48 @@ pub fn present_plan(post: PostFlags, last_present_us: u32, budget: GpuBudget) ->
     plan
 }
 
+/// Map a quality tier onto post flags. Low is unlit; Medium drops SSGI.
+#[must_use]
+pub fn post_for_tier(tier: QualityTier) -> PostFlags {
+    match tier {
+        QualityTier::High => PostFlags::ADVENTURE,
+        QualityTier::Medium => PostFlags {
+            taa: true,
+            bloom: true,
+            gi: false,
+            competitive: false,
+            lut: None,
+        },
+        QualityTier::Low => PostFlags::UNLIT,
+    }
+}
+
+/// Clamp GPU VFX lists to the budget. Drop order is later-first.
+#[must_use]
+pub fn clamp_gpu_vfx(vis: &VisualManifest, budget: GpuBudget) -> (usize, usize) {
+    (
+        vis.particles.len().min(budget.max_particles as usize),
+        vis.ribbons.len().min(budget.max_ribbons as usize),
+    )
+}
+
+/// Deterministic High→Medium→Low fallback for a counted stress scene.
+#[must_use]
+pub fn fallback_tier(scene: TapestryStress, requested: QualityTier) -> (QualityTier, GpuBudget) {
+    let mut tier = requested;
+    loop {
+        let cost = estimate_cost(scene, tier);
+        let profile = PresentProfile::for_tier(tier);
+        if cost.us_present <= profile.us_present && cost.vram_mb <= profile.vram_mb {
+            return (tier, gpu_budget(profile));
+        }
+        match tier.fallback() {
+            Some(next) => tier = next,
+            None => return (QualityTier::Low, gpu_budget(PresentProfile::low())),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -143,5 +186,26 @@ mod tests {
         let drop_cascades = present_plan(no_ssgi, 12_000, GpuBudget::AAA_ADVENTURE);
         assert!(!drop_cascades.ssgi);
         assert_eq!(drop_cascades.cascades, 1);
+    }
+
+    #[test]
+    fn tapestry_high_stress_stays_high() {
+        let (tier, budget) = fallback_tier(TapestryStress::high_gate(), QualityTier::High);
+        assert_eq!(tier, QualityTier::High);
+        assert_eq!(budget.us_present, 11_000);
+        assert_eq!(budget.vram_mb, 1_536);
+        assert_eq!(permutation(post_for_tier(tier)), PresenterPerm::Adventure);
+    }
+
+    #[test]
+    fn over_budget_fallback_is_deterministic() {
+        let a = fallback_tier(TapestryStress::over_budget(), QualityTier::High);
+        let b = fallback_tier(TapestryStress::over_budget(), QualityTier::High);
+        assert_eq!(a, b);
+        assert_ne!(a.0, QualityTier::High);
+        assert_eq!(
+            permutation(post_for_tier(QualityTier::Low)),
+            PresenterPerm::Unlit
+        );
     }
 }

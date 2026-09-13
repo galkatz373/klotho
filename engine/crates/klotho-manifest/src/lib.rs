@@ -30,11 +30,11 @@ pub use feel::FeelManifest;
 pub use loc::{ClosedCaptionCue, LocManifest, SubtitleCue, VoCue};
 pub use material::MaterialTag;
 pub use observer::{EYE_HEIGHT_MM, GpuBudget, Observer};
-pub use sonic::{BedRef, GrainVoice, SonicManifest};
+pub use sonic::{AdaptiveMusic, BedRef, GrainVoice, MusicCue, SonicManifest};
 pub use ui::{UiManifest, Widget, WidgetKind};
 pub use visual::{
     ClusterRef, Decal, GpuHandle, InstancePass, LightKind, LightStub, MaterialRef, OneShotMesh,
-    PaletteSlot, PostFlags, ProbeGrid, SkinnedInstance, VisualManifest,
+    PaletteSlot, ParticleEmitter, PostFlags, ProbeGrid, Ribbon, SkinnedInstance, VisualManifest,
 };
 
 pub use klotho_core::{AabbMm, BlobId, Epoch, IVec3, PoseMm, Sigil, Tick};

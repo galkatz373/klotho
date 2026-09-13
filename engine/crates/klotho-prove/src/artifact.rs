@@ -27,6 +27,8 @@ pub enum ArtifactKind {
     SkinnedMesh = 8,
     /// Sealed evaluation evidence bundle (KAI-06).
     Evidence = 9,
+    /// Cook-baked irradiance probe volume (KAI-17).
+    ProbeGrid = 10,
 }
 
 impl ArtifactKind {
@@ -44,6 +46,7 @@ impl ArtifactKind {
             7 => Some(Self::Embedding),
             8 => Some(Self::SkinnedMesh),
             9 => Some(Self::Evidence),
+            10 => Some(Self::ProbeGrid),
             _ => None,
         }
     }
@@ -63,9 +66,11 @@ mod tests {
         assert_eq!(ArtifactKind::Embedding as u8, 7);
         assert_eq!(ArtifactKind::SkinnedMesh as u8, 8);
         assert_eq!(ArtifactKind::Evidence as u8, 9);
+        assert_eq!(ArtifactKind::ProbeGrid as u8, 10);
         assert_eq!(ArtifactKind::from_u8(3), Some(ArtifactKind::Grain));
         assert_eq!(ArtifactKind::from_u8(8), Some(ArtifactKind::SkinnedMesh));
         assert_eq!(ArtifactKind::from_u8(9), Some(ArtifactKind::Evidence));
-        assert_eq!(ArtifactKind::from_u8(10), None);
+        assert_eq!(ArtifactKind::from_u8(10), Some(ArtifactKind::ProbeGrid));
+        assert_eq!(ArtifactKind::from_u8(11), None);
     }
 }

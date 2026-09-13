@@ -9,6 +9,7 @@
 
 mod extract;
 mod mix;
+mod music;
 mod thread;
 
 pub use extract::extract_sonic;
@@ -16,6 +17,7 @@ pub use mix::{
     DeviceMixer, IntegerMixer, MixBudget, MixFrame, Mixer, NullMixer, OCCLUDED_GAIN_MILLI,
     SAMPLES_PER_TICK, TICK_HZ, mix, mix_n,
 };
+pub use music::{cue_from_events, may_ship_vo, stems_for};
 pub use thread::AudioThread;
 
 pub use klotho_compile::GRAIN_HZ;

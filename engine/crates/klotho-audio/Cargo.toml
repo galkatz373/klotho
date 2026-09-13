@@ -16,6 +16,7 @@ audio-device = ["klotho-platform/audio-device"]
 [dependencies]
 klotho-compile.workspace = true
 klotho-core.workspace = true
+klotho-ir.workspace = true
 klotho-manifest.workspace = true
 klotho-platform.workspace = true
 klotho-trace.workspace = true

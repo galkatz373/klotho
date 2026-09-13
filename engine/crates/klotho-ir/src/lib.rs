@@ -36,6 +36,7 @@ mod name;
 mod parse;
 mod player;
 mod pred;
+mod present;
 mod project;
 mod rel;
 mod seed;
@@ -74,6 +75,7 @@ pub use name::Name;
 pub use parse::{from_ron, to_ron};
 pub use player::PlayerIntent;
 pub use pred::{Cmp, Pred, SourceKind};
+pub use present::{CastingConsent, MaterialGraph, MaterialNode, PresentProfile, QualityTier};
 pub use project::{
     AnchorKind, Flattened, IntentModule, IntentModuleRef, IntentProject, LockEntry, ModuleImport,
     ModuleLock, NameAlias, ObjectAnchor, ParameterDecl, ParameterType, ParameterValue, PatternArg,

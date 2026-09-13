@@ -931,6 +931,63 @@ fn type_schemas() -> Vec<TypeSchema> {
             "subtitles",
         ),
         enumeration(
+            "klotho_ir::QualityTier",
+            [
+                ("low", 0, "unlit family"),
+                ("medium", 1, "forward+ without SSGI"),
+                ("high", 2, "1080p High adventure"),
+            ]
+            .into_iter()
+            .map(|(n, d, desc)| variant(n, Some(d), "unit", desc))
+            .collect(),
+            "high",
+        ),
+        structure(
+            "klotho_ir::PresentProfile",
+            vec![
+                field("tier", "QualityTier", "quality ladder step"),
+                bounded("us_present", "u32", "present microseconds", 1, 11_000),
+                bounded("vram_mb", "u16", "resident mebibytes", 1, 1_536),
+                field("max_clusters", "u16", "cluster draw cap"),
+                field("max_particles", "u16", "GPU particle cap"),
+                field("max_ribbons", "u16", "ribbon cap"),
+                field("max_skinned", "u16", "skinned instance cap"),
+            ],
+            "(tier:high,us_present:11000,vram_mb:1536,max_clusters:2048,max_particles:1024,max_ribbons:128,max_skinned:256)",
+            "(tier:high,us_present:0,vram_mb:1536,max_clusters:2048,max_particles:1024,max_ribbons:128,max_skinned:256)",
+        ),
+        structure(
+            "klotho_ir::MaterialGraph",
+            vec![
+                field("id", "Name", "stable authoring id"),
+                field(
+                    "nodes",
+                    "Vec<MaterialNode>",
+                    "evaluation-order nodes; cap 16",
+                ),
+                field("albedo", "u8", "albedo node index"),
+                field("metalness", "u8", "metalness node index"),
+                field("roughness", "u8", "roughness node index"),
+                field("emissive", "Option<u8>", "optional emissive node"),
+                field("alpha", "Option<u8>", "optional masked-alpha node"),
+            ],
+            "(id:\"organic\",nodes:[constant(rgb_milli:[620,480,310]),constant(rgb_milli:[50,50,50]),constant(rgb_milli:[700,700,700])],albedo:0,metalness:1,roughness:2,emissive:None,alpha:None)",
+            "(id:\"\",nodes:[],albedo:0,metalness:0,roughness:0,emissive:None,alpha:None)",
+        ),
+        structure(
+            "klotho_ir::CastingConsent",
+            vec![
+                field("performer", "Name", "performer or session identity"),
+                field("role", "Name", "role or line group"),
+                field("consent", "Hash", "consent document hash"),
+                field("union_territory", "Name", "union/territory tag"),
+                field("reuse", "bool", "reuse beyond this title"),
+                field("approved_by", "Name", "named audio/legal approver"),
+            ],
+            "(performer:\"fixture-performer\",role:\"hero\",consent:\"1111111111111111111111111111111111111111111111111111111111111111\",union_territory:\"non-union-dev\",reuse:false,approved_by:\"audio-lead\")",
+            "(performer:\"fixture-performer\",role:\"hero\",consent:\"0000000000000000000000000000000000000000000000000000000000000000\",union_territory:\"non-union-dev\",reuse:false,approved_by:\"audio-lead\")",
+        ),
+        enumeration(
             "klotho_manifest::FocusRole",
             [
                 ("menu", 0, "top-level sheet"),
@@ -1714,6 +1771,14 @@ fn operations() -> Vec<OperationSchema> {
         ("author.set_a11y@1", "A11yProfile", &["a11y"], 2),
         ("input.remap@1", "{verb:Verb,button:Button}", &["binds"], 1),
         ("ui.layout.set@1", "UiNode", &["ui"], 2),
+        ("present.set_quality@1", "PresentProfile", &["present"], 2),
+        (
+            "present.material.compile@1",
+            "MaterialGraph",
+            &["materials"],
+            3,
+        ),
+        ("present.casting.set@1", "CastingConsent", &["casting"], 2),
     ]
     .into_iter()
     .map(|(id, input, writes, cost_units)| OperationSchema {
@@ -1793,6 +1858,18 @@ mod tests {
         );
         assert!(
             catalog
+                .kinds
+                .iter()
+                .any(|k| k.id == "klotho_ir::QualityTier")
+        );
+        assert!(
+            catalog
+                .operations
+                .iter()
+                .any(|o| o.id == "present.set_quality@1")
+        );
+        assert!(
+            catalog
                 .patterns
                 .iter()
                 .any(|p| p.id == "ui.menu_focus" && p.family == "ui")
@@ -1828,6 +1905,10 @@ mod tests {
         round_trip(&klotho_ir::A11yProfile::first_title());
         round_trip(&klotho_ir::ContrastMode::High);
         round_trip(&klotho_ir::CaptionMode::ClosedCaptions);
+        round_trip(&klotho_ir::QualityTier::High);
+        round_trip(&klotho_ir::PresentProfile::high());
+        round_trip(&klotho_ir::MaterialGraph::organic());
+        round_trip(&klotho_ir::CastingConsent::first_title());
         round_trip(&klotho_pattern::greybox_route());
         round_trip(&klotho_pattern::PlaceBudgets::greybox());
         round_trip(&klotho_dialogue::observatory());

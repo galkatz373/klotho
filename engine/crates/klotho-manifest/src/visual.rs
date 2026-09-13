@@ -147,6 +147,40 @@ pub struct OneShotMesh {
     pub ttl_ticks: u16,
 }
 
+/// GPU particle emitter. Presentation only; GPU output is never read back.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub struct ParticleEmitter {
+    /// CAS particle recipe (texture / spawn table).
+    pub blob: BlobId,
+    /// Integer millimetre spawn origin.
+    pub pose: PoseMm,
+    /// Closed material.
+    pub material: MaterialRef,
+    /// Tick the cue was committed.
+    pub born: Tick,
+    /// Live while `now < born + ttl_ticks`.
+    pub ttl_ticks: u16,
+    /// Authored spawn count this extract. Presenter clamps to the GPU budget.
+    pub count: u16,
+}
+
+/// GPU ribbon / trail. Presentation only; never a hull.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub struct Ribbon {
+    /// CAS ribbon recipe.
+    pub blob: BlobId,
+    /// Integer millimetre attachment.
+    pub pose: PoseMm,
+    /// Closed material.
+    pub material: MaterialRef,
+    /// Tick the cue was committed.
+    pub born: Tick,
+    /// Live while `now < born + ttl_ticks`.
+    pub ttl_ticks: u16,
+    /// Authored millimetre length. Presenter tessellates; sim never reads it.
+    pub length_mm: u16,
+}
+
 /// Cook-baked irradiance probe volume. SSGI is presenter-only.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct ProbeGrid {
@@ -241,6 +275,10 @@ pub struct VisualManifest {
     pub decals: Vec<Decal>,
     /// One-shot debris meshes. Empty on Hearth unlit extract.
     pub one_shots: Vec<OneShotMesh>,
+    /// GPU particle emitters. Empty on Hearth unlit extract.
+    pub particles: Vec<ParticleEmitter>,
+    /// GPU ribbons. Empty on Hearth unlit extract.
+    pub ribbons: Vec<Ribbon>,
 }
 
 impl VisualManifest {
@@ -262,6 +300,8 @@ impl VisualManifest {
             debug_sigils: Vec::new(),
             decals: Vec::new(),
             one_shots: Vec::new(),
+            particles: Vec::new(),
+            ribbons: Vec::new(),
         }
     }
 
@@ -366,6 +406,27 @@ impl VisualManifest {
         self.one_shots.extend(add.one_shots);
         self
     }
+
+    /// Appends GPU particle/ribbon lists. Sim never observes these columns.
+    #[must_use]
+    pub fn with_gpu_vfx(
+        mut self,
+        particles: impl IntoIterator<Item = ParticleEmitter>,
+        ribbons: impl IntoIterator<Item = Ribbon>,
+    ) -> Self {
+        let mut t = crate::tables::VisualTables::new();
+        t.set_tick(self.tick);
+        for p in particles {
+            t.push_particle(p);
+        }
+        for r in ribbons {
+            t.push_ribbon(r);
+        }
+        let add = t.extract(self.epoch);
+        self.particles.extend(add.particles);
+        self.ribbons.extend(add.ribbons);
+        self
+    }
 }
 
 #[cfg(test)]
@@ -400,6 +461,8 @@ mod tests {
         assert!(!vis.clusters[0].gpu.is_uploaded());
         assert!(vis.decals.is_empty());
         assert!(vis.one_shots.is_empty());
+        assert!(vis.particles.is_empty());
+        assert!(vis.ribbons.is_empty());
         let _eye: Observer = Observer::origin();
     }
 
@@ -600,6 +663,8 @@ mod tests {
             debug_sigils: _,
             decals: _,
             one_shots: _,
+            particles: _,
+            ribbons: _,
         } = vis;
     }
 }

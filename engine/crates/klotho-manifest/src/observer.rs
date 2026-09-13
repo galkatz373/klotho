@@ -59,21 +59,33 @@ pub struct GpuBudget {
     pub us_extract: u32,
     /// Cluster draw cap. Exceeding is drop-farthest, not a kernel reject.
     pub max_clusters: u16,
+    /// Resident texture+geometry budget, mebibytes (KAI-17).
+    pub vram_mb: u16,
+    /// GPU particle emitter cap. Extra emitters drop.
+    pub max_particles: u16,
+    /// Ribbon strip cap. Extra ribbons drop.
+    pub max_ribbons: u16,
 }
 
 impl GpuBudget {
-    /// Hearth desktop defaults.
+    /// Hearth desktop defaults. GPU particles stay off.
     pub const HEARTH: Self = Self {
         us_present: 7_000,
         us_extract: 1_500,
         max_clusters: 256,
+        vram_mb: 256,
+        max_particles: 0,
+        max_ribbons: 0,
     };
 
-    /// 1080p adventure high: forward+ + cascades + probes.
+    /// 1080p adventure High: forward+ + cascades + probes + GPU VFX.
     pub const AAA_ADVENTURE: Self = Self {
         us_present: 11_000,
         us_extract: 1_500,
         max_clusters: 2048,
+        vram_mb: 1_536,
+        max_particles: 1_024,
+        max_ribbons: 128,
     };
 
     /// 1080p shooter competitive: no GI, at most one cascade.
@@ -81,6 +93,9 @@ impl GpuBudget {
         us_present: 8_000,
         us_extract: 1_500,
         max_clusters: 1024,
+        vram_mb: 1_024,
+        max_particles: 256,
+        max_ribbons: 32,
     };
 }
 
@@ -113,11 +128,16 @@ mod tests {
         assert_eq!(GpuBudget::HEARTH.us_present, 7_000);
         assert_eq!(GpuBudget::HEARTH.us_extract, 1_500);
         assert_eq!(GpuBudget::HEARTH.max_clusters, 256);
+        assert_eq!(GpuBudget::HEARTH.vram_mb, 256);
+        assert_eq!(GpuBudget::HEARTH.max_particles, 0);
         assert_eq!(GpuBudget::AAA_ADVENTURE.us_present, 11_000);
         assert_eq!(GpuBudget::AAA_ADVENTURE.us_extract, 1_500);
         assert_eq!(GpuBudget::AAA_ADVENTURE.max_clusters, 2048);
+        assert_eq!(GpuBudget::AAA_ADVENTURE.vram_mb, 1_536);
+        assert_eq!(GpuBudget::AAA_ADVENTURE.max_particles, 1_024);
         assert_eq!(GpuBudget::AAA_SHOOTER.us_present, 8_000);
         assert_eq!(GpuBudget::AAA_SHOOTER.us_extract, 1_500);
         assert_eq!(GpuBudget::AAA_SHOOTER.max_clusters, 1024);
+        assert_eq!(GpuBudget::AAA_SHOOTER.vram_mb, 1_024);
     }
 }

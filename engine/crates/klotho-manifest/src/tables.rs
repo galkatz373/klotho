@@ -7,11 +7,11 @@
 
 use klotho_core::{AabbMm, BlobId, Epoch, PoseMm, Sigil, Tick};
 
-use crate::sonic::{BedRef, GrainVoice, SonicManifest};
+use crate::sonic::{AdaptiveMusic, BedRef, GrainVoice, SonicManifest};
 use crate::ui::{UiManifest, Widget};
 use crate::visual::{
-    ClusterRef, Decal, GpuHandle, LightStub, MaterialRef, OneShotMesh, PaletteSlot, PostFlags,
-    ProbeGrid, SkinnedInstance, VisualManifest,
+    ClusterRef, Decal, GpuHandle, LightStub, MaterialRef, OneShotMesh, PaletteSlot,
+    ParticleEmitter, PostFlags, ProbeGrid, Ribbon, SkinnedInstance, VisualManifest,
 };
 
 /// Visual SoA. Extract copies into [`VisualManifest`] (AoS presenter buffer).
@@ -30,6 +30,8 @@ pub(crate) struct VisualTables {
     tick: Tick,
     decals: Vec<Decal>,
     one_shots: Vec<OneShotMesh>,
+    particles: Vec<ParticleEmitter>,
+    ribbons: Vec<Ribbon>,
 }
 
 impl VisualTables {
@@ -83,6 +85,14 @@ impl VisualTables {
         self.one_shots.push(mesh);
     }
 
+    pub(crate) fn push_particle(&mut self, p: ParticleEmitter) {
+        self.particles.push(p);
+    }
+
+    pub(crate) fn push_ribbon(&mut self, r: Ribbon) {
+        self.ribbons.push(r);
+    }
+
     pub(crate) fn extract(&self, epoch: Epoch) -> VisualManifest {
         let clusters = self
             .blobs
@@ -119,6 +129,8 @@ impl VisualTables {
             debug_sigils: self.debug.clone(),
             decals: self.decals.clone(),
             one_shots: self.one_shots.clone(),
+            particles: self.particles.clone(),
+            ribbons: self.ribbons.clone(),
         }
     }
 }
@@ -128,6 +140,7 @@ impl VisualTables {
 pub(crate) struct SonicTables {
     grains: Vec<GrainVoice>,
     bed: Option<BedRef>,
+    music: Option<AdaptiveMusic>,
 }
 
 impl SonicTables {
@@ -143,11 +156,16 @@ impl SonicTables {
         self.bed = Some(bed);
     }
 
+    pub(crate) fn set_music(&mut self, music: AdaptiveMusic) {
+        self.music = Some(music);
+    }
+
     pub(crate) fn extract(&self, epoch: Epoch) -> SonicManifest {
         SonicManifest {
             epoch,
             grains: self.grains.clone(),
             bed: self.bed,
+            music: self.music,
         }
     }
 }

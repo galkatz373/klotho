@@ -1103,6 +1103,7 @@ version = "0.1.0"
 dependencies = [
  "klotho-compile",
  "klotho-core",
+ "klotho-ir",
  "klotho-manifest",
  "klotho-platform",
  "klotho-trace",
@@ -1120,6 +1121,7 @@ dependencies = [
 name = "klotho-cinematic"
 version = "0.1.0"
 dependencies = [
+ "klotho-anim",
  "klotho-core",
  "klotho-ir",
  "klotho-manifest",
@@ -1427,6 +1429,7 @@ version = "0.1.0"
 dependencies = [
  "klotho-core",
  "klotho-manifest",
+ "klotho-prove",
  "klotho-trace",
 ]
 

@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Klotho anim: ClipSet joint sampling and presentation palettes"
+description = "Klotho anim: ClipSet, MotionDb, retarget, and facial viseme palettes"
 readme = false
 publish = false
 

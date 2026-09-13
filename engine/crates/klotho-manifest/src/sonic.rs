@@ -26,6 +26,40 @@ pub struct BedRef {
     pub gain_milli: u16,
 }
 
+/// Semantic music cue. Mix follows committed Trace; this is presentation.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+#[repr(u8)]
+pub enum MusicCue {
+    /// Default exploration bed.
+    Explore = 0,
+    /// Combat stem.
+    Combat = 1,
+    /// Quiet / dialogue.
+    Quiet = 2,
+    /// One-shot stinger.
+    Stinger = 3,
+}
+
+/// Adaptive-music mix state. Stem gains are milli; the mixer never writes Trace.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub struct AdaptiveMusic {
+    /// Cue selected from committed events.
+    pub cue: MusicCue,
+    /// Explore / combat / quiet / stinger stem gains, 0..=1000.
+    pub stem_gains_milli: [u16; 4],
+}
+
+impl AdaptiveMusic {
+    /// Explore at full, other stems silent.
+    #[must_use]
+    pub const fn explore() -> Self {
+        Self {
+            cue: MusicCue::Explore,
+            stem_gains_milli: [1_000, 0, 0, 0],
+        }
+    }
+}
+
 /// Dumb sonic buffer. No runtime music LM.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SonicManifest {
@@ -35,6 +69,8 @@ pub struct SonicManifest {
     pub grains: Vec<GrainVoice>,
     /// At most one ambience bed.
     pub bed: Option<BedRef>,
+    /// Adaptive music, if a semantic cue selected a stem set.
+    pub music: Option<AdaptiveMusic>,
 }
 
 impl SonicManifest {
@@ -45,10 +81,11 @@ impl SonicManifest {
             epoch,
             grains: Vec::new(),
             bed: None,
+            music: None,
         }
     }
 
-    /// `true` if nothing would emit a sample.
+    /// `true` if no one-shot grain or bed would emit. Music stems are separate.
     #[must_use]
     pub fn is_silent(&self) -> bool {
         self.grains.is_empty() && self.bed.is_none()
@@ -61,12 +98,26 @@ impl SonicManifest {
         grains: impl IntoIterator<Item = GrainVoice>,
         bed: Option<BedRef>,
     ) -> Self {
+        Self::from_voices_music(epoch, grains, bed, None)
+    }
+
+    /// Build from grains, bed, and optional adaptive music.
+    #[must_use]
+    pub fn from_voices_music(
+        epoch: Epoch,
+        grains: impl IntoIterator<Item = GrainVoice>,
+        bed: Option<BedRef>,
+        music: Option<AdaptiveMusic>,
+    ) -> Self {
         let mut t = crate::tables::SonicTables::new();
         for g in grains {
             t.push_grain(g);
         }
         if let Some(b) = bed {
             t.set_bed(b);
+        }
+        if let Some(m) = music {
+            t.set_music(m);
         }
         t.extract(epoch)
     }

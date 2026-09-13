@@ -18,6 +18,7 @@ mod catalog;
 mod codec;
 mod error;
 mod map;
+mod present;
 
 pub use catalog::{StreamCatalog, blob, map_place};
 pub use codec::{
@@ -30,6 +31,7 @@ pub use codec::{
 pub use error::StreamError;
 pub use klotho_prove::{CATALOG_CAP, KCAS_VOLUME_CAP, MAX_BLOB_BYTES, MAX_BLOBS, PLACE_SHARD_CAP};
 pub use klotho_world::{MAX_PLACE_ROWS, PlaceRow, PlaceSnap};
+pub use present::{ClusterLod, PresentResidency, TextureResident, plan_residency};
 
 #[cfg(test)]
 mod tests {

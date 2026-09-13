@@ -65,6 +65,7 @@ KAI-13 — asset contracts and privileged DCC intake.
 KAI-14 — hierarchical world assembly and compact materialization.
 KAI-15 — story bible, quest coherence, dialogue, and localization.
 KAI-16 — accessible declarative UI: constraint layout, menu focus, remapping, captions, screen-reader metadata, and the locale × aspect × input × a11y capture matrix.
+KAI-17 — production presentation: GPU particles/ribbons, scalable geometry and texture residency, bounded material graphs, probe bake, permutation pruning, MotionDb/retarget/facial, adaptive music, casting consent, and High-tier fallback.
 
 ## Build
 

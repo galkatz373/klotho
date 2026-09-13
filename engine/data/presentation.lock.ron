@@ -1,0 +1,15 @@
+(
+  interchange: {
+    "gltf": "2.0",
+    "usd": "24.08",
+    "materialx": "1.38",
+    "ocio": "2.3",
+  },
+  ocio_config: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  tools: {
+    "shader": (id: "naga-wgsl", version: "27.0", hash: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+    "probe_bake": (id: "klotho-probe-bake", version: "1", hash: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"),
+    "texture": (id: "ktx2-encode", version: "4.3", hash: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"),
+    "scalable_geometry": (id: "cluster-lod", version: "1", hash: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"),
+  },
+)

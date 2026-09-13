@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "toolchain_hash": "cd918897ce7089002c3015ed8561fd7e2bc337f7ce1717c344a3cc7d175128eb",
+  "toolchain_hash": "b341e60237921e0fd4c0cf8760f6527bb6ba80d5d0d2eea4f543cc82195dd96b",
   "kinds": [
     {
       "id": "klotho_ir::IntentDoc",
@@ -1905,6 +1905,200 @@
       ],
       "positive_example": "subtitles",
       "negative_example": "UnknownVariant"
+    },
+    {
+      "id": "klotho_ir::QualityTier",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "low",
+          "discriminant": 0,
+          "payload": "unit",
+          "description": "unlit family"
+        },
+        {
+          "name": "medium",
+          "discriminant": 1,
+          "payload": "unit",
+          "description": "forward+ without SSGI"
+        },
+        {
+          "name": "high",
+          "discriminant": 2,
+          "payload": "unit",
+          "description": "1080p High adventure"
+        }
+      ],
+      "positive_example": "high",
+      "negative_example": "UnknownVariant"
+    },
+    {
+      "id": "klotho_ir::PresentProfile",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "tier",
+          "ty": "QualityTier",
+          "description": "quality ladder step",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "us_present",
+          "ty": "u32",
+          "description": "present microseconds",
+          "min": 1,
+          "max": 11000
+        },
+        {
+          "name": "vram_mb",
+          "ty": "u16",
+          "description": "resident mebibytes",
+          "min": 1,
+          "max": 1536
+        },
+        {
+          "name": "max_clusters",
+          "ty": "u16",
+          "description": "cluster draw cap",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "max_particles",
+          "ty": "u16",
+          "description": "GPU particle cap",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "max_ribbons",
+          "ty": "u16",
+          "description": "ribbon cap",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "max_skinned",
+          "ty": "u16",
+          "description": "skinned instance cap",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(tier:high,us_present:11000,vram_mb:1536,max_clusters:2048,max_particles:1024,max_ribbons:128,max_skinned:256)",
+      "negative_example": "(tier:high,us_present:0,vram_mb:1536,max_clusters:2048,max_particles:1024,max_ribbons:128,max_skinned:256)"
+    },
+    {
+      "id": "klotho_ir::MaterialGraph",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "id",
+          "ty": "Name",
+          "description": "stable authoring id",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "nodes",
+          "ty": "Vec<MaterialNode>",
+          "description": "evaluation-order nodes; cap 16",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "albedo",
+          "ty": "u8",
+          "description": "albedo node index",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "metalness",
+          "ty": "u8",
+          "description": "metalness node index",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "roughness",
+          "ty": "u8",
+          "description": "roughness node index",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "emissive",
+          "ty": "Option<u8>",
+          "description": "optional emissive node",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "alpha",
+          "ty": "Option<u8>",
+          "description": "optional masked-alpha node",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(id:\"organic\",nodes:[constant(rgb_milli:[620,480,310]),constant(rgb_milli:[50,50,50]),constant(rgb_milli:[700,700,700])],albedo:0,metalness:1,roughness:2,emissive:None,alpha:None)",
+      "negative_example": "(id:\"\",nodes:[],albedo:0,metalness:0,roughness:0,emissive:None,alpha:None)"
+    },
+    {
+      "id": "klotho_ir::CastingConsent",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "performer",
+          "ty": "Name",
+          "description": "performer or session identity",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "role",
+          "ty": "Name",
+          "description": "role or line group",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "consent",
+          "ty": "Hash",
+          "description": "consent document hash",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "union_territory",
+          "ty": "Name",
+          "description": "union/territory tag",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "reuse",
+          "ty": "bool",
+          "description": "reuse beyond this title",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "approved_by",
+          "ty": "Name",
+          "description": "named audio/legal approver",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(performer:\"fixture-performer\",role:\"hero\",consent:\"1111111111111111111111111111111111111111111111111111111111111111\",union_territory:\"non-union-dev\",reuse:false,approved_by:\"audio-lead\")",
+      "negative_example": "(performer:\"fixture-performer\",role:\"hero\",consent:\"0000000000000000000000000000000000000000000000000000000000000000\",union_territory:\"non-union-dev\",reuse:false,approved_by:\"audio-lead\")"
     },
     {
       "id": "klotho_manifest::FocusRole",
@@ -5595,6 +5789,13 @@
       "legal_repairs": []
     },
     {
+      "code": "IR.InvalidPresent",
+      "source": "klotho-ir",
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
       "code": "IR.MindProgramCap",
       "source": "klotho-ir",
       "class": "cap",
@@ -6285,6 +6486,30 @@
       "input": "UiNode",
       "writes": [
         "ui"
+      ],
+      "cost_units": 2
+    },
+    {
+      "id": "present.set_quality@1",
+      "input": "PresentProfile",
+      "writes": [
+        "present"
+      ],
+      "cost_units": 2
+    },
+    {
+      "id": "present.material.compile@1",
+      "input": "MaterialGraph",
+      "writes": [
+        "materials"
+      ],
+      "cost_units": 3
+    },
+    {
+      "id": "present.casting.set@1",
+      "input": "CastingConsent",
+      "writes": [
+        "casting"
       ],
       "cost_units": 2
     }

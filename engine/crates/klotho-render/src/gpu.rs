@@ -248,6 +248,7 @@ impl WgpuPresenter {
         match peek_kind(bytes) {
             Ok(ArtifactKind::ClusteredMesh) => self.upload_clustered(id, bytes),
             Ok(ArtifactKind::SkinnedMesh) => self.upload_skinned(id, bytes),
+            Ok(ArtifactKind::ProbeGrid) => true,
             _ => false,
         }
     }

@@ -2,8 +2,11 @@
 
 use std::collections::BTreeMap;
 
-use klotho_core::{BlobId, Epoch, PoseMm, Sigil, Tick};
-use klotho_manifest::{Decal, MaterialRef, MaterialTag, OneShotMesh, VisualManifest};
+use klotho_core::{AabbMm, BlobId, Epoch, Hash, PoseMm, Sigil, Tick};
+use klotho_manifest::{
+    Decal, MaterialRef, MaterialTag, OneShotMesh, ParticleEmitter, Ribbon, VisualManifest,
+};
+use klotho_prove::hash_bytes;
 use klotho_trace::{PoseReason, RelTag, TraceBody, TraceEvent};
 
 /// Recipe key for lock / wield / hinge / pick / drop / dead impact decals.
@@ -12,6 +15,10 @@ pub const RECIPE_IMPACT: &str = "vfx.decal.impact";
 pub const RECIPE_SCORCH: &str = "vfx.decal.scorch";
 /// Recipe key for `Emitted` one-shot meshes.
 pub const RECIPE_BURST: &str = "vfx.oneshot.burst";
+/// Recipe key for GPU particle emitters. Presentation only.
+pub const RECIPE_PARTICLE: &str = "vfx.particle.burst";
+/// Recipe key for GPU ribbons. Presentation only.
+pub const RECIPE_RIBBON: &str = "vfx.ribbon.trail";
 
 /// Presentation TTL. A cue is live while `now < born + ttl`. `now == born` is live.
 pub const DEFAULT_TTL_TICKS: u16 = 4;
@@ -19,6 +26,10 @@ pub const DEFAULT_TTL_TICKS: u16 = 4;
 pub const MAX_DECALS: usize = 128;
 /// Hard cap on one-shot meshes per extract. Extra cues drop.
 pub const MAX_ONESHOTS: usize = 128;
+/// Hard cap on GPU particle emitters per extract. Extra cues drop.
+pub const MAX_PARTICLES: usize = 256;
+/// Hard cap on GPU ribbons per extract. Extra cues drop.
+pub const MAX_RIBBONS: usize = 64;
 
 const MAT: MaterialRef = MaterialRef {
     tag: MaterialTag::Organic,
@@ -33,6 +44,8 @@ enum CuePos {
 enum Cue {
     Decal { pose: CuePos, key: &'static str },
     OneShot { pose: CuePos, key: &'static str },
+    Particle { pose: CuePos, key: &'static str },
+    Ribbon { pose: CuePos, key: &'static str },
 }
 
 fn live(born: Tick, ttl: u16, now: Tick) -> bool {
@@ -50,35 +63,54 @@ pub fn extract_vfx(
 ) -> VisualManifest {
     let mut decals = Vec::new();
     let mut one_shots = Vec::new();
+    let mut particles = Vec::new();
+    let mut ribbons = Vec::new();
     for ev in events {
         if !live(ev.tick, DEFAULT_TTL_TICKS, now) {
             continue;
         }
-        let Some(kind) = cue(&ev.body) else {
-            continue;
-        };
-        match kind {
-            Cue::Decal { pose, key } => {
-                if decals.len() >= MAX_DECALS {
-                    continue;
+        for kind in cues(&ev.body) {
+            match kind {
+                Cue::Decal { pose, key } => {
+                    if decals.len() >= MAX_DECALS {
+                        continue;
+                    }
+                    let Some(item) = resolve_decal(ev.tick, key, pose, recipes, &pose_of) else {
+                        continue;
+                    };
+                    decals.push(item);
                 }
-                let Some(item) = resolve_decal(ev.tick, key, pose, recipes, &pose_of) else {
-                    continue;
-                };
-                decals.push(item);
-            }
-            Cue::OneShot { pose, key } => {
-                if one_shots.len() >= MAX_ONESHOTS {
-                    continue;
+                Cue::OneShot { pose, key } => {
+                    if one_shots.len() >= MAX_ONESHOTS {
+                        continue;
+                    }
+                    let Some(item) = resolve_oneshot(ev.tick, key, pose, recipes, &pose_of) else {
+                        continue;
+                    };
+                    one_shots.push(item);
                 }
-                let Some(item) = resolve_oneshot(ev.tick, key, pose, recipes, &pose_of) else {
-                    continue;
-                };
-                one_shots.push(item);
+                Cue::Particle { pose, key } => {
+                    if particles.len() >= MAX_PARTICLES {
+                        continue;
+                    }
+                    let Some(item) = resolve_particle(ev.tick, key, pose, recipes, &pose_of) else {
+                        continue;
+                    };
+                    particles.push(item);
+                }
+                Cue::Ribbon { pose, key } => {
+                    if ribbons.len() >= MAX_RIBBONS {
+                        continue;
+                    }
+                    let Some(item) = resolve_ribbon(ev.tick, key, pose, recipes, &pose_of) else {
+                        continue;
+                    };
+                    ribbons.push(item);
+                }
             }
         }
     }
-    VisualManifest::from_vfx(epoch, now, decals, one_shots)
+    VisualManifest::from_vfx(epoch, now, decals, one_shots).with_gpu_vfx(particles, ribbons)
 }
 
 fn resolve_pose(pos: CuePos, pose_of: impl Fn(Sigil) -> Option<PoseMm>) -> Option<PoseMm> {
@@ -124,38 +156,134 @@ fn resolve_oneshot(
     })
 }
 
-fn cue(body: &TraceBody) -> Option<Cue> {
+fn resolve_particle(
+    born: Tick,
+    key: &str,
+    pos: CuePos,
+    recipes: &BTreeMap<String, BlobId>,
+    pose_of: impl Fn(Sigil) -> Option<PoseMm>,
+) -> Option<ParticleEmitter> {
+    let &blob = recipes.get(key)?;
+    let pose = resolve_pose(pos, pose_of)?;
+    Some(ParticleEmitter {
+        blob,
+        pose,
+        material: MAT,
+        born,
+        ttl_ticks: DEFAULT_TTL_TICKS,
+        count: 32,
+    })
+}
+
+fn resolve_ribbon(
+    born: Tick,
+    key: &str,
+    pos: CuePos,
+    recipes: &BTreeMap<String, BlobId>,
+    pose_of: impl Fn(Sigil) -> Option<PoseMm>,
+) -> Option<Ribbon> {
+    let &blob = recipes.get(key)?;
+    let pose = resolve_pose(pos, pose_of)?;
+    Some(Ribbon {
+        blob,
+        pose,
+        material: MAT,
+        born,
+        ttl_ticks: DEFAULT_TTL_TICKS,
+        length_mm: 1_000,
+    })
+}
+
+fn cues(body: &TraceBody) -> Vec<Cue> {
     match body {
         TraceBody::RelAdd { a, rel, .. } | TraceBody::RelDel { a, rel, .. }
             if *rel == RelTag::LOCKED_BY || *rel == RelTag::WIELDED_BY =>
         {
-            Some(Cue::Decal {
+            vec![Cue::Decal {
                 pose: CuePos::Locus(*a),
                 key: RECIPE_IMPACT,
-            })
+            }]
         }
-        TraceBody::RelAdd { a, rel, .. } if *rel == RelTag::DEAD => Some(Cue::Decal {
-            pose: CuePos::Locus(*a),
-            key: RECIPE_IMPACT,
-        }),
+        TraceBody::RelAdd { a, rel, .. } if *rel == RelTag::DEAD => vec![
+            Cue::Decal {
+                pose: CuePos::Locus(*a),
+                key: RECIPE_IMPACT,
+            },
+            Cue::Ribbon {
+                pose: CuePos::Locus(*a),
+                key: RECIPE_RIBBON,
+            },
+        ],
         TraceBody::PoseCommitted {
             pose,
             reason: PoseReason::Hinge | PoseReason::Pick | PoseReason::Drop,
             ..
-        } => Some(Cue::Decal {
+        } => vec![Cue::Decal {
             pose: CuePos::Pose(*pose),
             key: RECIPE_IMPACT,
-        }),
-        TraceBody::QtyChanged { id, .. } => Some(Cue::Decal {
+        }],
+        TraceBody::QtyChanged { id, .. } => vec![Cue::Decal {
             pose: CuePos::Locus(*id),
             key: RECIPE_SCORCH,
-        }),
-        TraceBody::Emitted { a, .. } => Some(Cue::OneShot {
-            pose: CuePos::Locus(*a),
-            key: RECIPE_BURST,
-        }),
-        _ => None,
+        }],
+        TraceBody::Emitted { a, .. } => vec![
+            Cue::OneShot {
+                pose: CuePos::Locus(*a),
+                key: RECIPE_BURST,
+            },
+            Cue::Particle {
+                pose: CuePos::Locus(*a),
+                key: RECIPE_PARTICLE,
+            },
+        ],
+        _ => Vec::new(),
     }
+}
+
+/// Semantic area-effect identity: hull + Emitted events. Presentation recipes
+/// are excluded so a GPU VFX swap cannot move the golden.
+#[must_use]
+pub fn area_effect_golden(hull: AabbMm, events: &[TraceEvent]) -> Hash {
+    let mut bytes = Vec::new();
+    for v in [
+        hull.min.x, hull.min.y, hull.min.z, hull.max.x, hull.max.y, hull.max.z,
+    ] {
+        bytes.extend_from_slice(&v.to_le_bytes());
+    }
+    for ev in events {
+        if let TraceBody::Emitted { kind, a, b } = &ev.body {
+            bytes.extend_from_slice(&ev.tick.0.to_le_bytes());
+            bytes.extend_from_slice(&kind.to_le_bytes());
+            bytes.extend_from_slice(&a.raw().to_le_bytes());
+            match b {
+                Some(s) => {
+                    bytes.push(1);
+                    bytes.extend_from_slice(&s.raw().to_le_bytes());
+                }
+                None => bytes.push(0),
+            }
+        }
+    }
+    hash_bytes(&bytes)
+}
+
+/// Presenter-owned particle instances. Never a Proposal; never hashed.
+#[must_use]
+pub fn present_particles(emitters: &[ParticleEmitter], cap: u16) -> Vec<PoseMm> {
+    let mut out = Vec::new();
+    let cap = cap as usize;
+    for e in emitters {
+        if out.len() >= cap {
+            break;
+        }
+        let n = (e.count as usize).min(cap - out.len());
+        for i in 0..n {
+            let mut pose = e.pose;
+            pose.y = pose.y.wrapping_add(klotho_core::Mm(i as i32 * 20));
+            out.push(pose);
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -587,6 +715,84 @@ mod tests {
             debug_sigils: _,
             decals: _,
             one_shots: _,
+            particles: _,
+            ribbons: _,
         } = vis;
+    }
+
+    #[test]
+    fn gpu_particles_need_their_own_recipe() {
+        let a = relic(1);
+        let events = [TraceEvent::new(
+            Tick(1),
+            TraceBody::Emitted {
+                kind: 1,
+                a,
+                b: None,
+            },
+        )];
+        let vis = extract(&events);
+        assert_eq!(vis.one_shots.len(), 1);
+        assert!(vis.particles.is_empty());
+
+        let mut recipes = recipes();
+        recipes.insert(RECIPE_PARTICLE.into(), blob(9));
+        let vis = extract_vfx(&events, Epoch::ZERO, Tick(1), &recipes, |s| {
+            poses().get(&s).copied()
+        });
+        assert_eq!(vis.particles.len(), 1);
+        assert_eq!(vis.particles[0].blob, blob(9));
+        assert_eq!(vis.one_shots.len(), 1);
+    }
+
+    #[test]
+    fn presentation_swap_does_not_move_area_effect_golden() {
+        let a = relic(1);
+        let hull = AabbMm::from_point(klotho_core::IVec3 { x: 0, y: 0, z: 0 });
+        let events = [TraceEvent::new(
+            Tick(1),
+            TraceBody::Emitted {
+                kind: 7,
+                a,
+                b: None,
+            },
+        )];
+        let semantic = area_effect_golden(hull, &events);
+        let mut fire = recipes();
+        fire.insert(RECIPE_PARTICLE.into(), blob(4));
+        let mut smoke = recipes();
+        smoke.insert(RECIPE_PARTICLE.into(), blob(5));
+        let vis_fire = extract_vfx(&events, Epoch::ZERO, Tick(1), &fire, |s| {
+            poses().get(&s).copied()
+        });
+        let vis_smoke = extract_vfx(&events, Epoch::ZERO, Tick(1), &smoke, |s| {
+            poses().get(&s).copied()
+        });
+        assert_eq!(semantic, area_effect_golden(hull, &events));
+        assert_ne!(vis_fire.particles[0].blob, vis_smoke.particles[0].blob);
+        assert_eq!(vis_fire.one_shots[0].pose, vis_smoke.one_shots[0].pose);
+    }
+
+    #[test]
+    fn present_particles_are_not_a_proposal() {
+        let e = ParticleEmitter {
+            blob: blob(1),
+            pose: pose_at(0),
+            material: MAT,
+            born: Tick(1),
+            ttl_ticks: DEFAULT_TTL_TICKS,
+            count: 4,
+        };
+        let poses = present_particles(&[e], 8);
+        assert_eq!(poses.len(), 4);
+        assert_ne!(poses[0], poses[3]);
+        let ParticleEmitter {
+            blob: _,
+            pose: _,
+            material: _,
+            born: _,
+            ttl_ticks: _,
+            count: _,
+        } = e;
     }
 }

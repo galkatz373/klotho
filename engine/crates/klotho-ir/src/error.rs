@@ -88,6 +88,13 @@ pub enum IrError {
         /// Protected fact id.
         fact: String,
     },
+    /// A presentation contract field is out of bounds (KAI-17).
+    InvalidPresent {
+        /// Field path (`nodes`, `consent`).
+        field: String,
+        /// Why it failed.
+        reason: String,
+    },
 }
 
 impl fmt::Display for IrError {
@@ -130,6 +137,9 @@ impl fmt::Display for IrError {
             }
             Self::InvalidMindProgram(reason) => write!(f, "InvalidMindProgram({reason})"),
             Self::UnsafeFarFact { locus, fact } => write!(f, "UnsafeFarFact({locus}.{fact})"),
+            Self::InvalidPresent { field, reason } => {
+                write!(f, "InvalidPresent({field}: {reason})")
+            }
         }
     }
 }

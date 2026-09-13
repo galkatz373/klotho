@@ -31,7 +31,10 @@ pub use gpu::{GOLDEN_HEIGHT, GOLDEN_WIDTH, WgpuPresenter};
 pub use hal::{HalPresenter, RenderHal, RenderHalError};
 pub use overlay::{overlay_hud, write_bmp};
 pub use palette::{albedo, metalness_roughness};
-pub use perm::{PresenterPerm, cascade_count, gi_enabled, permutation, ssgi_enabled};
+pub use perm::{
+    PresentPlan, PresenterPerm, cascade_count, clamp_gpu_vfx, fallback_tier, gi_enabled,
+    permutation, post_for_tier, present_plan, ssgi_enabled,
+};
 pub use presenter::{NullPresenter, Presenter, draw_list};
 pub use probes::{DEFAULT_SPACING_MM, probe_grid_ready, probe_sample};
 pub use surface::WindowedPresenter;

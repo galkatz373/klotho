@@ -14,6 +14,7 @@ use crate::snap::PlaceSnap;
 use crate::view::WorldView;
 
 /// Speculative overlay: CoW-cloned projection plus events not yet on Trace.
+#[cfg_attr(not(any(test, feature = "mutate")), allow(dead_code))]
 #[derive(Clone, Debug)]
 pub struct SpecDelta {
     proj: Projection,
@@ -21,6 +22,7 @@ pub struct SpecDelta {
     tick: Tick,
 }
 
+#[cfg_attr(not(any(test, feature = "mutate")), allow(dead_code))]
 impl SpecDelta {
     /// Read the would-be post-state.
     #[must_use]

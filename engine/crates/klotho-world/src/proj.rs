@@ -64,6 +64,7 @@ pub struct RiteMachine {
 }
 
 /// Rows to drop and rites to end before packed-index remap.
+#[cfg_attr(not(any(test, feature = "mutate")), allow(dead_code))]
 pub(crate) struct PlaceEvictPlan {
     pub drop: Vec<Sigil>,
     pub rites: Vec<(Sigil, u16)>,

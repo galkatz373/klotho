@@ -5,7 +5,7 @@
 | Document | High-Level Design — AI-native production for Klotho's first AAA title |
 | Author | Gal Katz |
 | Date | 2026-09-13 |
-| Status | Active successor plan (KAI-00–13 landed; KAI-14–24 not landed) |
+| Status | Active successor plan (KAI-00–14 landed; KAI-15–24 not landed) |
 | Baseline | `docs/hld.md` rev 6; AAA-01–27 landed |
 | Audience | Engine, tools, gameplay, content, AI platform, build, QA, and production leads |
 | Language | Rust (edition 2024; 2021-compatible crates OK) |
@@ -1911,7 +1911,7 @@ managers.
 
 ## PR plan
 
-Landed baseline: AAA-01–27 and KAI-00–13 (2026-09-13). KAI-14–24 remain planned.
+Landed baseline: AAA-01–27 and KAI-00–14 (2026-09-13). KAI-15–24 remain planned.
 Each header gains `— landed` only with its implementation, tests, date bump, and
 this section's landed list update.
 
@@ -2170,7 +2170,7 @@ flowchart TB
   without Pin; blinded representative hero bake-off reports quality and rework,
   and the approved program plan funds the winning route or human/vendor fallback.
 
-#### KAI-14 — Hierarchical world assembly and compact materialization
+#### KAI-14 — Hierarchical world assembly and compact materialization — **landed 2026-09-13**
 
 - **Files:** world patterns, editor graph view, Place budget solver, CAS-instance
   placement codec, cook materializer, eval reachability.

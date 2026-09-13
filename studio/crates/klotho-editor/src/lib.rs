@@ -17,6 +17,7 @@ mod kernel;
 mod outliner;
 mod session;
 mod transaction;
+mod world;
 
 pub use assistant::{
     AcceptanceEditor, Assumption, CaptureComparison, CostView, DistaffReview, PlanStep,
@@ -29,6 +30,7 @@ pub use inspector::InspectorView;
 pub use outliner::{LocusEntry, Outliner, PlaceGroup};
 pub use session::EditorSession;
 pub use transaction::EditorTransaction;
+pub use world::{GraphEdge, PlaceNode, WorldGraphView, review_world, world_graph};
 
 pub use klotho_author::{
     AuthorError, Cooked, IntentDoc, Pin, apply_pin, cook_validated, load_file,
@@ -46,5 +48,7 @@ mod kai09_tests;
 mod kai10_tests;
 #[cfg(test)]
 mod kai11_tests;
+#[cfg(test)]
+mod kai14_tests;
 #[cfg(test)]
 mod tests;

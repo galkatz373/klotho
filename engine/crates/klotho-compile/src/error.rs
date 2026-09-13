@@ -47,6 +47,8 @@ pub enum CompileError {
     Flatten(String),
     /// Authoring-only artifact in the ship package graph (K70).
     PackageAllowlist(String),
+    /// Placement table encode/decode or materialization failed.
+    Placement(String),
 }
 
 impl CompileError {
@@ -116,6 +118,13 @@ impl CompileError {
                 "COMPILE.Flatten",
                 FailureClass::Schema,
                 "module",
+                s,
+                message,
+            ),
+            Self::Placement(s) => diagnose_named(
+                "COMPILE.Placement",
+                FailureClass::Schema,
+                "placement",
                 s,
                 message,
             ),
@@ -203,6 +212,7 @@ impl fmt::Display for CompileError {
             Self::EpochOverflow => write!(f, "EpochOverflow"),
             Self::Flatten(s) => write!(f, "Flatten({s})"),
             Self::PackageAllowlist(p) => write!(f, "PackageAllowlist({p})"),
+            Self::Placement(s) => write!(f, "Placement({s})"),
         }
     }
 }

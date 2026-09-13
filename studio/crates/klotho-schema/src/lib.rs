@@ -419,6 +419,115 @@ fn type_schemas() -> Vec<TypeSchema> {
             "(anchor:\"00\",module:\"00\",instance:\"\",pattern:\"\",version:0,args:[])",
         ),
         structure(
+            "klotho_pattern::WorldPlan",
+            vec![
+                field("anchor", "AnchorId", "immutable plan identity"),
+                field("id", "Name", "authoring id"),
+                field("places", "Vec<PlacePlan>", "Places; validate sorts by name"),
+                field("edges", "Vec<TraversalEdge>", "traversal graph"),
+                field("critical_path", "Vec<Name>", "ordered critical journey"),
+                field(
+                    "protected",
+                    "Vec<AnchorId>",
+                    "anchors regeneration must keep",
+                ),
+            ],
+            "(anchor:\"00000000000000000000000000000000\",id:\"greybox\",places:[],edges:[],critical_path:[\"hub\"],protected:[])",
+            "(anchor:\"00\",id:\"\",places:[],edges:[],critical_path:[],protected:[])",
+        ),
+        structure(
+            "klotho_pattern::PlacePlan",
+            vec![
+                field("name", "Name", "authoring name"),
+                field("role", "PlaceRole", "route role"),
+                field("envelope", "AabbMm", "streaming envelope"),
+                field("budgets", "PlaceBudgets", "multidomain caps"),
+                field(
+                    "protected",
+                    "Vec<AnchorId>",
+                    "Place-local protected anchors",
+                ),
+                field("zones", "Vec<Name>", "dressing zones"),
+            ],
+            "(name:\"hub\",role:hub,envelope:(min:(x:0,y:0,z:0),max:(x:1,y:1,z:1)),budgets:(density:8,visibility:4,streaming_bytes:1024,nav_cells:8,phys_bodies:8,audio_voices:2,gpu_instances:8),protected:[],zones:[\"dress\"])",
+            "(name:\"\",role:hub,envelope:(min:(x:1,y:0,z:0),max:(x:0,y:0,z:0)),budgets:(density:0,visibility:0,streaming_bytes:0,nav_cells:0,phys_bodies:0,audio_voices:0,gpu_instances:0),protected:[],zones:[])",
+        ),
+        structure(
+            "klotho_pattern::PlaceBudgets",
+            vec![
+                field("density", "u32", "max dressing instances"),
+                field("visibility", "u32", "max unique bindings"),
+                field("streaming_bytes", "u64", "max unique dressing bytes"),
+                field("nav_cells", "u32", "max nav cost"),
+                field("phys_bodies", "u32", "max Phys cost"),
+                field("audio_voices", "u32", "max audio voices"),
+                field("gpu_instances", "u32", "max GPU instances"),
+            ],
+            "(density:64,visibility:16,streaming_bytes:65536,nav_cells:64,phys_bodies:64,audio_voices:8,gpu_instances:64)",
+            "(density:-1,visibility:0,streaming_bytes:0,nav_cells:0,phys_bodies:0,audio_voices:0,gpu_instances:0)",
+        ),
+        structure(
+            "klotho_pattern::TraversalEdge",
+            vec![
+                field("from", "Name", "origin Place"),
+                field("to", "Name", "destination Place"),
+                field("bidirectional", "bool", "implied reverse edge"),
+                field("kind", "EdgeKind", "critical, optional, or shortcut"),
+            ],
+            "(from:\"hub\",to:\"combat\",bidirectional:false,kind:critical)",
+            "(from:\"\",to:\"\",bidirectional:false,kind:critical)",
+        ),
+        structure(
+            "klotho_pattern::DressingInstance",
+            vec![
+                field("place", "Name", "owning Place"),
+                field("zone", "Name", "owning zone"),
+                field("mesh", "BlobId", "shared mesh"),
+                field("material", "BlobId", "shared material"),
+                field("clip", "Option<BlobId>", "optional clip"),
+                field("variant", "u16", "variant index"),
+                field("pose", "IVec3", "translation mm"),
+                field("yaw", "YawMd", "yaw millidegrees"),
+                field("scale_permille", "u16", "uniform scale, 1000 = 1"),
+                field("blob_bytes", "u32", "unique source bytes for streaming"),
+                field("nav_cost", "u32", "nav-cell cost"),
+                field("phys_cost", "u32", "Phys-body cost"),
+                field("audio_cost", "u32", "audio-voice cost"),
+                field("protected", "bool", "solver may not drop"),
+            ],
+            "(place:\"hub\",zone:\"dress\",mesh:\"0000000000000000000000000000000000000000000000000000000000000000\",material:\"0000000000000000000000000000000000000000000000000000000000000000\",clip:None,variant:0,pose:(x:0,y:0,z:0),yaw:0,scale_permille:1000,blob_bytes:256,nav_cost:1,phys_cost:1,audio_cost:0,protected:true)",
+            "(place:\"\",zone:\"\",mesh:\"00\",material:\"00\",clip:None,variant:0,pose:(x:0,y:0,z:0),yaw:0,scale_permille:0,blob_bytes:0,nav_cost:0,phys_cost:0,audio_cost:0,protected:false)",
+        ),
+        enumeration(
+            "klotho_pattern::PlaceRole",
+            [
+                ("hub", 0, "safe hub"),
+                ("combat_pocket", 1, "combat pocket"),
+                ("traversal", 2, "traversal beat"),
+                ("conversation", 3, "conversation beat"),
+                ("cinematic", 4, "cinematic beat"),
+                ("checkpoint", 5, "checkpoint / rest"),
+                ("shortcut", 6, "return shortcut"),
+                ("optional", 7, "optional objective"),
+            ]
+            .into_iter()
+            .map(|(n, d, desc)| variant(n, Some(d), "unit", desc))
+            .collect(),
+            "hub",
+        ),
+        enumeration(
+            "klotho_pattern::EdgeKind",
+            [
+                ("critical", 0, "required critical-path connection"),
+                ("optional", 1, "optional branch"),
+                ("shortcut", 2, "return / skip shortcut"),
+            ]
+            .into_iter()
+            .map(|(n, d, desc)| variant(n, Some(d), "unit", desc))
+            .collect(),
+            "critical",
+        ),
+        structure(
             "klotho_ir::ObjectAnchor",
             vec![
                 field("kind", "AnchorKind", "object family"),
@@ -1366,6 +1475,8 @@ fn operations() -> Vec<OperationSchema> {
             &["review"],
             2,
         ),
+        ("world.plan@1", "WorldPlan", &["places", "graph"], 4),
+        ("world.dress@1", "Vec<DressingInstance>", &["dressing"], 2),
     ]
     .into_iter()
     .map(|(id, input, writes, cost_units)| OperationSchema {
@@ -1447,6 +1558,8 @@ mod tests {
             look_pitch: 4,
         });
         round_trip(&klotho_ir::FeelContract::spindle_use());
+        round_trip(&klotho_pattern::greybox_route());
+        round_trip(&klotho_pattern::PlaceBudgets::greybox());
         round_trip(&Cost {
             res: Name::from("stamina"),
             amount: 1,

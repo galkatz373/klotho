@@ -50,6 +50,29 @@ pub enum PatternError {
         /// Declared cap.
         cap: u32,
     },
+    /// Place multidomain budget cannot be met without deleting a protected or
+    /// critical-path anchor (K75).
+    WorldBudget {
+        /// Place that missed.
+        place: String,
+        /// Density, visibility, streaming, nav, phys, audio, or gpu.
+        domain: String,
+        /// Observed cost.
+        used: u64,
+        /// Declared cap.
+        cap: u64,
+    },
+    /// World plan graph is incomplete, cyclic where forbidden, or names a
+    /// missing Place.
+    WorldGraph {
+        /// Why the plan failed.
+        reason: String,
+    },
+    /// Regeneration or a budget solve would drop a protected semantic anchor.
+    ProtectedAnchor {
+        /// Anchor token.
+        token: String,
+    },
     /// Underlying IR validation.
     Ir(IrError),
 }
@@ -98,6 +121,27 @@ impl PatternError {
                 id,
                 message,
             ),
+            Self::WorldBudget { place, .. } => diagnose_named(
+                "PATTERN.WorldBudget",
+                FailureClass::Budget,
+                "place",
+                place,
+                message,
+            ),
+            Self::WorldGraph { reason } => diagnose_named(
+                "PATTERN.WorldGraph",
+                FailureClass::Schema,
+                "world",
+                reason,
+                message,
+            ),
+            Self::ProtectedAnchor { token } => diagnose_named(
+                "PATTERN.ProtectedAnchor",
+                FailureClass::Schema,
+                "anchor",
+                token,
+                message,
+            ),
             Self::Ir(e) => e.to_diagnostic(),
         };
         if primary != AnchorId::ZERO {
@@ -123,6 +167,14 @@ impl fmt::Display for PatternError {
                 used,
                 cap,
             } => write!(f, "PatternBudget({id} {counter} {used}/{cap})"),
+            Self::WorldBudget {
+                place,
+                domain,
+                used,
+                cap,
+            } => write!(f, "WorldBudget({place} {domain} {used}/{cap})"),
+            Self::WorldGraph { reason } => write!(f, "WorldGraph({reason})"),
+            Self::ProtectedAnchor { token } => write!(f, "ProtectedAnchor({token})"),
             Self::Ir(e) => write!(f, "{e}"),
         }
     }

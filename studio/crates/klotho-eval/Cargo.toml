@@ -14,6 +14,7 @@ klotho-core.workspace = true
 klotho-debug.workspace = true
 klotho-input.workspace = true
 klotho-ir.workspace = true
+klotho-pattern.workspace = true
 klotho-prove.workspace = true
 ron.workspace = true
 serde.workspace = true

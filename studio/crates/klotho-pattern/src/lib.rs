@@ -15,6 +15,7 @@ mod error;
 mod expand;
 mod migrate;
 mod stdlib;
+mod world;
 
 pub use def::{
     ExpandKind, Expansion, ExpansionCost, HostCaps, JourneyHook, ParamSpec, PatternBudget,
@@ -24,6 +25,11 @@ pub use error::PatternError;
 pub use expand::{bind_args, caps_from_module, expand_bundle, expand_instance, expand_module};
 pub use migrate::{migrate_instance, migration_journeys};
 pub use stdlib::{first_pattern_ids, latest, lookup, specs};
+pub use world::{
+    DressingInstance, EdgeKind, PlaceBudgets, PlacePlan, PlaceRole, SolvedDressing, TraversalEdge,
+    WorldPlan, expand_world_plan, greybox_dressing, greybox_route, reachable_from,
+    regenerate_dressing, solve_budgets,
+};
 
 use crate::def::PatternCatalogRow as Row;
 

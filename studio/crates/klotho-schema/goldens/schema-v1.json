@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "toolchain_hash": "85fecabd27dc04c9d0b350dbfb7a2f316c1cb65e404bd2b1c74ac09c10334a79",
+  "toolchain_hash": "09f19b8b678c0031691bc348e31e7ea0d697614e45b7a40ef5d7dec45abe8225",
   "kinds": [
     {
       "id": "klotho_ir::IntentDoc",
@@ -334,6 +334,394 @@
       "variants": [],
       "positive_example": "(anchor:\"00000000000000000000000000000000\",module:\"00000000000000000000000000000000\",instance:\"gate\",pattern:\"traversal.door_key\",version:1,args:[])",
       "negative_example": "(anchor:\"00\",module:\"00\",instance:\"\",pattern:\"\",version:0,args:[])"
+    },
+    {
+      "id": "klotho_pattern::WorldPlan",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "anchor",
+          "ty": "AnchorId",
+          "description": "immutable plan identity",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "id",
+          "ty": "Name",
+          "description": "authoring id",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "places",
+          "ty": "Vec<PlacePlan>",
+          "description": "Places; validate sorts by name",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "edges",
+          "ty": "Vec<TraversalEdge>",
+          "description": "traversal graph",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "critical_path",
+          "ty": "Vec<Name>",
+          "description": "ordered critical journey",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "protected",
+          "ty": "Vec<AnchorId>",
+          "description": "anchors regeneration must keep",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(anchor:\"00000000000000000000000000000000\",id:\"greybox\",places:[],edges:[],critical_path:[\"hub\"],protected:[])",
+      "negative_example": "(anchor:\"00\",id:\"\",places:[],edges:[],critical_path:[],protected:[])"
+    },
+    {
+      "id": "klotho_pattern::PlacePlan",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "name",
+          "ty": "Name",
+          "description": "authoring name",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "role",
+          "ty": "PlaceRole",
+          "description": "route role",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "envelope",
+          "ty": "AabbMm",
+          "description": "streaming envelope",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "budgets",
+          "ty": "PlaceBudgets",
+          "description": "multidomain caps",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "protected",
+          "ty": "Vec<AnchorId>",
+          "description": "Place-local protected anchors",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "zones",
+          "ty": "Vec<Name>",
+          "description": "dressing zones",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(name:\"hub\",role:hub,envelope:(min:(x:0,y:0,z:0),max:(x:1,y:1,z:1)),budgets:(density:8,visibility:4,streaming_bytes:1024,nav_cells:8,phys_bodies:8,audio_voices:2,gpu_instances:8),protected:[],zones:[\"dress\"])",
+      "negative_example": "(name:\"\",role:hub,envelope:(min:(x:1,y:0,z:0),max:(x:0,y:0,z:0)),budgets:(density:0,visibility:0,streaming_bytes:0,nav_cells:0,phys_bodies:0,audio_voices:0,gpu_instances:0),protected:[],zones:[])"
+    },
+    {
+      "id": "klotho_pattern::PlaceBudgets",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "density",
+          "ty": "u32",
+          "description": "max dressing instances",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "visibility",
+          "ty": "u32",
+          "description": "max unique bindings",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "streaming_bytes",
+          "ty": "u64",
+          "description": "max unique dressing bytes",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "nav_cells",
+          "ty": "u32",
+          "description": "max nav cost",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "phys_bodies",
+          "ty": "u32",
+          "description": "max Phys cost",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "audio_voices",
+          "ty": "u32",
+          "description": "max audio voices",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "gpu_instances",
+          "ty": "u32",
+          "description": "max GPU instances",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(density:64,visibility:16,streaming_bytes:65536,nav_cells:64,phys_bodies:64,audio_voices:8,gpu_instances:64)",
+      "negative_example": "(density:-1,visibility:0,streaming_bytes:0,nav_cells:0,phys_bodies:0,audio_voices:0,gpu_instances:0)"
+    },
+    {
+      "id": "klotho_pattern::TraversalEdge",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "from",
+          "ty": "Name",
+          "description": "origin Place",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "to",
+          "ty": "Name",
+          "description": "destination Place",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "bidirectional",
+          "ty": "bool",
+          "description": "implied reverse edge",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "kind",
+          "ty": "EdgeKind",
+          "description": "critical, optional, or shortcut",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(from:\"hub\",to:\"combat\",bidirectional:false,kind:critical)",
+      "negative_example": "(from:\"\",to:\"\",bidirectional:false,kind:critical)"
+    },
+    {
+      "id": "klotho_pattern::DressingInstance",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "place",
+          "ty": "Name",
+          "description": "owning Place",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "zone",
+          "ty": "Name",
+          "description": "owning zone",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "mesh",
+          "ty": "BlobId",
+          "description": "shared mesh",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "material",
+          "ty": "BlobId",
+          "description": "shared material",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "clip",
+          "ty": "Option<BlobId>",
+          "description": "optional clip",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "variant",
+          "ty": "u16",
+          "description": "variant index",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "pose",
+          "ty": "IVec3",
+          "description": "translation mm",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "yaw",
+          "ty": "YawMd",
+          "description": "yaw millidegrees",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "scale_permille",
+          "ty": "u16",
+          "description": "uniform scale, 1000 = 1",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "blob_bytes",
+          "ty": "u32",
+          "description": "unique source bytes for streaming",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "nav_cost",
+          "ty": "u32",
+          "description": "nav-cell cost",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "phys_cost",
+          "ty": "u32",
+          "description": "Phys-body cost",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "audio_cost",
+          "ty": "u32",
+          "description": "audio-voice cost",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "protected",
+          "ty": "bool",
+          "description": "solver may not drop",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(place:\"hub\",zone:\"dress\",mesh:\"0000000000000000000000000000000000000000000000000000000000000000\",material:\"0000000000000000000000000000000000000000000000000000000000000000\",clip:None,variant:0,pose:(x:0,y:0,z:0),yaw:0,scale_permille:1000,blob_bytes:256,nav_cost:1,phys_cost:1,audio_cost:0,protected:true)",
+      "negative_example": "(place:\"\",zone:\"\",mesh:\"00\",material:\"00\",clip:None,variant:0,pose:(x:0,y:0,z:0),yaw:0,scale_permille:0,blob_bytes:0,nav_cost:0,phys_cost:0,audio_cost:0,protected:false)"
+    },
+    {
+      "id": "klotho_pattern::PlaceRole",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "hub",
+          "discriminant": 0,
+          "payload": "unit",
+          "description": "safe hub"
+        },
+        {
+          "name": "combat_pocket",
+          "discriminant": 1,
+          "payload": "unit",
+          "description": "combat pocket"
+        },
+        {
+          "name": "traversal",
+          "discriminant": 2,
+          "payload": "unit",
+          "description": "traversal beat"
+        },
+        {
+          "name": "conversation",
+          "discriminant": 3,
+          "payload": "unit",
+          "description": "conversation beat"
+        },
+        {
+          "name": "cinematic",
+          "discriminant": 4,
+          "payload": "unit",
+          "description": "cinematic beat"
+        },
+        {
+          "name": "checkpoint",
+          "discriminant": 5,
+          "payload": "unit",
+          "description": "checkpoint / rest"
+        },
+        {
+          "name": "shortcut",
+          "discriminant": 6,
+          "payload": "unit",
+          "description": "return shortcut"
+        },
+        {
+          "name": "optional",
+          "discriminant": 7,
+          "payload": "unit",
+          "description": "optional objective"
+        }
+      ],
+      "positive_example": "hub",
+      "negative_example": "UnknownVariant"
+    },
+    {
+      "id": "klotho_pattern::EdgeKind",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "critical",
+          "discriminant": 0,
+          "payload": "unit",
+          "description": "required critical-path connection"
+        },
+        {
+          "name": "optional",
+          "discriminant": 1,
+          "payload": "unit",
+          "description": "optional branch"
+        },
+        {
+          "name": "shortcut",
+          "discriminant": 2,
+          "payload": "unit",
+          "description": "return / skip shortcut"
+        }
+      ],
+      "positive_example": "critical",
+      "negative_example": "UnknownVariant"
     },
     {
       "id": "klotho_ir::ObjectAnchor",
@@ -4925,6 +5313,23 @@
       "input": "{action:Name,candidates:Vec<FeelContract>}",
       "writes": [
         "review"
+      ],
+      "cost_units": 2
+    },
+    {
+      "id": "world.plan@1",
+      "input": "WorldPlan",
+      "writes": [
+        "places",
+        "graph"
+      ],
+      "cost_units": 4
+    },
+    {
+      "id": "world.dress@1",
+      "input": "Vec<DressingInstance>",
+      "writes": [
+        "dressing"
       ],
       "cost_units": 2
     }

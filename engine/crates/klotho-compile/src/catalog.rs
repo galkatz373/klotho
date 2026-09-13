@@ -565,4 +565,23 @@ mod tests {
         );
         let _ = fs::remove_dir_all(&dir);
     }
+
+    #[test]
+    fn eight_place_greybox_catalog_streams() {
+        let cooked = hearth();
+        let dir = temp_dir();
+        let aabb = AabbMm::from_point(IVec3::ZERO);
+        let mut places = Vec::new();
+        for id in 1..=8u128 {
+            let p = place(id);
+            places.push((snap_for(&cooked, p), aabb));
+        }
+        let man = write_catalog(&dir, &cooked, &places).unwrap();
+        assert_eq!(man.places.len(), 8);
+        let cat = StreamCatalog::open(&man.catalog_path).unwrap();
+        for id in 1..=8u128 {
+            assert!(cat.contains_place(place(id)));
+        }
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

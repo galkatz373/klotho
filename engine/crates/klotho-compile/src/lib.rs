@@ -23,6 +23,7 @@ mod error;
 mod header;
 mod kit;
 mod package;
+mod placement;
 mod warp;
 
 #[cfg(test)]
@@ -56,6 +57,12 @@ pub use package::{
     AccessibilitySettings, CreditEntry, CreditsRoll, DESKTOP_SKUS, DesktopPackage, DesktopSku,
     HudSpec, InstallRecord, LocaleTable, REQUIRED_LOCALE_KEYS, ShipContent, install_package,
     pack_desktop, repair_package, uninstall_package,
+};
+pub use placement::{
+    ChunkKey, InstanceGroup, MAX_INSTANCE_GROUPS, MAX_PLACEMENT_RECORDS, MaterializedWorld,
+    PLACEMENT_MAGIC, PLACEMENT_VERSION, PlacementChunk, PlacementRecord, PlacementWrite,
+    RawPlacement, decode_chunk, diff_chunks, materialize, place_sigil, unique_blob_count,
+    write_placement_chunks,
 };
 pub use warp::{
     WARP_CAP_DESKTOP, WARP_CAP_MOBILE, WARP_MAGIC, WARP_MAX_LOCI, WARP_VERSION, pack_warp,

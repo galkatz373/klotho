@@ -21,6 +21,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod a11y;
 mod agency;
 mod analog;
 mod anchor;
@@ -43,6 +44,7 @@ mod target;
 mod validate;
 mod verb;
 
+pub use a11y::{A11yProfile, CaptionMode, ContrastMode};
 pub use agency::{Agency, AssistLevel, Channel};
 pub use analog::Analog;
 pub use anchor::AnchorId;

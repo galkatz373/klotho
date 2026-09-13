@@ -61,6 +61,13 @@ pub enum IrError {
         /// Why it failed.
         reason: String,
     },
+    /// A [`crate::A11yProfile`] field is out of bounds.
+    InvalidA11y {
+        /// Field path (`text_scale_milli`).
+        field: String,
+        /// Why it failed.
+        reason: String,
+    },
     /// A compiled Mind program exceeds a K90 content-independent cap.
     MindProgramCap {
         /// Actor anchor/name.
@@ -112,6 +119,7 @@ impl fmt::Display for IrError {
             Self::ParameterTypeMismatch(name) => write!(f, "ParameterTypeMismatch({name})"),
             Self::UnexpandedPattern(id) => write!(f, "UnexpandedPattern({id})"),
             Self::InvalidFeel { field, reason } => write!(f, "InvalidFeel({field}: {reason})"),
+            Self::InvalidA11y { field, reason } => write!(f, "InvalidA11y({field}: {reason})"),
             Self::MindProgramCap {
                 locus,
                 resource,

@@ -8,6 +8,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod a11y;
 mod assistant;
 mod dashboard;
 mod error;
@@ -20,6 +21,7 @@ mod session;
 mod transaction;
 mod world;
 
+pub use a11y::{A11yReview, review_a11y, review_first_title};
 pub use assistant::{
     AcceptanceEditor, Assumption, CaptureComparison, CostView, DistaffReview, PlanStep,
     ProvenanceView, RequestDraft, ReviewGroup, ReviewState, conservative_risk_inputs,
@@ -54,5 +56,7 @@ mod kai11_tests;
 mod kai14_tests;
 #[cfg(test)]
 mod kai15_tests;
+#[cfg(test)]
+mod kai16_tests;
 #[cfg(test)]
 mod tests;

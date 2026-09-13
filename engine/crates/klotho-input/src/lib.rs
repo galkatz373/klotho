@@ -21,8 +21,10 @@ use klotho_core::{PlayerId, Tick, YawMd};
 use klotho_ir::{Agency, Analog, Channel, IntentTarget, PlayerIntent, Verb};
 
 mod feel;
+mod remap;
 
 pub use feel::{DeviceLane, FeelGate, FeelMapper, LatencyLog, LatencySample, apply_aim_assist};
+pub use remap::{InputFamily, RemapError, coverage_complete, glyph};
 
 /// One digital control a bind table can name.
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Serialize, Deserialize)]
@@ -53,6 +55,26 @@ pub enum Button {
     PadEast,
     /// Gamepad start — Talk + DialogueChoice.
     PadStart,
+    /// Keyboard up — menu previous.
+    KeyUp,
+    /// Keyboard down — menu next.
+    KeyDown,
+    /// Keyboard left — menu left / slider down.
+    KeyLeft,
+    /// Keyboard right — menu right / slider up.
+    KeyRight,
+    /// Keyboard escape — menu back.
+    KeyEsc,
+    /// Gamepad D-pad up.
+    PadUp,
+    /// Gamepad D-pad down.
+    PadDown,
+    /// Gamepad D-pad left.
+    PadLeft,
+    /// Gamepad D-pad right.
+    PadRight,
+    /// Gamepad north face (Y/Triangle) — menu back.
+    PadNorth,
 }
 
 /// One bind: button → verb and optional agency channel.
@@ -151,6 +173,37 @@ impl BindTable {
     #[must_use]
     pub fn bindings(&self) -> &[Binding] {
         &self.binds
+    }
+
+    /// Rebind `verb` onto `button`. Occupied buttons swap when both are bound.
+    pub fn rebind(&mut self, verb: Verb, button: Button) -> Result<(), RemapError> {
+        remap::rebind(self, verb, button)
+    }
+
+    /// Swap the verbs on two buttons. Both must already be bound.
+    pub fn swap(&mut self, a: Button, b: Button) -> Result<(), RemapError> {
+        remap::swap(self, a, b)
+    }
+
+    /// First binding for `verb` on `family`, if any.
+    #[must_use]
+    pub fn binding_for(&self, verb: Verb, family: InputFamily) -> Option<Binding> {
+        self.binds
+            .iter()
+            .copied()
+            .find(|b| b.verb == verb && family.contains(b.button))
+    }
+
+    /// True when `verb` has at least one binding in `family`.
+    #[must_use]
+    pub fn covers(&self, verb: Verb, family: InputFamily) -> bool {
+        self.binding_for(verb, family).is_some()
+    }
+}
+
+impl BindTable {
+    pub(crate) fn binds_mut(&mut self) -> &mut Vec<Binding> {
+        &mut self.binds
     }
 }
 

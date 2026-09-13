@@ -283,6 +283,7 @@ pub fn diagnostic_catalog() -> &'static [DiagnosticCatalogEntry] {
         "IR.ParameterTypeMismatch",
         "IR.UnexpandedPattern",
         "IR.InvalidFeel",
+        "IR.InvalidA11y",
         "IR.MindProgramCap",
         "IR.InvalidMindProgram",
         "IR.UnsafeFarFact",
@@ -900,6 +901,7 @@ impl IrError {
             }
             Self::UnexpandedPattern(id) => schema_diag("IR.UnexpandedPattern", id, message),
             Self::InvalidFeel { field, .. } => schema_diag("IR.InvalidFeel", field, message),
+            Self::InvalidA11y { field, .. } => schema_diag("IR.InvalidA11y", field, message),
             Self::MindProgramCap {
                 locus, actual, cap, ..
             } => diagnose_cap(locus, *actual as u32, *cap as u32, message),

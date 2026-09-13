@@ -102,9 +102,9 @@ fn attach(module: &mut klotho_ir::IntentModule, instance: &PatternInstance) {
 }
 
 #[test]
-fn stdlib_has_forty_six_first_patterns() {
+fn stdlib_has_fifty_first_patterns() {
     let ids = first_pattern_ids();
-    assert_eq!(ids.len(), 46, "{ids:?}");
+    assert_eq!(ids.len(), 50, "{ids:?}");
     for family in [
         "traversal.",
         "combat.",

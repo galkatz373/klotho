@@ -17,6 +17,7 @@ klotho-ir.workspace = true
 klotho-pattern.workspace = true
 klotho-dialogue.workspace = true
 klotho-prove.workspace = true
+klotho-ui.workspace = true
 ron.workspace = true
 serde.workspace = true
 

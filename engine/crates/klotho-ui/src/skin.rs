@@ -138,6 +138,8 @@ pub struct HudSkin {
     pub palette: HudPalette,
     /// Whether the whole HUD is hidden by the active presentation beat.
     pub hidden: bool,
+    /// Suppress non-essential HUD motion. Layout is unchanged.
+    pub reduce_motion: bool,
 }
 
 impl Default for HudSkin {
@@ -145,6 +147,7 @@ impl Default for HudSkin {
         Self {
             palette: HudPalette::DEFAULT,
             hidden: false,
+            reduce_motion: false,
         }
     }
 }
@@ -156,6 +159,21 @@ impl HudSkin {
         Self {
             palette: HudPalette::HIGH_CONTRAST,
             hidden: false,
+            reduce_motion: false,
+        }
+    }
+
+    /// Skin tokens from an authorable accessibility profile.
+    #[must_use]
+    pub const fn from_profile(profile: &klotho_ir::A11yProfile) -> Self {
+        Self {
+            palette: if matches!(profile.contrast, klotho_ir::ContrastMode::High) {
+                HudPalette::HIGH_CONTRAST
+            } else {
+                HudPalette::DEFAULT
+            },
+            hidden: false,
+            reduce_motion: profile.reduce_motion,
         }
     }
 }
@@ -190,6 +208,8 @@ pub struct HudFrame {
     pub epoch: Epoch,
     /// Whether a presentation beat hid the HUD.
     pub hidden: bool,
+    /// Whether motion should be suppressed. Presentation only.
+    pub reduce_motion: bool,
     /// Styled elements in stable input order.
     pub elements: Vec<HudElement>,
 }
@@ -204,6 +224,7 @@ pub fn skin_hud(ui: &UiManifest, viewport: HudViewport, skin: HudSkin) -> HudFra
         return HudFrame {
             epoch: ui.epoch,
             hidden: skin.hidden,
+            reduce_motion: skin.reduce_motion,
             elements: Vec::new(),
         };
     }
@@ -306,11 +327,12 @@ pub fn skin_hud(ui: &UiManifest, viewport: HudViewport, skin: HudSkin) -> HudFra
     HudFrame {
         epoch: ui.epoch,
         hidden: false,
+        reduce_motion: skin.reduce_motion,
         elements,
     }
 }
 
-fn safe_rect(viewport: HudViewport) -> Rect {
+pub(crate) fn safe_rect(viewport: HudViewport) -> Rect {
     let left = viewport.safe_area.left.min(viewport.width);
     let top = viewport.safe_area.top.min(viewport.height);
     let right = viewport

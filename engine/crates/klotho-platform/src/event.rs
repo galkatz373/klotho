@@ -92,6 +92,11 @@ fn key_code(code: KeyCode) -> Option<Button> {
         KeyCode::KeyR => Button::KeyR,
         KeyCode::Space => Button::KeySpace,
         KeyCode::Enter => Button::KeyEnter,
+        KeyCode::ArrowUp => Button::KeyUp,
+        KeyCode::ArrowDown => Button::KeyDown,
+        KeyCode::ArrowLeft => Button::KeyLeft,
+        KeyCode::ArrowRight => Button::KeyRight,
+        KeyCode::Escape => Button::KeyEsc,
         _ => return None,
     })
 }

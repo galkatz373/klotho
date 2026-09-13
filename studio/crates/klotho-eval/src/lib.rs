@@ -9,6 +9,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod a11y;
 mod bot;
 mod contract;
 mod dialogue;
@@ -24,6 +25,7 @@ mod run;
 mod script;
 mod select;
 
+pub use a11y::{FocusHost, capture_matrix_gate, focus_journey, human_focus_journey, remap_journey};
 pub use bot::{AutomatedPlayer, BotManifest};
 pub use contract::{
     AcceptanceContract, BudgetTarget, ChangeScope, InvariantRef, QualityTarget, SemanticClaim,

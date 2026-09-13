@@ -25,7 +25,7 @@ pub enum PatternFamily {
     Narrative,
     /// Place, graph, pocket, hub, dressing, audio.
     World,
-    /// Prompt, remap, subtitle, hold/toggle, contrast.
+    /// Prompt, remap, subtitle, hold/toggle, contrast, scale, reader, motion, focus.
     Ui,
     /// Save, analytics, screenshot, journey, performance.
     Production,

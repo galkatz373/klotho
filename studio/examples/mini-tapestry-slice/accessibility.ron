@@ -2,8 +2,10 @@
     remap: true,
     hold_to_toggle: true,
     subtitles: true,
+    closed_captions: false,
     text_scale_milli: 1000,
-    contrast: "default",
+    contrast: default,
     reduce_motion: true,
     reduce_shake: true,
+    screen_reader: false,
 )

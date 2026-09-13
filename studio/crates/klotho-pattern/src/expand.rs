@@ -742,8 +742,19 @@ fn emit_ui(ctx: &Ctx<'_>) -> Result<Expansion, PatternError> {
         rel: Rel::Knows,
         b: action.clone(),
     });
-    b.beat(ctx, "cue", action.0.clone());
-    b.rite(ctx, "prompt", "Shown");
+    let (beat, emit) = match ctx.spec.id {
+        "ui.remappable_action" => ("remap", "Rebound"),
+        "ui.subtitle_cue" => ("subtitle", "Captioned"),
+        "ui.hold_toggle" => ("hold", "Toggled"),
+        "ui.contrast_variant" => ("contrast", "Contrasted"),
+        "ui.text_scale" => ("scale", "Scaled"),
+        "ui.screen_reader" => ("reader", "Spoken"),
+        "ui.motion_reduction" => ("motion", "Reduced"),
+        "ui.menu_focus" => ("focus", "Focused"),
+        _ => ("cue", "Shown"),
+    };
+    b.beat(ctx, beat, action.0.clone());
+    b.rite(ctx, "prompt", emit);
     Ok(b.finish())
 }
 

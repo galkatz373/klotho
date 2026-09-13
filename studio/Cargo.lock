@@ -1063,6 +1063,7 @@ dependencies = [
  "klotho-ir",
  "klotho-pattern",
  "klotho-prove",
+ "klotho-ui",
  "ron",
  "serde",
 ]
@@ -1203,6 +1204,7 @@ version = "0.1.0"
 dependencies = [
  "klotho-canon",
  "klotho-core",
+ "klotho-input",
  "klotho-ir",
  "klotho-manifest",
  "klotho-save",

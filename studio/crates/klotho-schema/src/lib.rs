@@ -885,6 +885,68 @@ fn type_schemas() -> Vec<TypeSchema> {
             "(action:\"use\",input_buffer_ticks:2,coyote_ticks:2,cancel_windows:[(start:0,end:3,verb:Drop)],combo_windows:[(start:4,end:8,verb:Use)],accel_curve:(knots:[(x:0,y:0),(x:1000,y:65536)]),decel_curve:(knots:[(x:0,y:0),(x:1000,y:65536)]),camera:(smoothing_ticks:2,follow_stiffness:500,shake_amp_mm:8,shake_cap_mm:16,accel_cap_md:12000,hull_radius_mm:250),aim_assist:None,impact:(hit_stop_present_ticks:2,recovery_wait_ticks:4,shake_amp_mm:6),haptics:\"hit\",accessibility:(reduce_shake:false,reduce_haptics:false,hold_to_toggle:false,aim_assist_required:false))",
             "(action:\"use\",input_buffer_ticks:9,coyote_ticks:2,cancel_windows:[],combo_windows:[],accel_curve:(knots:[]),decel_curve:(knots:[]),camera:(smoothing_ticks:0,follow_stiffness:0,shake_amp_mm:0,shake_cap_mm:0,accel_cap_md:0,hull_radius_mm:0),aim_assist:None,impact:(hit_stop_present_ticks:0,recovery_wait_ticks:0,shake_amp_mm:0),haptics:\"hit\",accessibility:(reduce_shake:false,reduce_haptics:false,hold_to_toggle:false,aim_assist_required:false))",
         ),
+        structure(
+            "klotho_ir::A11yProfile",
+            vec![
+                field("remap", "bool", "full action remapping required"),
+                field("hold_to_toggle", "bool", "hold becomes toggle"),
+                field("subtitles", "bool", "dialogue subtitle band"),
+                field("closed_captions", "bool", "SDH / closed captions"),
+                bounded(
+                    "text_scale_milli",
+                    "u16",
+                    "UI scale thousandths",
+                    750,
+                    2_000,
+                ),
+                field("contrast", "ContrastMode", "default or high"),
+                field("reduce_motion", "bool", "suppress non-essential motion"),
+                field("reduce_shake", "bool", "zero presented camera shake"),
+                field("screen_reader", "bool", "menu screen-reader metadata"),
+            ],
+            "(remap:true,hold_to_toggle:false,subtitles:true,closed_captions:false,text_scale_milli:1000,contrast:default,reduce_motion:false,reduce_shake:false,screen_reader:false)",
+            "(remap:true,hold_to_toggle:false,subtitles:true,closed_captions:false,text_scale_milli:500,contrast:default,reduce_motion:false,reduce_shake:false,screen_reader:false)",
+        ),
+        enumeration(
+            "klotho_ir::ContrastMode",
+            [
+                ("default", 0, "production palette"),
+                ("high", 1, "high-contrast tokens"),
+            ]
+            .into_iter()
+            .map(|(n, d, desc)| variant(n, Some(d), "unit", desc))
+            .collect(),
+            "default",
+        ),
+        enumeration(
+            "klotho_ir::CaptionMode",
+            [
+                ("off", 0, "no caption band"),
+                ("subtitles", 1, "dialogue subtitles"),
+                ("closed_captions", 2, "subtitles plus SDH"),
+            ]
+            .into_iter()
+            .map(|(n, d, desc)| variant(n, Some(d), "unit", desc))
+            .collect(),
+            "subtitles",
+        ),
+        enumeration(
+            "klotho_manifest::FocusRole",
+            [
+                ("menu", 0, "top-level sheet"),
+                ("item", 1, "focusable row"),
+                ("button", 2, "activate control"),
+                ("slider", 3, "bounded numeric control"),
+                ("toggle", 4, "binary control"),
+                ("group", 5, "group header"),
+                ("caption", 6, "subtitle/CC band"),
+                ("status", 7, "HUD status"),
+            ]
+            .into_iter()
+            .map(|(n, d, desc)| variant(n, Some(d), "unit", desc))
+            .collect(),
+            "button",
+        ),
         enumeration(
             "klotho_ir::CanonDiff",
             canon_diff_variants(),
@@ -1649,6 +1711,9 @@ fn operations() -> Vec<OperationSchema> {
             4,
         ),
         ("narrative.loc.catalog@1", "LocaleCatalog", &["locales"], 2),
+        ("author.set_a11y@1", "A11yProfile", &["a11y"], 2),
+        ("input.remap@1", "{verb:Verb,button:Button}", &["binds"], 1),
+        ("ui.layout.set@1", "UiNode", &["ui"], 2),
     ]
     .into_iter()
     .map(|(id, input, writes, cost_units)| OperationSchema {
@@ -1689,7 +1754,7 @@ mod tests {
         assert_eq!(catalog.rels.len(), 13);
         assert_eq!(catalog.predicates.len(), 25);
         assert_eq!(catalog.rite_ops.len(), 14);
-        assert_eq!(catalog.patterns.len(), 47);
+        assert_eq!(catalog.patterns.len(), 51);
         assert!(
             catalog
                 .patterns
@@ -1713,6 +1778,24 @@ mod tests {
                 .operations
                 .iter()
                 .any(|o| o.id == "narrative.dialogue.module@1")
+        );
+        assert!(
+            catalog
+                .kinds
+                .iter()
+                .any(|k| k.id == "klotho_ir::A11yProfile")
+        );
+        assert!(
+            catalog
+                .operations
+                .iter()
+                .any(|o| o.id == "author.set_a11y@1")
+        );
+        assert!(
+            catalog
+                .patterns
+                .iter()
+                .any(|p| p.id == "ui.menu_focus" && p.family == "ui")
         );
         assert!(
             catalog
@@ -1742,6 +1825,9 @@ mod tests {
             look_pitch: 4,
         });
         round_trip(&klotho_ir::FeelContract::spindle_use());
+        round_trip(&klotho_ir::A11yProfile::first_title());
+        round_trip(&klotho_ir::ContrastMode::High);
+        round_trip(&klotho_ir::CaptionMode::ClosedCaptions);
         round_trip(&klotho_pattern::greybox_route());
         round_trip(&klotho_pattern::PlaceBudgets::greybox());
         round_trip(&klotho_dialogue::observatory());

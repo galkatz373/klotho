@@ -58,6 +58,13 @@ KAI-06 — journeys, public-input execution, trusted evidence, affected-test sel
 KAI-07 — built-in Klotho AI service, semantic context/index, model fabric, typed tools, budgets, policy, and approved memory.
 KAI-08 — Distaff conversational planning, semantic diff, evidence review, risk routing, and grouped Pin.
 KAI-09 — Spindle data-only observatory slice with bounded counterexample repair and three journey gates.
+KAI-10 — typed feel, camera, input, and haptics with accessibility overlays.
+KAI-11 — Mini-Tapestry independently shippable increment.
+KAI-12 — compiled Mind and encounter policies.
+KAI-13 — asset contracts and privileged DCC intake.
+KAI-14 — hierarchical world assembly and compact materialization.
+KAI-15 — story bible, quest coherence, dialogue, and localization.
+KAI-16 — accessible declarative UI: constraint layout, menu focus, remapping, captions, screen-reader metadata, and the locale × aspect × input × a11y capture matrix.
 
 ## Build
 

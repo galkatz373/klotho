@@ -107,24 +107,7 @@ pub struct CreditsRoll {
 }
 
 /// First-title accessibility settings shipped with the increment.
-#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct AccessibilitySettings {
-    /// Full action remapping is present.
-    pub remap: bool,
-    /// Hold/toggle alternative.
-    pub hold_to_toggle: bool,
-    /// Subtitles / CC.
-    pub subtitles: bool,
-    /// UI scale in thousandths.
-    pub text_scale_milli: u16,
-    /// `default` or `high`.
-    pub contrast: String,
-    /// Camera/motion reduction.
-    pub reduce_motion: bool,
-    /// Camera shake reduction.
-    pub reduce_shake: bool,
-}
+pub type AccessibilitySettings = klotho_ir::A11yProfile;
 
 /// Production HUD slots. Presentation only.
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
@@ -315,9 +298,7 @@ fn validate_content(content: &ShipContent) -> Result<(), CompileError> {
     }
     if !content.accessibility.remap
         || !content.accessibility.subtitles
-        || content.accessibility.text_scale_milli < 750
-        || content.accessibility.text_scale_milli > 2_000
-        || (content.accessibility.contrast != "default" && content.accessibility.contrast != "high")
+        || content.accessibility.validate().is_err()
     {
         return Err(CompileError::Catalog(
             "accessibility settings are incomplete".into(),
@@ -411,10 +392,12 @@ mod tests {
                 remap: true,
                 hold_to_toggle: true,
                 subtitles: true,
+                closed_captions: false,
                 text_scale_milli: 1_000,
-                contrast: "default".into(),
+                contrast: klotho_ir::ContrastMode::Default,
                 reduce_motion: true,
                 reduce_shake: true,
+                screen_reader: false,
             },
             hud: HudSpec {
                 slots: vec!["status".into(), "prompt".into(), "notice".into()],

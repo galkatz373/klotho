@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "toolchain_hash": "2041467f87bea4b557a70f4be18ee66eb5d92091775c0b7a07f693c00f4b0960",
+  "toolchain_hash": "cd918897ce7089002c3015ed8561fd7e2bc337f7ce1717c344a3cc7d175128eb",
   "kinds": [
     {
       "id": "klotho_ir::IntentDoc",
@@ -1785,6 +1785,183 @@
       "variants": [],
       "positive_example": "(action:\"use\",input_buffer_ticks:2,coyote_ticks:2,cancel_windows:[(start:0,end:3,verb:Drop)],combo_windows:[(start:4,end:8,verb:Use)],accel_curve:(knots:[(x:0,y:0),(x:1000,y:65536)]),decel_curve:(knots:[(x:0,y:0),(x:1000,y:65536)]),camera:(smoothing_ticks:2,follow_stiffness:500,shake_amp_mm:8,shake_cap_mm:16,accel_cap_md:12000,hull_radius_mm:250),aim_assist:None,impact:(hit_stop_present_ticks:2,recovery_wait_ticks:4,shake_amp_mm:6),haptics:\"hit\",accessibility:(reduce_shake:false,reduce_haptics:false,hold_to_toggle:false,aim_assist_required:false))",
       "negative_example": "(action:\"use\",input_buffer_ticks:9,coyote_ticks:2,cancel_windows:[],combo_windows:[],accel_curve:(knots:[]),decel_curve:(knots:[]),camera:(smoothing_ticks:0,follow_stiffness:0,shake_amp_mm:0,shake_cap_mm:0,accel_cap_md:0,hull_radius_mm:0),aim_assist:None,impact:(hit_stop_present_ticks:0,recovery_wait_ticks:0,shake_amp_mm:0),haptics:\"hit\",accessibility:(reduce_shake:false,reduce_haptics:false,hold_to_toggle:false,aim_assist_required:false))"
+    },
+    {
+      "id": "klotho_ir::A11yProfile",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "remap",
+          "ty": "bool",
+          "description": "full action remapping required",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "hold_to_toggle",
+          "ty": "bool",
+          "description": "hold becomes toggle",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "subtitles",
+          "ty": "bool",
+          "description": "dialogue subtitle band",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "closed_captions",
+          "ty": "bool",
+          "description": "SDH / closed captions",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "text_scale_milli",
+          "ty": "u16",
+          "description": "UI scale thousandths",
+          "min": 750,
+          "max": 2000
+        },
+        {
+          "name": "contrast",
+          "ty": "ContrastMode",
+          "description": "default or high",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "reduce_motion",
+          "ty": "bool",
+          "description": "suppress non-essential motion",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "reduce_shake",
+          "ty": "bool",
+          "description": "zero presented camera shake",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "screen_reader",
+          "ty": "bool",
+          "description": "menu screen-reader metadata",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(remap:true,hold_to_toggle:false,subtitles:true,closed_captions:false,text_scale_milli:1000,contrast:default,reduce_motion:false,reduce_shake:false,screen_reader:false)",
+      "negative_example": "(remap:true,hold_to_toggle:false,subtitles:true,closed_captions:false,text_scale_milli:500,contrast:default,reduce_motion:false,reduce_shake:false,screen_reader:false)"
+    },
+    {
+      "id": "klotho_ir::ContrastMode",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "default",
+          "discriminant": 0,
+          "payload": "unit",
+          "description": "production palette"
+        },
+        {
+          "name": "high",
+          "discriminant": 1,
+          "payload": "unit",
+          "description": "high-contrast tokens"
+        }
+      ],
+      "positive_example": "default",
+      "negative_example": "UnknownVariant"
+    },
+    {
+      "id": "klotho_ir::CaptionMode",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "off",
+          "discriminant": 0,
+          "payload": "unit",
+          "description": "no caption band"
+        },
+        {
+          "name": "subtitles",
+          "discriminant": 1,
+          "payload": "unit",
+          "description": "dialogue subtitles"
+        },
+        {
+          "name": "closed_captions",
+          "discriminant": 2,
+          "payload": "unit",
+          "description": "subtitles plus SDH"
+        }
+      ],
+      "positive_example": "subtitles",
+      "negative_example": "UnknownVariant"
+    },
+    {
+      "id": "klotho_manifest::FocusRole",
+      "shape": "enum",
+      "fields": [],
+      "variants": [
+        {
+          "name": "menu",
+          "discriminant": 0,
+          "payload": "unit",
+          "description": "top-level sheet"
+        },
+        {
+          "name": "item",
+          "discriminant": 1,
+          "payload": "unit",
+          "description": "focusable row"
+        },
+        {
+          "name": "button",
+          "discriminant": 2,
+          "payload": "unit",
+          "description": "activate control"
+        },
+        {
+          "name": "slider",
+          "discriminant": 3,
+          "payload": "unit",
+          "description": "bounded numeric control"
+        },
+        {
+          "name": "toggle",
+          "discriminant": 4,
+          "payload": "unit",
+          "description": "binary control"
+        },
+        {
+          "name": "group",
+          "discriminant": 5,
+          "payload": "unit",
+          "description": "group header"
+        },
+        {
+          "name": "caption",
+          "discriminant": 6,
+          "payload": "unit",
+          "description": "subtitle/CC band"
+        },
+        {
+          "name": "status",
+          "discriminant": 7,
+          "payload": "unit",
+          "description": "HUD status"
+        }
+      ],
+      "positive_example": "button",
+      "negative_example": "UnknownVariant"
     },
     {
       "id": "klotho_ir::CanonDiff",
@@ -4945,6 +5122,44 @@
       "per_tick": 0
     },
     {
+      "id": "ui.menu_focus",
+      "version": 1,
+      "family": "ui",
+      "parameters": [
+        "actor",
+        "action"
+      ],
+      "requires": [
+        "actor:Minded"
+      ],
+      "grants": [
+        "action:Focus"
+      ],
+      "conflicts": [],
+      "predicates": 6,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "ui.motion_reduction",
+      "version": 1,
+      "family": "ui",
+      "parameters": [
+        "actor",
+        "action"
+      ],
+      "requires": [
+        "actor:Minded"
+      ],
+      "grants": [
+        "action:ReduceMotion"
+      ],
+      "conflicts": [],
+      "predicates": 6,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
       "id": "ui.remappable_action",
       "version": 1,
       "family": "ui",
@@ -4964,6 +5179,25 @@
       "per_tick": 0
     },
     {
+      "id": "ui.screen_reader",
+      "version": 1,
+      "family": "ui",
+      "parameters": [
+        "actor",
+        "action"
+      ],
+      "requires": [
+        "actor:Minded"
+      ],
+      "grants": [
+        "action:Reader"
+      ],
+      "conflicts": [],
+      "predicates": 6,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
       "id": "ui.subtitle_cue",
       "version": 1,
       "family": "ui",
@@ -4976,6 +5210,25 @@
       ],
       "grants": [
         "action:Subtitle"
+      ],
+      "conflicts": [],
+      "predicates": 6,
+      "rite_steps": 8,
+      "per_tick": 0
+    },
+    {
+      "id": "ui.text_scale",
+      "version": 1,
+      "family": "ui",
+      "parameters": [
+        "actor",
+        "action"
+      ],
+      "requires": [
+        "actor:Minded"
+      ],
+      "grants": [
+        "action:TextScale"
       ],
       "conflicts": [],
       "predicates": 6,
@@ -5329,6 +5582,13 @@
     },
     {
       "code": "IR.InvalidFeel",
+      "source": "klotho-ir",
+      "class": "schema",
+      "retryable": false,
+      "legal_repairs": []
+    },
+    {
+      "code": "IR.InvalidA11y",
       "source": "klotho-ir",
       "class": "schema",
       "retryable": false,
@@ -6001,6 +6261,30 @@
       "input": "LocaleCatalog",
       "writes": [
         "locales"
+      ],
+      "cost_units": 2
+    },
+    {
+      "id": "author.set_a11y@1",
+      "input": "A11yProfile",
+      "writes": [
+        "a11y"
+      ],
+      "cost_units": 2
+    },
+    {
+      "id": "input.remap@1",
+      "input": "{verb:Verb,button:Button}",
+      "writes": [
+        "binds"
+      ],
+      "cost_units": 1
+    },
+    {
+      "id": "ui.layout.set@1",
+      "input": "UiNode",
+      "writes": [
+        "ui"
       ],
       "cost_units": 2
     }

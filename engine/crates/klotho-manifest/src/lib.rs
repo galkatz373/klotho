@@ -16,6 +16,7 @@
 
 pub(crate) mod tables;
 
+mod a11y;
 mod feel;
 mod loc;
 mod material;
@@ -24,6 +25,7 @@ mod sonic;
 mod ui;
 mod visual;
 
+pub use a11y::{A11yEvidence, CaptionBand, FocusRole, ScreenReaderNode};
 pub use feel::FeelManifest;
 pub use loc::{ClosedCaptionCue, LocManifest, SubtitleCue, VoCue};
 pub use material::MaterialTag;

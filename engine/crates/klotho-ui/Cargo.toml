@@ -12,6 +12,7 @@ publish = false
 [dependencies]
 klotho-canon.workspace = true
 klotho-core.workspace = true
+klotho-input.workspace = true
 klotho-ir.workspace = true
 klotho-manifest.workspace = true
 klotho-save.workspace = true

@@ -491,6 +491,42 @@ pub fn specs() -> &'static [PatternSpec] {
             journeys: &["default", "high"]
         ),
         spec!(
+            "ui.text_scale", 1, PatternFamily::Ui, ExpandKind::UiCue,
+            params: UI_PARAMS,
+            req: &[("actor", "Minded")],
+            grants: &[("action", "TextScale")],
+            conflicts: &[],
+            budget: budget(6, 8),
+            journeys: &["default", "large", "overflow"]
+        ),
+        spec!(
+            "ui.screen_reader", 1, PatternFamily::Ui, ExpandKind::UiCue,
+            params: UI_PARAMS,
+            req: &[("actor", "Minded")],
+            grants: &[("action", "Reader")],
+            conflicts: &[],
+            budget: budget(6, 8),
+            journeys: &["named", "focused", "skipped"]
+        ),
+        spec!(
+            "ui.motion_reduction", 1, PatternFamily::Ui, ExpandKind::UiCue,
+            params: UI_PARAMS,
+            req: &[("actor", "Minded")],
+            grants: &[("action", "ReduceMotion")],
+            conflicts: &[],
+            budget: budget(6, 8),
+            journeys: &["default", "reduced"]
+        ),
+        spec!(
+            "ui.menu_focus", 1, PatternFamily::Ui, ExpandKind::UiCue,
+            params: UI_PARAMS,
+            req: &[("actor", "Minded")],
+            grants: &[("action", "Focus")],
+            conflicts: &[],
+            budget: budget(6, 8),
+            journeys: &["next", "activate", "back"]
+        ),
+        spec!(
             "production.save_checkpoint", 1, PatternFamily::Production, ExpandKind::Marker,
             params: MARKER_PARAMS,
             req: &[("target", "Placeable")],

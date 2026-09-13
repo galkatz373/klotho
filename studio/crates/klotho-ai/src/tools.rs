@@ -73,7 +73,7 @@ pub enum ToolCall {
     },
     /// Submit a complete typed request to the asset queue. This never Pins a
     /// candidate or invokes an arbitrary process.
-    AssetRequest(AssetRequest),
+    AssetRequest(Box<AssetRequest>),
 }
 
 impl ToolCall {
@@ -224,7 +224,7 @@ impl ToolRegistry {
                 .submit(transaction)
                 .map(|entry| ToolResult::Submitted(entry.change)),
             ToolCall::AssetRequest(request) => {
-                env.assets.submit(request).map(ToolResult::AssetCandidates)
+                env.assets.submit(*request).map(ToolResult::AssetCandidates)
             }
         }
     }

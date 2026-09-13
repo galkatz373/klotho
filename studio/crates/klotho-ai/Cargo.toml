@@ -14,6 +14,7 @@ klotho-author.workspace = true
 klotho-canon.workspace = true
 klotho-core.workspace = true
 klotho-eval.workspace = true
+klotho-dcc.workspace = true
 klotho-ir.workspace = true
 klotho-pattern.workspace = true
 klotho-prove.workspace = true

@@ -10,6 +10,7 @@
 #![warn(missing_docs)]
 
 mod agent;
+mod assets;
 mod audit;
 mod cells;
 mod conflict;
@@ -36,6 +37,7 @@ pub use agent::{
     AgentRole, AgentScheduler, AiProgress, CreativeRequest, RequestBudget, RequestId,
     RequestRecord, RequestState, Usage,
 };
+pub use assets::AssetRequestStore;
 pub use audit::{AuditKind, AuditRecord, ReviewQueueEntry};
 pub use cells::{OpDecl, Precondition, declare};
 pub use conflict::{

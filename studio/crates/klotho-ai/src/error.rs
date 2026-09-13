@@ -89,6 +89,8 @@ pub enum AiError {
     BaseHashMismatch,
     /// Transaction scope exceeds the acceptance contract.
     ContractScopeMismatch,
+    /// Typed asset request/candidate policy failed.
+    Asset(String),
 }
 
 impl fmt::Display for AiError {
@@ -130,6 +132,7 @@ impl fmt::Display for AiError {
             Self::ContractScopeMismatch => {
                 write!(f, "transaction scope exceeds acceptance contract")
             }
+            Self::Asset(error) => write!(f, "asset: {error}"),
         }
     }
 }

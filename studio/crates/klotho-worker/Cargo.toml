@@ -1,29 +1,22 @@
 [package]
-name = "klotho-schema"
+name = "klotho-worker"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Generated machine-readable catalog of Klotho's authoring surface"
+description = "Privileged typed DCC/media worker registry and sandbox broker"
 readme = false
 publish = false
 
-[[bin]]
-name = "klotho-schema"
-path = "src/main.rs"
-
 [dependencies]
-blake3.workspace = true
-klotho-canon.workspace = true
+ed25519-dalek.workspace = true
 klotho-core.workspace = true
+klotho-compile.workspace = true
 klotho-dcc.workspace = true
-klotho-ir.workspace = true
-klotho-pattern.workspace = true
 klotho-prove.workspace = true
 ron.workspace = true
 serde.workspace = true
-serde_json.workspace = true
 
 [lints]
 workspace = true

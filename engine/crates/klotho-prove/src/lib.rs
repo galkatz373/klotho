@@ -21,6 +21,7 @@ mod encode;
 mod error;
 mod evidence;
 mod license;
+mod rights;
 
 pub use artifact::ArtifactKind;
 pub use cas::{CATALOG_CAP, Cas, KCAS_VOLUME_CAP, MAX_BLOB_BYTES, MAX_BLOBS, PLACE_SHARD_CAP};
@@ -30,3 +31,4 @@ pub use error::ProveError;
 pub use evidence::{evidence_matches, evidence_signature};
 pub use klotho_core::{BlobId, Hash};
 pub use license::LicenseSpan;
+pub use rights::{ReleaseRights, RightsError, RightsRoute};

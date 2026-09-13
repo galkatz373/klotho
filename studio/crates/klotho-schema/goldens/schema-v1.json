@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "toolchain_hash": "c579be678c30c2ad6e35a338efcfe5969f73baa64194730ebc7c1957adb9cc1d",
+  "toolchain_hash": "85fecabd27dc04c9d0b350dbfb7a2f316c1cb65e404bd2b1c74ac09c10334a79",
   "kinds": [
     {
       "id": "klotho_ir::IntentDoc",
@@ -2657,6 +2657,185 @@
       "variants": [],
       "positive_example": "(claims:[],journeys:[],invariants:[],quality:[],budgets:[],non_regression:[],allowed_scope:(modules:[],anchors:[]))",
       "negative_example": "(claims:())"
+    },
+    {
+      "id": "klotho_dcc::AssetRequest",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "id",
+          "ty": "AssetRequestId",
+          "description": "content-derived request identity",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "role",
+          "ty": "AssetRole",
+          "description": "production role",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "semantic_tag",
+          "ty": "String",
+          "description": "required semantic binding tag",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "references",
+          "ty": "Vec<Hash>",
+          "description": "approved reference hashes",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "dimensions_mm",
+          "ty": "BoundsMm",
+          "description": "integer dimensions",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "visual_budget",
+          "ty": "VisualBudget",
+          "description": "geometry/texture caps",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "material_budget",
+          "ty": "MaterialBudget",
+          "description": "material/shader caps",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "rig",
+          "ty": "Option<RigContract>",
+          "description": "optional rig contract",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "lods",
+          "ty": "LodContract",
+          "description": "ordered LOD caps",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "collision",
+          "ty": "CollisionRequest",
+          "description": "semantic hull policy",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "variants",
+          "ty": "u16",
+          "description": "requested variants",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "platform_tiers",
+          "ty": "BTreeSet<GpuTier>",
+          "description": "target GPU tiers",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "routes",
+          "ty": "BTreeSet<SourceRoute>",
+          "description": "allowed intake routes",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(id:\"0000000000000000000000000000000000000000000000000000000000000000\",role:prop,semantic_tag:\"prop.crate\",references:[\"1111111111111111111111111111111111111111111111111111111111111111\"],dimensions_mm:(x:500,y:500,z:500),visual_budget:(triangles:10000,vertices:10000,texture_bytes:16777216),material_budget:(slots:2,textures:4,shader_features:4),rig:None,lods:(levels:3,max_triangles:[10000,5000,1000]),collision:proposed_hull,variants:1,platform_tiers:[desktop_high],routes:[retrieval,vendor])",
+      "negative_example": "(id:\"00\",role:prop,semantic_tag:\"\",references:[],dimensions_mm:(x:0,y:0,z:0),visual_budget:(triangles:0,vertices:0,texture_bytes:0),material_budget:(slots:0,textures:0,shader_features:0),rig:None,lods:(levels:0,max_triangles:[]),collision:none,variants:0,platform_tiers:[],routes:[])"
+    },
+    {
+      "id": "klotho_prove::ReleaseRights",
+      "shape": "struct",
+      "fields": [
+        {
+          "name": "route",
+          "ty": "RightsRoute",
+          "description": "retrieval/generated/vendor/commissioned",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "origin",
+          "ty": "Hash",
+          "description": "origin record",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "terms",
+          "ty": "Hash",
+          "description": "license/contract terms",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "ownership",
+          "ty": "Hash",
+          "description": "output ownership representation",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "indemnity",
+          "ty": "Hash",
+          "description": "indemnity position",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "source_permission",
+          "ty": "Hash",
+          "description": "source/reference permission",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "consent",
+          "ty": "Hash",
+          "description": "performer/likeness or N/A decision",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "restrictions",
+          "ty": "Hash",
+          "description": "territory/union/export/trademark review",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "approved_by",
+          "ty": "String",
+          "description": "named legal approver",
+          "min": null,
+          "max": null
+        },
+        {
+          "name": "approval",
+          "ty": "Hash",
+          "description": "signed approval record",
+          "min": null,
+          "max": null
+        }
+      ],
+      "variants": [],
+      "positive_example": "(route:vendor,origin:\"1111111111111111111111111111111111111111111111111111111111111111\",terms:\"2222222222222222222222222222222222222222222222222222222222222222\",ownership:\"3333333333333333333333333333333333333333333333333333333333333333\",indemnity:\"4444444444444444444444444444444444444444444444444444444444444444\",source_permission:\"5555555555555555555555555555555555555555555555555555555555555555\",consent:\"6666666666666666666666666666666666666666666666666666666666666666\",restrictions:\"7777777777777777777777777777777777777777777777777777777777777777\",approved_by:\"legal.owner\",approval:\"8888888888888888888888888888888888888888888888888888888888888888\")",
+      "negative_example": "(route:vendor,origin:\"0000000000000000000000000000000000000000000000000000000000000000\")"
     }
   ],
   "verbs": [
@@ -4732,6 +4911,14 @@
         "feel"
       ],
       "cost_units": 2
+    },
+    {
+      "id": "asset.request@1",
+      "input": "AssetRequest",
+      "writes": [
+        "asset_queue"
+      ],
+      "cost_units": 5
     },
     {
       "id": "author.feel_sweep@1",

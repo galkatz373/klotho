@@ -5,7 +5,7 @@
 | Document | High-Level Design — AI-native production for Klotho's first AAA title |
 | Author | Gal Katz |
 | Date | 2026-09-13 |
-| Status | Active successor plan (KAI-00–12 landed; KAI-13–24 not landed) |
+| Status | Active successor plan (KAI-00–13 landed; KAI-14–24 not landed) |
 | Baseline | `docs/hld.md` rev 6; AAA-01–27 landed |
 | Audience | Engine, tools, gameplay, content, AI platform, build, QA, and production leads |
 | Language | Rust (edition 2024; 2021-compatible crates OK) |
@@ -110,7 +110,7 @@ The repository makes the remaining gap concrete:
 | Canon/Rites | Strong validator and bounded VM | No reusable, typed title-pattern library or example-driven assembly |
 | Mind | KAI-12 compiled hash-interned operators, integer utilities, relation targets, Beat clocks, and a table-only Far lane | Production dialogue policy remains KAI-15 scope |
 | Infer | Safe OS-process protocol; placeholder behavior; runtime default-off | It is the wrong surface for authoring and cannot produce project artifacts |
-| DCC/cook | glTF and CAS with provenance | No generated-asset request contract, reference conformance, semantic/visual split, or automated repair |
+| DCC/cook | KAI-13 typed asset requests, signed privileged-worker registry, semantic/visual split, release-rights gates, quarantine, and pinned DCC/color/interchange locks | Multimodal reference-quality scoring and advisory repair remain KAI-18 scope |
 | Tests | Strong subsystem goldens | No title journey graph, visual-quality rubric, automated play exploration, or release evidence roll-up |
 | Build | Incremental cook and large logical fixture | No whole-title specialization, budget-guided content reduction, package/SKU matrix, or one-command candidate build |
 
@@ -1911,7 +1911,7 @@ managers.
 
 ## PR plan
 
-Landed baseline: AAA-01–27 and KAI-00–12 (2026-09-13). KAI-13–24 remain planned.
+Landed baseline: AAA-01–27 and KAI-00–13 (2026-09-13). KAI-14–24 remain planned.
 Each header gains `— landed` only with its implementation, tests, date bump, and
 this section's landed list update.
 
@@ -2151,7 +2151,7 @@ flowchart TB
   Trace for protected effects; over-cap programs fail with anchored diagnostics;
   worker-count Trace equality; no hidden planner state.
 
-#### KAI-13 — Asset contracts, privileged DCC, VCS, and vendor intake
+#### KAI-13 — Asset contracts, privileged DCC, VCS, and vendor intake — **landed 2026-09-13**
 
 - **Files:** `klotho-dcc`, compile/prove, new `klotho-worker`, Klotho AI asset
   tools, DCC/interchange/color locks, neutral capture scene, LFS/CAS pointer and

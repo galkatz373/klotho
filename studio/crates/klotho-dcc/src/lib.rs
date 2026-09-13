@@ -23,11 +23,30 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod asset;
 mod error;
 mod import;
+mod pipeline;
+mod qualification;
+mod vcs;
 
+pub use asset::{
+    AssetCandidate, AssetCandidateId, AssetRequest, AssetRequestId, AssetRole, BoundsMm,
+    CandidateApproval, CandidateGate, CandidateReport, CollisionRequest, GpuTier, LodContract,
+    MaterialBudget, RigContract, SemanticPin, SourceRoute, VisualBudget, validate_candidate,
+};
 pub use error::DccError;
 pub use import::{import_gltf, import_gltf_bytes};
+pub use pipeline::{
+    DccApplication, InterchangeFormat, PipelineLock, ToolPin, neutral_capture_scene_hash,
+};
+pub use qualification::{
+    HeroCase, HeroCaseKind, HeroQualification, QualificationCandidate, QualificationFunding,
+    RouteReveal,
+};
+pub use vcs::{
+    DccLease, DisclosureManifest, LfsPointer, QuarantineDrop, QuarantineState, VendorWorkspace,
+};
 
 use klotho_compile::DccArtifact;
 use klotho_core::Hash;

@@ -19,6 +19,10 @@ pub enum DccError {
     Compile(CompileError),
     /// Filesystem read failed.
     Io(String),
+    /// Typed asset contract or candidate gate failed.
+    Contract(String),
+    /// DCC lock, lease, pointer, or quarantine policy failed.
+    Policy(String),
 }
 
 impl fmt::Display for DccError {
@@ -30,6 +34,8 @@ impl fmt::Display for DccError {
             Self::License(s) => write!(f, "License({s})"),
             Self::Compile(e) => write!(f, "{e}"),
             Self::Io(s) => write!(f, "Io({s})"),
+            Self::Contract(s) => write!(f, "Contract({s})"),
+            Self::Policy(s) => write!(f, "Policy({s})"),
         }
     }
 }

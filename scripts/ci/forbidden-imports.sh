@@ -80,7 +80,9 @@ check_gameplay_jobs studio/crates/klotho-editor
 check_gameplay_jobs studio/crates/klotho-ai
 check_gameplay_jobs studio/crates/klotho-eval
 
-# Gameplay and authoring must not import cook-time DCC.
+# Gameplay and semantic author/eval paths must not import cook-time DCC.
+# `klotho-ai` is the KAI-13 typed asset-tool integration and may depend on it;
+# privileged execution remains isolated in studio-only `klotho-worker`.
 check_no_dcc() {
   local dir="$1"
   if [[ ! -d "$dir" ]]; then
@@ -106,7 +108,6 @@ check_no_dcc engine/examples/chorus-slice
 check_no_dcc engine/examples/netlock-slice
 check_no_dcc studio/crates/klotho-author
 check_no_dcc studio/crates/klotho-editor
-check_no_dcc studio/crates/klotho-ai
 check_no_dcc studio/crates/klotho-eval
 check_no_dcc engine/crates/klotho-sim
 check_no_dcc engine/crates/klotho-commit

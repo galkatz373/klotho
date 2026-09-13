@@ -503,7 +503,7 @@ New crates (named, implementable):
 | `klotho-interest` | SimLod + net relevancy | No | Pure `F(view)`. **Deps: world+core only** |
 | `klotho-stream` | Place shard pager, CAS volumes | **Yes** (mmap) | Hands `Arc<PlaceSnap>` to **runtime**; runtime builds `Proposal::Residency`. Must not enable `mutate` |
 | `klotho-save` | Epoch compaction, K19/K48 I/O | No | |
-| `klotho-dcc` | glTF/USD/FBX cook workers | No (unless a decoder FFI; then platform) | Cook-time only |
+| `klotho-dcc` | Typed asset contracts plus glTF/USD/FBX cook workers | No (unless a decoder FFI; then platform) | KAI-13 keeps semantic geometry Pin-gated; cook-time only |
 | `klotho-anim` | ClipSet skinning; optional MotionDb, retarget cook | No | May start as modules inside `klotho-motion`. Ember does not wait on this crate |
 | `klotho-nav` | Integer funnel on a **cooked hull-derived** grid | No | Mind may depend on nav. Grid is Manifest-of-cells, **not** a second walk mesh. Path is a hint; pose still Motion/Phys |
 | `klotho-vfx` | Particle/decal extract from Trace | No (GPU in render) | Lands AAA-11b (Era 2 decals) / Era 3 GPU particles |

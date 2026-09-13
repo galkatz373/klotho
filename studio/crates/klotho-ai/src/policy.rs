@@ -30,11 +30,13 @@ pub enum Capability {
     EvidenceRead,
     /// Submit a candidate to human review.
     ChangeSubmit,
+    /// Submit a typed asset request; never approval or arbitrary worker execution.
+    AssetRequest,
 }
 
 impl Capability {
     /// Complete closed set.
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::ProjectDescribe,
         Self::SchemaQuery,
         Self::ChangeCreate,
@@ -44,6 +46,7 @@ impl Capability {
         Self::ValidateRun,
         Self::EvidenceRead,
         Self::ChangeSubmit,
+        Self::AssetRequest,
     ];
 }
 
@@ -112,7 +115,9 @@ impl ToolProfile {
             AgentRole::Test | AgentRole::Critic => {
                 [C::ProjectDescribe, C::EvidenceRead].into_iter().collect()
             }
-            AgentRole::Asset => [C::ProjectDescribe, C::SchemaQuery].into_iter().collect(),
+            AgentRole::Asset => [C::ProjectDescribe, C::SchemaQuery, C::AssetRequest]
+                .into_iter()
+                .collect(),
             AgentRole::Optimizer => [C::ProjectDescribe, C::EvidenceRead].into_iter().collect(),
         };
         Self { role, capabilities }

@@ -16,6 +16,7 @@ klotho-ir.workspace = true
 klotho-prove.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+ron.workspace = true
 
 [lints]
 workspace = true

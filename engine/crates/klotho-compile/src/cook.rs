@@ -368,6 +368,7 @@ pub fn cook_with_dcc(doc: &IntentDoc, imports: &[DccArtifact]) -> Result<Cooked,
     let mut hull_ids = BTreeMap::new();
     let mut clip_ids = BTreeMap::new();
     let mut dcc_blobs = Vec::new();
+    let mut semantic_blobs = Vec::new();
 
     for (i, a) in imports.iter().enumerate() {
         let src = src_nodes[i];
@@ -395,6 +396,7 @@ pub fn cook_with_dcc(doc: &IntentDoc, imports: &[DccArtifact]) -> Result<Cooked,
         hull_ids.insert(a.tag.clone(), hid);
         dcc_blobs.push(mid);
         dcc_blobs.push(hid);
+        semantic_blobs.push(hid);
 
         if let Some(sk) = &a.skinned {
             validate_skinned_mesh(sk)?;
@@ -473,11 +475,16 @@ pub fn cook_with_dcc(doc: &IntentDoc, imports: &[DccArtifact]) -> Result<Cooked,
     }
 
     let cook_hash = cook_digest(doc, &dcc_blobs);
+    // Visual meshes/skinning/clips hot-swap without changing authoritative
+    // ancestry. Only explicitly imported semantic hulls participate in the
+    // World/Trace canon hash (K72); the complete artifact set remains in the
+    // cook hash for reproducible packaging.
+    let canon_hash = cook_digest(doc, &semantic_blobs);
     Ok(Cooked {
         doc: doc.clone(),
         canon,
         cook_hash,
-        canon_hash: cook_hash,
+        canon_hash,
         cas,
         dag,
         bindings,
@@ -728,5 +735,18 @@ mod tests {
         assert_eq!(cooked.bindings[0].locus.as_str(), "prop.cube.portable");
         assert_eq!(cooked.bindings[0].tag.as_str(), "prop.cube.portable");
         assert_eq!(cooked.bindings[0].material, MaterialTag::Organic);
+    }
+
+    #[test]
+    fn visual_only_dcc_rebake_preserves_authoritative_hash() {
+        let lic = LicenseSpan::spdx("CC0-1.0", "Klotho fixtures").unwrap();
+        let a = dcc_tri("prop.cube.portable", lic);
+        let mut b = a.clone();
+        b.mesh = crate::encode_mesh_i16(&[[0, 0, 0], [90, 0, 0], [0, 90, 0]], &[0, 1, 2]).unwrap();
+        let doc = empty_doc(&["prop.cube.portable"]);
+        let before = cook_with_dcc(&doc, &[a]).unwrap();
+        let after = cook_with_dcc(&doc, &[b]).unwrap();
+        assert_ne!(before.cook_hash, after.cook_hash);
+        assert_eq!(before.canon_hash, after.canon_hash);
     }
 }

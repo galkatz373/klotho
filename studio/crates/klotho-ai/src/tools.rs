@@ -3,11 +3,13 @@
 use serde::{Deserialize, Serialize};
 
 use klotho_core::Hash;
+use klotho_dcc::{AssetCandidateId as DccAssetCandidateId, AssetRequest};
 use klotho_eval::EvidenceBundle;
 use klotho_ir::{Diagnostic, Name};
 use klotho_pattern::PatternCatalogRow;
 use klotho_schema::SchemaCatalog;
 
+use crate::assets::AssetRequestStore;
 use crate::context::{CompiledContext, ContextBuilder, ContextRequest};
 use crate::diff::SemanticDiff;
 use crate::error::AiError;
@@ -69,6 +71,9 @@ pub enum ToolCall {
         /// Transaction.
         transaction: TxId,
     },
+    /// Submit a complete typed request to the asset queue. This never Pins a
+    /// candidate or invokes an arbitrary process.
+    AssetRequest(AssetRequest),
 }
 
 impl ToolCall {
@@ -85,6 +90,7 @@ impl ToolCall {
             Self::ValidateRun { .. } => Capability::ValidateRun,
             Self::EvidenceRead { .. } => Capability::EvidenceRead,
             Self::ChangeSubmit { .. } => Capability::ChangeSubmit,
+            Self::AssetRequest(_) => Capability::AssetRequest,
         }
     }
 }
@@ -115,6 +121,8 @@ pub enum ToolResult {
     Evidence(EvidenceBundle),
     /// Candidate entered the human review queue.
     Submitted(ChangeId),
+    /// Candidate ids already materialized for an idempotent asset request.
+    AssetCandidates(Vec<DccAssetCandidateId>),
 }
 
 /// Stateless registry for the closed protocol.
@@ -132,6 +140,8 @@ pub struct ToolEnvironment<'a> {
     pub memory: &'a ProjectMemory,
     /// Trusted evidence broker.
     pub evaluation: &'a EvaluationBroker,
+    /// Typed asset request queue.
+    pub assets: &'a mut AssetRequestStore,
 }
 
 impl ToolRegistry {
@@ -213,6 +223,9 @@ impl ToolRegistry {
                 .transactions
                 .submit(transaction)
                 .map(|entry| ToolResult::Submitted(entry.change)),
+            ToolCall::AssetRequest(request) => {
+                env.assets.submit(request).map(ToolResult::AssetCandidates)
+            }
         }
     }
 
@@ -229,6 +242,7 @@ impl ToolRegistry {
             "validate.run",
             "evidence.read",
             "change.submit",
+            "asset.request",
         ]
         .into_iter()
         .map(Name::from)

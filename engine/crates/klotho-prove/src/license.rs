@@ -3,6 +3,7 @@
 use crate::Hash;
 use crate::encode::CanonBuf;
 use crate::error::ProveError;
+use serde::{Deserialize, Serialize};
 
 /// License recorded on a provenance node.
 ///
@@ -11,7 +12,8 @@ use crate::error::ProveError;
 /// `wasDerivedFrom` edges **washes to Unknown** if any parent is Unknown.
 /// Distinct non-Unknown spans are **not** algebraically merged — the graph
 /// does not prove legal sufficiency.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Default)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub enum LicenseSpan {
     /// Missing or unreviewed. In-memory OK; export is not.
     #[default]

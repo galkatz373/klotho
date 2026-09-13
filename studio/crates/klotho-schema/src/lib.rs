@@ -1013,6 +1013,51 @@ fn type_schemas() -> Vec<TypeSchema> {
             "(claims:[],journeys:[],invariants:[],quality:[],budgets:[],non_regression:[],allowed_scope:(modules:[],anchors:[]))",
             "(claims:())",
         ),
+        structure(
+            "klotho_dcc::AssetRequest",
+            vec![
+                field("id", "AssetRequestId", "content-derived request identity"),
+                field("role", "AssetRole", "production role"),
+                field("semantic_tag", "String", "required semantic binding tag"),
+                field("references", "Vec<Hash>", "approved reference hashes"),
+                field("dimensions_mm", "BoundsMm", "integer dimensions"),
+                field("visual_budget", "VisualBudget", "geometry/texture caps"),
+                field("material_budget", "MaterialBudget", "material/shader caps"),
+                field("rig", "Option<RigContract>", "optional rig contract"),
+                field("lods", "LodContract", "ordered LOD caps"),
+                field("collision", "CollisionRequest", "semantic hull policy"),
+                field("variants", "u16", "requested variants"),
+                field("platform_tiers", "BTreeSet<GpuTier>", "target GPU tiers"),
+                field("routes", "BTreeSet<SourceRoute>", "allowed intake routes"),
+            ],
+            "(id:\"0000000000000000000000000000000000000000000000000000000000000000\",role:prop,semantic_tag:\"prop.crate\",references:[\"1111111111111111111111111111111111111111111111111111111111111111\"],dimensions_mm:(x:500,y:500,z:500),visual_budget:(triangles:10000,vertices:10000,texture_bytes:16777216),material_budget:(slots:2,textures:4,shader_features:4),rig:None,lods:(levels:3,max_triangles:[10000,5000,1000]),collision:proposed_hull,variants:1,platform_tiers:[desktop_high],routes:[retrieval,vendor])",
+            "(id:\"00\",role:prop,semantic_tag:\"\",references:[],dimensions_mm:(x:0,y:0,z:0),visual_budget:(triangles:0,vertices:0,texture_bytes:0),material_budget:(slots:0,textures:0,shader_features:0),rig:None,lods:(levels:0,max_triangles:[]),collision:none,variants:0,platform_tiers:[],routes:[])",
+        ),
+        structure(
+            "klotho_prove::ReleaseRights",
+            vec![
+                field(
+                    "route",
+                    "RightsRoute",
+                    "retrieval/generated/vendor/commissioned",
+                ),
+                field("origin", "Hash", "origin record"),
+                field("terms", "Hash", "license/contract terms"),
+                field("ownership", "Hash", "output ownership representation"),
+                field("indemnity", "Hash", "indemnity position"),
+                field("source_permission", "Hash", "source/reference permission"),
+                field("consent", "Hash", "performer/likeness or N/A decision"),
+                field(
+                    "restrictions",
+                    "Hash",
+                    "territory/union/export/trademark review",
+                ),
+                field("approved_by", "String", "named legal approver"),
+                field("approval", "Hash", "signed approval record"),
+            ],
+            "(route:vendor,origin:\"1111111111111111111111111111111111111111111111111111111111111111\",terms:\"2222222222222222222222222222222222222222222222222222222222222222\",ownership:\"3333333333333333333333333333333333333333333333333333333333333333\",indemnity:\"4444444444444444444444444444444444444444444444444444444444444444\",source_permission:\"5555555555555555555555555555555555555555555555555555555555555555\",consent:\"6666666666666666666666666666666666666666666666666666666666666666\",restrictions:\"7777777777777777777777777777777777777777777777777777777777777777\",approved_by:\"legal.owner\",approval:\"8888888888888888888888888888888888888888888888888888888888888888\")",
+            "(route:vendor,origin:\"0000000000000000000000000000000000000000000000000000000000000000\")",
+        ),
     ]
 }
 
@@ -1314,6 +1359,7 @@ fn operations() -> Vec<OperationSchema> {
         ),
         ("author.transaction.submit@1", "ChangeId", &["review"], 1),
         ("author.set_feel@1", "FeelContract", &["feel"], 2),
+        ("asset.request@1", "AssetRequest", &["asset_queue"], 5),
         (
             "author.feel_sweep@1",
             "{action:Name,candidates:Vec<FeelContract>}",

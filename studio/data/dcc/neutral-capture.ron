@@ -1,0 +1,9 @@
+(
+  version: 1,
+  illuminant: "D65",
+  backdrop_permille: 180,
+  lens_mm: 35,
+  views: ["front", "back", "left", "right", "top"],
+  turntable_frames: 120,
+  hash: "neutral_capture_scene_hash() in klotho-dcc is the canonical lock",
+)

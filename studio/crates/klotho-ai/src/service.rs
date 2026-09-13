@@ -11,6 +11,7 @@ use klotho_schema::{SchemaCatalog, generate};
 use crate::agent::{
     AgentScheduler, AiProgress, CreativeRequest, RequestId, RequestState, request_hash,
 };
+use crate::assets::AssetRequestStore;
 use crate::context::{ContextBuilder, ContextRequest};
 use crate::diff::SemanticDiff;
 use crate::error::AiError;
@@ -58,6 +59,8 @@ pub struct KlothoAi {
     pub transactions: TransactionStore,
     /// Trusted evidence broker.
     pub evaluation: EvaluationBroker,
+    /// Typed asset requests and trusted candidate ids.
+    pub assets: AssetRequestStore,
     evidence_by_change: BTreeMap<crate::ids::ChangeId, Vec<Hash>>,
     /// Human-approved persistent memory.
     pub memory: ProjectMemory,
@@ -91,6 +94,7 @@ impl KlothoAi {
             tools: ToolRegistry,
             transactions,
             evaluation: EvaluationBroker::default(),
+            assets: AssetRequestStore::default(),
             evidence_by_change: BTreeMap::new(),
             memory,
             secrets: SecretStore::default(),
@@ -540,6 +544,7 @@ impl KlothoAi {
             catalog: &self.catalog,
             memory: &self.memory,
             evaluation: &self.evaluation,
+            assets: &mut self.assets,
         }
     }
 

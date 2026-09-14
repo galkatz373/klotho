@@ -1,0 +1,24 @@
+(
+    human_completion: (reviewer: "Gal Katz", journey: "tapestry.human-critical", completed: true, recording_hash: "17843f536a8d8230c0c1b181366e2e0d926910bd8e36ce43bc8ad16bd5e97306"),
+    reproduction: (team: "fresh-title-team-a", from_brief_and_approved_refs: true, locked_lane: "kai-dev-a", completed: true, elapsed_minutes: 214),
+    assets: [
+        (id: "world.blue_stone", class: "final_environment", approval: "art-owner", rights: "release-cleared", evidence: "asset-blue-stone-v1"),
+        (id: "character.player", class: "final_character", approval: "character-owner", rights: "release-cleared", evidence: "asset-player-v1"),
+        (id: "character.kel", class: "final_character", approval: "character-owner", rights: "release-cleared", evidence: "asset-kel-v1"),
+        (id: "animation.melee", class: "final_animation", approval: "animation-owner", rights: "release-cleared", evidence: "anim-melee-v1"),
+        (id: "vfx.impact", class: "final_vfx", approval: "vfx-owner", rights: "release-cleared", evidence: "vfx-impact-v1"),
+        (id: "audio.route_mix", class: "final_audio", approval: "audio-owner", rights: "release-cleared", evidence: "audio-route-v1"),
+        (id: "dialogue.mira", class: "final_dialogue", approval: "narrative-owner", rights: "release-cleared", evidence: "dialogue-mira-v1"),
+    ],
+    gates: [
+        (id: "rights.complete", passed: true, used: 0, cap: 0, evidence: "rights-matrix-v1"),
+        (id: "quality.visual_delta", passed: true, used: 49, cap: 60, evidence: "capture-route-v1"),
+        (id: "quality.animation", passed: true, used: 14, cap: 20, evidence: "animation-route-v1"),
+        (id: "quality.audio", passed: true, used: 0, cap: 0, evidence: "audio-route-v1"),
+        (id: "sim.admit_us", passed: true, used: 7340, cap: 8000, evidence: "perf-auth-v1"),
+        (id: "sim.critical_path_us", passed: true, used: 19620, cap: 21000, evidence: "perf-auth-v1"),
+        (id: "present.high_us", passed: true, used: 10340, cap: 11000, evidence: "perf-present-v1"),
+        (id: "stream.apply_us", passed: true, used: 1840, cap: 2000, evidence: "perf-stream-v1"),
+        (id: "package.authoring_bytes", passed: true, used: 0, cap: 0, evidence: "package-scan-v1"),
+    ],
+)

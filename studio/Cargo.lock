@@ -786,6 +786,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 
 [[package]]
+name = "hearth-slice"
+version = "0.1.0"
+dependencies = [
+ "klotho-canon",
+ "klotho-commit",
+ "klotho-compile",
+ "klotho-core",
+ "klotho-ir",
+ "klotho-manifest",
+ "klotho-motion",
+ "klotho-render",
+ "klotho-trace",
+ "klotho-world",
+]
+
+[[package]]
 name = "hermit-abi"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1071,6 +1087,8 @@ dependencies = [
  "klotho-pattern",
  "klotho-prove",
  "klotho-render",
+ "klotho-runtime",
+ "klotho-save",
  "klotho-ui",
  "klotho-world",
  "serde",
@@ -1096,12 +1114,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "klotho-infer"
+version = "0.1.0"
+dependencies = [
+ "klotho-core",
+ "klotho-ir",
+ "klotho-world",
+]
+
+[[package]]
 name = "klotho-input"
 version = "0.1.0"
 dependencies = [
  "klotho-core",
  "klotho-ir",
  "serde",
+]
+
+[[package]]
+name = "klotho-interest"
+version = "0.1.0"
+dependencies = [
+ "klotho-core",
+ "klotho-world",
 ]
 
 [[package]]
@@ -1112,6 +1147,15 @@ dependencies = [
  "klotho-prove",
  "ron",
  "serde",
+]
+
+[[package]]
+name = "klotho-jobs"
+version = "0.1.0"
+dependencies = [
+ "klotho-commit",
+ "klotho-core",
+ "klotho-world",
 ]
 
 [[package]]
@@ -1133,6 +1177,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "klotho-mind"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "klotho-commit",
+ "klotho-core",
+ "klotho-ir",
+ "klotho-world",
+ "ron",
+]
+
+[[package]]
+name = "klotho-motion"
+version = "0.1.0"
+dependencies = [
+ "klotho-anim",
+ "klotho-commit",
+ "klotho-core",
+ "klotho-ir",
+ "klotho-world",
+]
+
+[[package]]
 name = "klotho-pattern"
 version = "0.1.0"
 dependencies = [
@@ -1142,6 +1209,15 @@ dependencies = [
  "klotho-prove",
  "ron",
  "serde",
+]
+
+[[package]]
+name = "klotho-phys"
+version = "0.1.0"
+dependencies = [
+ "klotho-commit",
+ "klotho-core",
+ "klotho-world",
 ]
 
 [[package]]
@@ -1181,6 +1257,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "klotho-runtime"
+version = "0.1.0"
+dependencies = [
+ "hearth-slice",
+ "klotho-commit",
+ "klotho-compile",
+ "klotho-core",
+ "klotho-infer",
+ "klotho-input",
+ "klotho-interest",
+ "klotho-ir",
+ "klotho-jobs",
+ "klotho-manifest",
+ "klotho-mind",
+ "klotho-motion",
+ "klotho-phys",
+ "klotho-platform",
+ "klotho-sim",
+ "klotho-space",
+ "klotho-stream",
+ "klotho-ui",
+ "klotho-world",
+]
+
+[[package]]
 name = "klotho-save"
 version = "0.1.0"
 dependencies = [
@@ -1204,6 +1305,25 @@ dependencies = [
  "ron",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "klotho-sim"
+version = "0.1.0"
+dependencies = [
+ "klotho-commit",
+ "klotho-core",
+ "klotho-trace",
+ "klotho-world",
+]
+
+[[package]]
+name = "klotho-space"
+version = "0.1.0"
+dependencies = [
+ "klotho-commit",
+ "klotho-core",
+ "klotho-world",
 ]
 
 [[package]]

@@ -1,0 +1,11 @@
+(
+    remap: true,
+    hold_to_toggle: true,
+    subtitles: true,
+    closed_captions: true,
+    text_scale_milli: 1500,
+    contrast: high,
+    reduce_motion: true,
+    reduce_shake: true,
+    screen_reader: true,
+)

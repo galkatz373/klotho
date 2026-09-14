@@ -1,0 +1,8 @@
+(
+    title: "Tapestry Observatory Road",
+    entries: [
+        (name: "Klotho", role: "engine"),
+        (name: "Tapestry production team", role: "design, art, animation, audio, narrative, accessibility, quality, and release"),
+        (name: "Approved Klotho asset library", role: "source art and audio"),
+    ],
+)

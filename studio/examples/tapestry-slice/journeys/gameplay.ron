@@ -1,0 +1,28 @@
+(
+    id:"tapestry.gameplay",
+    start:(name:"route-start"),
+    steps:[
+        Device(action:(player:PlayerId(0),buttons:[KeyE],stick_x:0,stick_z:0,look_yaw:0,look_pitch:0,phase:0,target:Name("iron_key"))),
+        Device(action:(player:PlayerId(0),buttons:[KeyE],stick_x:0,stick_z:0,look_yaw:0,look_pitch:0,phase:0,target:Name("oak_door"))),
+        Device(action:(player:PlayerId(0),buttons:[KeyR],stick_x:0,stick_z:0,look_yaw:0,look_pitch:0,phase:0,target:Name("kel"))),
+        Device(action:(player:PlayerId(0),buttons:[KeyE],stick_x:0,stick_z:0,look_yaw:0,look_pitch:0,phase:0,target:Name("anvil"))),
+        Save(slot:"anvil"),
+        Camera(name:"observatory_reveal"),
+        Load(slot:"anvil"),
+    ],
+    assertions:[
+        Rel(a:"iron_key",rel:OwnedBy,b:"player",present:true),
+        Rel(a:"oak_door",rel:LockedBy,b:"oak_door",present:false),
+        Rel(a:"kel",rel:Dead,b:"kel",present:true),
+        Trace(contains:"Unlocked"),
+        Trace(contains:"Hit"),
+        Trace(contains:"Checkpoint"),
+        Place(locus:"player",place:"hub"),
+        Qty(locus:"player",resource:"stamina",cmp:Eq,value:80),
+    ],
+    capture_points:[(name:"gameplay_complete",after_step:6,kind:semantic)],
+    max_ticks:54000,
+    depends_on:[],
+    anchors:[],
+    modules:[],
+)

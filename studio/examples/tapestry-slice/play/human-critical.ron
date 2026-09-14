@@ -1,0 +1,22 @@
+(
+    id:"tapestry.human-critical",
+    start:(name:"hub"),
+    steps:[
+        Device(action:(player:PlayerId(0),buttons:[KeyE],stick_x:0,stick_z:0,look_yaw:0,look_pitch:0,phase:0,target:Name("combat"))),
+        Device(action:(player:PlayerId(0),buttons:[KeyE],stick_x:0,stick_z:0,look_yaw:0,look_pitch:0,phase:0,target:Name("traverse"))),
+        Device(action:(player:PlayerId(0),buttons:[KeyE],stick_x:0,stick_z:0,look_yaw:0,look_pitch:0,phase:0,target:Name("talk"))),
+        Device(action:(player:PlayerId(0),buttons:[KeyE],stick_x:0,stick_z:0,look_yaw:0,look_pitch:0,phase:0,target:Name("cinema"))),
+        Device(action:(player:PlayerId(0),buttons:[KeyE],stick_x:0,stick_z:0,look_yaw:0,look_pitch:0,phase:0,target:Name("rest"))),
+        Save(slot:"observatory"),
+        Camera(name:"observatory_reveal"),
+        Device(action:(player:PlayerId(0),buttons:[KeyE],stick_x:0,stick_z:0,look_yaw:0,look_pitch:0,phase:0,target:Name("shortcut"))),
+        Load(slot:"observatory"),
+        Device(action:(player:PlayerId(0),buttons:[KeyE],stick_x:0,stick_z:0,look_yaw:0,look_pitch:0,phase:0,target:Name("shortcut"))),
+    ],
+    assertions:[Place(locus:"player",place:"shortcut")],
+    capture_points:[(name:"human_route_complete",after_step:9,kind:semantic)],
+    max_ticks:54000,
+    depends_on:["tapestry.route","tapestry.gameplay"],
+    anchors:[],
+    modules:[],
+)

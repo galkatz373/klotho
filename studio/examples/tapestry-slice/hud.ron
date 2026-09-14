@@ -1,0 +1,4 @@
+(
+    slots: ["status", "prompt", "notice"],
+    palette: "production",
+)

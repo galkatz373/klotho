@@ -33,5 +33,9 @@ klotho-ui.workspace = true
 klotho-world.workspace = true
 serde.workspace = true
 
+[dev-dependencies]
+klotho-runtime.workspace = true
+klotho-save.workspace = true
+
 [lints]
 workspace = true

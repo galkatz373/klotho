@@ -68,6 +68,7 @@ KAI-16 — accessible declarative UI: constraint layout, menu focus, remapping, 
 KAI-17 — production presentation: GPU particles/ribbons, scalable geometry and texture residency, bounded material graphs, probe bake, permutation pruning, MotionDb/retarget/facial, adaptive music, casting consent, and High-tier fallback.
 KAI-18 — multimodal quality evaluation: aligned captures, pinned SSIM/LPIPS plugins, farm-derived lane SLOs, flake policy, signed sample review, and advisory critics that cannot change pass/fail.
 KAI-19 — reference/optimized whole-title cook with predicate folding/interning, stable table and Place/SKU plans, Trace-equivalence fallback, debug source maps, and authoring-free ship packages.
+KAI-20 — Tapestry data-only thirty-minute, eight-Place vertical route with integrated production evidence and optimized desktop packages.
 
 ## Build
 
@@ -115,6 +116,7 @@ klotho/
   studio/crates/klotho-dialogue/ # Story bible, quest graph, compiled dialogue, localization
   studio/crates/klotho-pattern/ # Deterministic pattern expansion and standard library v1
   studio/examples/spindle-slice/ # KAI-09 data-only request, approved kit, and journeys
+  studio/examples/tapestry-slice/ # KAI-20 data-only eight-Place vertical-route acceptance
   studio/crates/klotho-dcc/ # glTF 2.0 cook → quantized KLTH mesh/hull/clip
   engine/crates/klotho-stream/   # Place shard pager, KCAS volumes (mmap after header validate)
   engine/crates/klotho-save/     # epoch compaction, K19/K48 I/O

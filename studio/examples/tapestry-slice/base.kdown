@@ -1,0 +1,69 @@
+# Tapestry is assembled from approved semantic and presentation inputs.
+style notes "storm-worn observatory road, readable silhouettes, warm brass against blue stone"
+style palette stone
+style palette metal
+style tag place.hearth.interior
+style tag door.oak.lockable
+style tag npc.human.biped
+style tag relic.key
+style tag relic.hammer
+style tag prop.anvil
+
+seed locus hub Place
+seed locus combat Place
+seed locus traverse Place
+seed locus talk Place
+seed locus cinema Place
+seed locus rest Place
+seed locus shortcut Place
+seed locus optional Place
+seed locus player Actor
+seed locus oak_door Relic
+seed locus iron_key Relic
+seed locus kel Actor
+seed locus mira Actor
+seed locus fathers_hammer Relic
+seed locus anvil Relic
+seed locus observatory_tablet Relic
+seed locus Openable Relic
+seed locus Carryable Relic
+seed locus Armed Relic
+seed locus Hittable Relic
+seed locus Mobile Relic
+seed locus Placeable Relic
+seed locus Minded Relic
+seed locus Talkable Relic
+seed locus use Relic
+seed locus talk_action Relic
+
+seed rel player In hub
+seed rel oak_door In traverse
+seed rel iron_key In hub
+seed rel kel In combat
+seed rel mira In talk
+seed rel fathers_hammer In combat
+seed rel anvil In rest
+seed rel observatory_tablet In optional
+seed rel oak_door Knows Openable
+seed rel iron_key Knows Carryable
+seed rel fathers_hammer Knows Carryable
+seed rel player Knows Mobile
+seed rel player Knows Armed
+seed rel player Knows Minded
+seed rel player Knows Talkable
+seed rel kel Knows Hittable
+seed rel kel Knows Minded
+seed rel mira Knows Minded
+seed rel mira Knows Talkable
+seed rel mira Knows Placeable
+seed rel anvil Knows Placeable
+seed rel observatory_tablet Knows Carryable
+seed rel hub Knows Placeable
+seed rel combat Knows Placeable
+seed rel traverse Knows Placeable
+seed rel talk Knows Placeable
+seed rel cinema Knows Placeable
+seed rel rest Knows Placeable
+seed rel shortcut Knows Placeable
+seed rel optional Knows Placeable
+seed qty player stamina 80

@@ -4,16 +4,16 @@
 | --- | --- |
 | Document | High-Level Design — Klotho at AAA production scale |
 | Author | Gal Katz |
-| Date | 2026-09-05 |
-| Status | Current (rev 6 — AAA-01–27 landed; first-title profile frozen) |
-| Last verified | 2026-09-06 through AAA-27 |
+| Date | 2026-09-14 |
+| Status | Current (rev 7 — PHYS-A01 authority and transaction RFC) |
+| Last verified | 2026-09-14 through PHYS-A01 |
 | Supersedes | `docs/hld-v1.md` rev 5 (2026-08-22) — v1 semantic kernel, Hearth/Ash slice |
 | Audience | Senior engine, tools, gameplay systems, and production engineers |
 | Language | Rust (edition 2024; 2021-compatible crates OK) |
 
-This is the current architecture for a studio that wants Klotho's programming model **and** a contemporary first-party quality bar. The preserved rev 5 baseline remains useful history, but this document is the law where the two differ. **Landed on `main` (verified 2026-09-06 through AAA-27):** AAA-01, AAA-02, AAA-03, AAA-04, AAA-05, AAA-08.1, AAA-06, AAA-08, AAA-07, AAA-09, AAA-10, AAA-11, AAA-11b, AAA-12, AAA-13, AAA-14, AAA-15, AAA-16, AAA-17, AAA-18, AAA-19, AAA-20, AAA-21, AAA-21b, AAA-22, AAA-23, AAA-24, AAA-25, AAA-26, AAA-27 (plus rev-4 K58 caps). **The planned AAA sequence is complete.**
+This is the current architecture for a studio that wants Klotho's programming model **and** a contemporary first-party quality bar. The preserved rev 5 baseline remains useful history, but this document is the law where the two differ. **Landed on `main` (verified 2026-09-14 through PHYS-A01):** AAA-01, AAA-02, AAA-03, AAA-04, AAA-05, AAA-08.1, AAA-06, AAA-08, AAA-07, AAA-09, AAA-10, AAA-11, AAA-11b, AAA-12, AAA-13, AAA-14, AAA-15, AAA-16, AAA-17, AAA-18, AAA-19, AAA-20, AAA-21, AAA-21b, AAA-22, AAA-23, AAA-24, AAA-25, AAA-26, AAA-27, and PHYS-A01 (plus rev-4 K58 caps). **The planned AAA sequence is complete; the PHYS-A continuation is active.**
 
-> **Freshness rule (keeps this doc from going stale):** every AAA PR that lands must bump the `Last verified` row, the landed list in this paragraph, the `Landed on main` line in §PR Plan, and the `— landed` suffix on its `#### AAA-NN` header in the same commit. `git log` is the source of truth; this list is a cached view of it.
+> **Freshness rule (keeps this doc from going stale):** every AAA or PHYS-A PR that lands must bump the `Last verified` row, the landed list in this paragraph, the `Landed on main` line in §PR Plan, and the `— landed` suffix on its PR header in the same commit. `git log` is the source of truth; this list is a cached view of it.
 
 ---
 
@@ -236,7 +236,7 @@ CI: same `.warp` + Intent file ⇒ same Trace prefix hash on linux/mac/windows f
 | **K28** | **Hybrid architecture.** Semantic kernel + conventional proposers/presenters. Physics, motion matching, nav, GI, virtualized geo, FMOD, DCC importers are legal **as long as they emit `Proposal` or consume Manifest**. They are never sources. | Alternative 1 (Manifest-only skin) cannot do combat/net/streaming. Alternative 2 (become ECS) throws away the product. |
 | **K29** | **Simulation LOD / interest.** Every locus has `SimLod::{Full, Far, Dormant}` derived from observer interest + Place residency + island wake. Far steps every `N` global ticks (default 6). Dormant emits no Space/Phys/Mind proposals. Mesh LOD is a separate Manifest concern. | 30k crowd actors cannot full-rate. LOD of **sim** is the actual AAA problem. |
 | **K30** | **World partitions are Places.** A Place is a cooked shard: Canon slice (shared) + seed Trace fragment + CAS range. Streaming **admits** a Place (apply snapshot or seed events) and **evicts** it (flush epoch snapshot, drop projection rows). There is no scene file. The editor viewport lists Places, not a hierarchy of meshes. | Stops sublevels from becoming UWorld. |
-| **K31** | **Physics is a proposer, not a second world.** Era 1 `klotho-phys` is **in-house or vendored scalar XPBD/SI, no FFI** (Q9 closed). f32 internals, quantized `PhysDelta` out. SIMD is optional and **the same ISA in CI and every dedicated server**; there is no OS-varying path. Client-predicted phys is Overlay-only (K53). Dual-truth: if a contact can change a Law, it went through PhysDelta. Ragdoll/cloth/debris vis = Manifest, never read back. | Honest split. Rapier/Jolt-as-hashed-truth stays rejected (rev 5 A5). |
+| **K31** | **Physics is a proposer, not a second world.** Era 1 `klotho-phys` is **in-house or vendored scalar XPBD/SI, no FFI** (Q9 closed). f32 internals, quantized authoritative proposal out (`PhysDelta` in the landed baseline; `PhysIsland` after PHYS-A02). SIMD is optional and **the same ISA in CI and every dedicated server**; there is no OS-varying path. Client-predicted phys is Overlay-only (K53). Dual-truth: if a contact can change a Law, it went through the physical island transaction. Ragdoll/cloth/debris vis = Manifest, never read back. | Honest split. Rapier/Jolt-as-hashed-truth stays rejected (rev 5 A5). |
 | **K32** | **Split-rate.** Global `Tick` at the **authoritative** Hz (30 adventure / 60 shooter, Canon-selected). Presentation thread 60–120 Hz interpolates published snapshots + unhashed overlay. Input sampling may exceed sim Hz; analog is held or sampled-latest per K8-profile. | 60 Hz 200k-locus admit is a fantasy. 30 Hz auth + 120 Hz present is how action-adventure actually ships. Shooter slice opts into 60 Hz. |
 | **K33** | **Trace is semantic history, not a pose bus.** Runtime Trace retention is a separate concern with a 120 s target; exact disk checkpoints are full epoch snapshots with empty suffixes. Pose is **not** logged per admit (AAA-01). `IslandSnap` is **coarse** (2 Hz, awake islands, for replay visualization only). `TraceDelta` replicates events, not 60 Hz pose. Net pose and rewind are **K53**, not a denser log. | Rev 5 already split “10 Hz IslandSnap vs snapshot blob 60 Hz columns.” One 10 Hz snap cannot also be lag-comp, shooter pose, and an exact save. |
 | **K34** | **Parallel propose, serial admit.** After Interest, a **Partition** phase (K58) writes this-tick `island` ids. Jobs then call `propose_island(island, &WorldView, &mut AdmitBuf)` into per-worker buffers. Concatenate in island-id order; kernel sorts with the total K18 key. `SyncProposer::propose` remains for Hearth. K55 is **admit-time**. `klotho-sim` does not depend on jobs. | Without Partition, `propose_island` has no producer. Ash defaults `island_id = 0`, so 8≡1 would be vacuous. |
@@ -249,7 +249,7 @@ CI: same `.warp` + Intent file ⇒ same Trace prefix hash on linux/mac/windows f
 | **K41** | **Rite ISA may grow; hot loops are Laws.** AAA-08.1 RFC adds atoms `RayHits`, `SimLodIs`, `InPlace`; op `SPAWN template`; op `PHYS_REQ` writing a **`PhysRequest` Projection column** (not `Qty`). Combat tick is Laws (Ash hitscan). Designers never see `PhysRequest` in Distaff (author/engine split). Caps live in `Budget`. The K21 budget split is re-affirmed: pred-op exhaustion rejects the proposal, rite-step exhaustion admits the burst-so-far with `RiteEnd::FailBudget` as the atomic outcome. Verb adds (`Steer`, `Reload`) are IR enum extensions with frozen discriminants, scheduled in AAA-08.1. | `IMPULSE` as Qty is how `DamageComponent` returns. |
 | **K42** | **New slices, not a bigger Hearth.** Ember (combat fidelity), Drift (vehicles + streaming Place), Chorus (sim LOD crowds), Netlock (dedicated 8p + prediction). Each is an `examples/*-slice` with goldens on the same kernel. | K26 generalized. |
 | **K43** | **Distaff production UX is Pin-shaped.** Viewport, gizmos, outliner, sequencer (timeline of Intents/Pins), cook, profiler, retarget, lighting. Saving the viewport = Pin selected facts. Play-in-editor = `klotho-runtime` with `step` pausable (already `klotho-ui::Pause`). No hidden "editor world" that differs from cook. | Prevents the editor from becoming the ontology. |
-| **K44** | **Phys determinism law (Q9 closed).** (A) The **only** path that may emit `PhysDelta` is a **pinned scalar XPBD/SI** (one software ISA). Dedicated servers deploy the pinned-Linux Phys artifact tested by CI; they do not rebuild it with host-native features. Client-predicted phys is Overlay-only and never admitted. Quantize at admit (mm trunc −∞, vel 16.16); non-finite solver output emits no `PhysDelta`. **Do not claim** linux/mac/windows Trace equality for slices that include `PhysDelta`; Ember/Drift phys goldens are **pinned-Linux**. Kinematic Hearth/Ash remain three-OS. No warm-start lambdas unless hashed in Projection. (B) — f32 stacking as Manifest — is rejected because it kills Drift/Ember. **AAA-08 build contract (not optional comments):** `rust-toolchain.toml` pins `1.98.0`; the pinned-Linux CI build asserts `x86_64` and supplies `-C llvm-args=--fp-contract=off -C target-cpu=x86-64 -C target-feature=-fma`. Cargo config is workspace-scoped only and is fallback protection when `RUSTFLAGS` is unset. **Gates:** `klotho.phys.quant_residual_mm` fails CI if p99 \|residual\| > 1 mm or any sample > 4 mm; long-run stacking goldens bound trajectory, not merely individual quantizations. | Quantize-at-admit does not stop f32 from crossing millimetre bins. Rev 5 A5 still applies to hashed contacts. A residual metric without a fail threshold is not a gate. |
+| **K44** | **Phys determinism law (Q9 closed).** (A) The **only** path that may emit authoritative physical deltas is a **pinned scalar XPBD/SI** (one software ISA). Dedicated servers deploy the pinned-Linux Phys artifact tested by CI; they do not rebuild it with host-native features. Client-predicted phys is Overlay-only and never admitted. Quantize at admit (mm trunc −∞, vel 16.16); non-finite solver output emits no physical proposal. **Do not claim** linux/mac/windows Trace equality for slices that include admitted physics; Ember/Drift phys goldens are **pinned-Linux**. Kinematic Hearth/Ash remain three-OS. No warm-start lambdas unless hashed in Projection. (B) — f32 stacking as Manifest — is rejected because it kills Drift/Ember. **AAA-08 build contract (not optional comments):** `rust-toolchain.toml` pins `1.98.0`; the pinned-Linux CI build asserts `x86_64` and supplies `-C llvm-args=--fp-contract=off -C target-cpu=x86-64 -C target-feature=-fma`. Cargo config is workspace-scoped only and is fallback protection when `RUSTFLAGS` is unset. **Gates:** `klotho.phys.quant_residual_mm` fails CI if p99 \|residual\| > 1 mm or any sample > 4 mm; long-run stacking goldens bound trajectory, not merely individual quantizations. | Quantize-at-admit does not stop f32 from crossing millimetre bins. Rev 5 A5 still applies to hashed contacts. A residual metric without a fail threshold is not a gate. |
 | **K45** | **Console path is `klotho-platform` + GPU HAL, not a kernel fork.** Era 4 spike: devkit bring-up, **HAL TBD** (GDK is D3D12, not wgpu-as-cert; Prospero is Gnm/AGC). Same `CommitKernel` semantics. Cert evidence = replay files. | Do not imply wgpu is the SKU. |
 | **K46** | **Job system is not a sim API.** `klotho-jobs` is engine-only: island propose, cook, stream decompress, parallel extract. Gameplay never schedules jobs. Registration order of proposers stays a static list in `klotho-runtime`. | Stops "jobified Update." |
 | **K47** | **Sharded warp.** `KWRP` catalog (small) + CAS volumes (`KCAS` files, content-addressed, 1–4 GB each) + Place shards. Loader caps become **per-shard** (32 MB blob stays until virtual geo). Catalog mmap is tens of MB. | 512 MB desktop cap is the v1 bomb-prevention; AAA needs volume without removing caps. |
@@ -264,6 +264,13 @@ CI: same `.warp` + Intent file ⇒ same Trace prefix hash on linux/mac/windows f
 | **K56** | **Attach is a kernel fact.** `Rel::PilotedBy` (Q12 closed). Optional `Rel::AttachedTo`. Era 1 compose is **yaw-only, not SO(3)**: `child.xz = parent.xz + rot_yaw(parent.yaw, attach_local.xz)`; `child.y = parent.y + attach_local.y`; **copy** parent yaw/pitch/roll onto the child (seat, not turret). General 6DOF welds are a later RFC. Motion does not integrate attached actors. `support` written only from admitted PhysDelta (or Motion swept for unattached). **Ban** Motion→phys calls. Drift v1: one vehicle + driver, flat AABB floor. | Millidegree Euler compose is gimbal-ambiguous. A seat copies parent attitude. |
 | **K57** | **Rewind is bounded; anti-cheat is a sidecar.** `Budget.rewind_ticks` (shooter 12; adventure 0). Fire/melee with `PlayerIntent.at` older than `now - rewind_ticks` → `StaleEpoch`. Analog clamped at ingest. Cmd-rate sidecar **reads** only. K10 is not this box. | Unbounded `RTT/2` rewind is Source-style backtrack. |
 | **K58** | **Partition is a sim-thread phase, not proposer memory.** After Interest, **before** ProposeJobs: union-find on **phys-body** hulls **this tick** (`F(view)`, not last-tick `island_id`). **Occupancy ≠ island.** `space_ix` still holds Dormant / `OpaqueClosed` sleepers for `never_clip_closed`. Island members are phys bodies only: `LocusKind::Actor`, or a Relic that is not idle kinematic scenery. **Idle scenery** (locked door, static wall) = `OpaqueClosed` ∧ `sleep_ticks == 0` ∧ zero vel ∧ no `phys_req` ∧ not attached. **`LocusKind::Place` is never an island member** (Drift floor AABB is occupancy, not a body). Seed = [`SimLod::Full`] phys bodies that are awake (`sleep_ticks == 0`) **or** non-zero vel **or** `phys_req` **or** `PilotedBy`/`AttachedTo` an awake locus. **Flood-fill through overlapping phys-body hulls including sleepers** (crate piles), never through idle scenery or Places. Island id = dense rank of min-Sigil. Non-members get `NO_ISLAND = u16::MAX` (Interest must not island-wake this id). **Caps, fail closed, do not split:** `MAX_ISLAND_SIZE = 256` members — oversize omits the **whole** group (`RejectReason::IslandTooLarge`); splitting a contact group is how stacking lies. `MAX_ISLANDS` extra groups omit by min-Sigil rank (`TooManyIslands`). Partition is **not** an admit; those rejects land on the next `TraceDelta` (unhashed). PhysDelta for a sleeper in the flood-fill sets `sleep_ticks = 0`. AAA-08 stacking golden uses this rule; `ContactTable` remains fallback if it still jitters. | `propose_island` cannot discover islands. Last-tick `island_id` reintroduces K22 memory. Flood-fill through *all* overlapping hulls makes a city of touching walls one island and serializes jobs. |
+| **K59** | **The authoritative physics transaction is one complete island.** `PhysIsland` replaces per-body `PhysDelta` on every registered runtime physics path. Its body deltas, gameplay contact claims, and constraint-break claims are one K21 speculative transaction: validate the entire payload and write set, apply all proposed rows, evaluate Laws against the complete proposed island, then publish all or none. The temporary legacy variant is migration-only and is removed in PHYS-A02. | A solver result is coupled. Committing only the acceptable bodies manufactures a state the solver never produced. |
+| **K60** | **Island payload order and bounds are consensus rules.** Bodies are strictly increasing by body Sigil; contacts by `(min(a,b), max(a,b), shape_a, shape_b, feature)`; participating constraints and breaks by constraint Sigil. Duplicate or out-of-order keys reject; the kernel does not silently canonicalize. Caps: 256 body deltas, 1,024 contact claims, 512 participating constraints, 256 break claims, 256 attached children, and 512 total written loci. A cap failure rejects the whole island. | Sorting inside admission hides malformed producers and spends unbounded work before the bound is established. Fixed caps make validation and speculative allocation auditable. |
+| **K61** | **Canonical geometry is shared, typed, and narrow.** PHYS-A03 may add `klotho-geom`, depending only on `klotho-core`; both `klotho-phys` and `klotho-commit` may depend on it, but commit still never depends on phys. The frozen cooked shape vocabulary is oriented box, sphere, Y-axis capsule transformed by the locus pose, convex hull, compound hull, and static triangle mesh or heightfield. Dynamic bodies may use the first five; triangle mesh/heightfield is static occupancy only. Shape ids and quantized witness identity remain in `klotho-core`. | Commit must independently verify contacts without importing a solver or accepting an opaque manifold. Static terrain must not join dynamic islands. |
+| **K62** | **Resting contact is legal; crossing and unresolved penetration are not.** The kernel verifies the start-to-end shape cast and proposed final separation against Canon geometry. Touching and penetration of at most 2 mm that does not deepen are contact slop; a resolving move may reduce a pre-existing overlap. Final penetration over 2 mm, increased penetration, or crossing an `OpaqueClosed` boundary rejects the whole island. A gameplay-visible contact additionally requires a current-epoch, correct-shape, quantized witness that the kernel reproduces; a broad-phase AABB hit alone is never evidence. | `SweptHitsOpaqueClosed` currently rejects legal resolution and can mistake a conservative broad-phase hit for gameplay contact. |
+| **K63** | **A driven character has one spatial owner.** Motion samples the Canon-bound semantic root trajectory and produces a pure drive description. Runtime passes that description to the physics/character proposer; it is not a proposal and not mutable proposer-to-proposer state. The island solve owns the actor pose for that tick and resolves capsule sweep, grounding, depenetration, step-up, slope limits, platform following, and dynamic-body interaction. Motion emits no competing `MotionDelta` for a driven character. | Root motion and collision resolution cannot independently commit without tunnelling, foot sliding, or detached weapon sweeps. |
+| **K64** | **Rite time and cooked contact geometry jointly authorize gameplay contact.** `WAIT` remains the timing authority. A Canon-bound semantic contact track supplies quantized root/socket/sweep geometry at authoritative tick boundaries; visual clips and notifies cannot mutate Projection. A motion-contact claim is admitted only with valid Agency, active channel/window, matching epoch and compatibility signature, canonical target affordances, duplicate/hit-cap compliance, and a kernel-reproduced geometric witness. Root/body resolution and its contact claims share the island transaction. | Timing-only melee permits visible misses to damage; animation-notify authority creates a second, frame-rate-dependent source. |
+| **K65** | **Physical authority follows the four existing categories.** Canon owns shape bindings, body mode, mass, centre of mass, inertia, material, constraints and break thresholds, character envelope/limits, vehicle rig, and semantic contact-track bindings. Projection owns admitted pose and velocity, sleep/support, active constraint state, authoritative Rite phase, and per-action hit ledger. Solver manifolds, broad-phase pairs, lambdas, character scratch, and tire caches are disposable and may affect output only when every required prior value is represented in Projection. Ragdoll, cloth, sparks, and cosmetic debris are Manifest. | A cache, notify, or presenter artifact becoming gameplay-readable would create a fifth category and a second world. |
 
 ### Author-facing vs engine-facing (new nouns)
 
@@ -358,7 +365,7 @@ flowchart TB
   Infer -->|Proposal::Infer via runtime| Commit
   Interest --> Phys
   Interest --> Mind
-  Phys -->|PhysDelta| Commit
+  Phys -->|PhysIsland| Commit
   Space -->|SpaceDelta| Commit
   Motion -->|MotionDelta| Commit
   Mind -->|MindIntent| Commit
@@ -409,6 +416,7 @@ flowchart LR
   trace[klotho-trace]
   world[klotho-world]
   commit[klotho-commit]
+  geom[klotho-geom]
   sim[klotho-sim]
   interest[klotho-interest]
   jobs[klotho-jobs]
@@ -443,12 +451,15 @@ flowchart LR
   world --> canon
   world --> trace
   commit --> world
+  geom --> core
+  commit --> geom
   sim --> commit
   interest --> world
   jobs --> core
   jobs --> commit
   jobs --> world
   phys --> commit
+  phys --> geom
   space --> commit
   motion --> commit
   anim --> motion
@@ -498,7 +509,8 @@ New crates (named, implementable):
 
 | Crate | Role | Unsafe | Notes |
 | --- | --- | --- | --- |
-| `klotho-phys` | Rigid + kinematic island proposer | **Yes** (SIMD of scalar XPBD; **no FFI in Era 1**) | Emits `PhysDelta`. No `&mut World` |
+| `klotho-geom` | Pure canonical shape queries and witness verification | No | Depends only on core; shared by phys and commit after PHYS-A03 |
+| `klotho-phys` | Rigid + kinematic island proposer | **Yes** (SIMD of scalar XPBD; **no FFI in Era 1**) | Emits `PhysIsland` after PHYS-A02. No `&mut World` |
 | `klotho-jobs` | Worker pool | **Yes** | Steal queue. Not a gameplay API |
 | `klotho-interest` | SimLod + net relevancy | No | Pure `F(view)`. **Deps: world+core only** |
 | `klotho-stream` | Place shard pager, CAS volumes | **Yes** (mmap) | Hands `Arc<PlaceSnap>` to **runtime**; runtime builds `Proposal::Residency`. Must not enable `mutate` |
@@ -623,25 +635,25 @@ sequenceDiagram
 
   V->>J: islands Full = F(overlap this tick), hulls, pose/vel, support, phys_req
   J->>J: scalar XPBD/SI f32 substeps, lambdas zeroed (not hashed)
-  J->>K: PhysDelta quantized pose/vel + HullWitness
+  J->>K: one bounded PhysIsland with quantized bodies + claims
   K->>K: derive swept / overlap vs canonical hulls (K24)
   K->>L: never_clip_closed, Conserve, Cap, custom combat Laws
   alt Law fail or WitnessMismatch
     K->>T: Reject (delta discarded)
   else admit
-    K->>V: apply pose/vel/sleep/support; attach children (K56)
+    K->>V: atomically apply every body/support/constraint/child row
     K->>T: IslandSnap only on 2 Hz coarse boundary or interact
   end
   V->>M: if Rel Dead: ragdoll from last admitted pose (never read back)
 ```
 
-**Projection columns phys may read** (and only these): `pose`, `vel3`, `yaw/pitch/roll_rate`, `island`, `sleep_ticks`, `support: Option<(nx,ny,nz,depth_mm)>` (integer, written from last admitted PhysDelta or Motion swept), `phys_req`, `attach_local`, hull/affordance/rel. **Not** warm-start lambdas, not last-tick union-find.
+**Projection columns phys may read** (and only these): `pose`, `vel3`, `yaw/pitch/roll_rate`, `island`, `sleep_ticks`, `support: Option<(nx,ny,nz,depth_mm)>` (integer, written from the last admitted physical island or Motion swept), `phys_req`, `attach_local`, hull/affordance/rel. **Not** warm-start lambdas, not last-tick union-find.
 
 **Island partition (K58):** sim-thread (or one job) **before** ProposeJobs. Union-find on **phys-body** hulls this tick — not every `space_ix` occupant. Seed = `SimLod::Full` phys bodies with `sleep_ticks == 0` or non-zero vel or `phys_req` or attach-to-awake. **Flood-fill overlapping phys-body hulls including sleepers** so a sleeping crate pile is in the same island as the bumped crate; PhysDelta sets those `sleep_ticks = 0`. **Do not** flood through idle `OpaqueClosed` scenery or `LocusKind::Place` (a city of face-adjacent walls, or a floor AABB, must not become one island). Members sorted by Sigil; island id = dense rank of min-Sigil. Non-members: `NO_ISLAND`. Do **not** reuse last tick’s `island_id`. Do **not** split an oversize group — omit it (`IslandTooLarge`). Extra groups past `MAX_ISLANDS` omit (`TooManyIslands`). Laws do not read `island`. AAA-08 stacking golden is this rule; hashed `ContactTable` only if it still jitters. Drift floor is a Place AABB / occupancy query, **not** a phys body.
 
-**Exclusive owner (K55) is admit-time.** Propose may emit both a MotionDelta (unattached actor) and a later Phys attach. After Player Rel admits, kernel nacks the extra spatial proposal `Conflict`. `write_cells(PhysDelta)` of a `Driveable` includes every `PilotedBy`/`AttachedTo` child (post-Player view). Motion skips attached actors when the **pre-propose** view already has the Rel. Drift golden: possess at T ⇒ no admitted Motion root on the driver at T. Motion **must not** import `klotho-phys`.
+**Exclusive owner (K55/K63) is admit-time.** Until PHYS-A06, propose may emit both a MotionDelta (unattached actor) and a later physical attach. After Player Rel admits, kernel nacks the extra spatial proposal `Conflict`. `write_cells(PhysIsland)` includes every `PilotedBy`/`AttachedTo` child of its bodies in the post-Player view. From PHYS-A06 onward, a driven character's desired semantic root is a pure input to its island solve and Motion emits no competing spatial proposal. Drift golden remains: possess at T ⇒ no Motion root on the driver at T. Motion **must not** import `klotho-phys`.
 
-**Character grounding:** Motion reads `support` from Projection. If none, `grounded = pose.y <= 0` (v1). Slopes/steps in Era 1 Ember/Drift are AABB floors; no heightfield.
+**Character grounding:** the landed fallback has Motion read `support` from Projection and use `pose.y <= 0` when absent. PHYS-A06 retires that fallback for physically driven characters: a single island proposer consumes the semantic root drive and owns capsule sweep, grounding, depenetration, step-up, slope limiting, platform following, and dynamic-body interaction. The accepted defaults for the Anvil golden are a 300 mm capsule radius, 900 mm half-height, 250 mm maximum step, 45° maximum walkable slope, and 2 mm contact slop. These are frozen test-profile Canon values, not universal gameplay constants.
 
 **Vehicles (K56):** `Affordance Driveable`. Phys 6DOF + traction rays against canonical hulls (floor AABB in Drift v1). `Verb::Steer` (AAA-08.1). Driver: `Rel::PilotedBy`. Era 1 attach compose (**not** SO(3) Euler multiply):
 
@@ -679,6 +691,29 @@ AAA:
 | AnimNotify | **Forbidden** as a sim input | — |
 
 **Q15 closed: ClipSet first.** Ember (AAA-09) ships v1 verb→clip + root motion; it does **not** depend on AAA-13. Motion matching is Era 2: cooked `MotionDb` (`ArtifactKind::ClipSet` already reserved as “v2 MotionDb”), table query, not a learned policy. AAA-13 may land MotionDb **or** stop at skinned ClipSet extract. Learned policies are Infer-class. **Ember golden:** swapping a ClipSet blob must not change Rite `WAIT` windows (hit timing is Canon).
+
+**Authoritative animation contact (K64):** PHYS-A07 cooks a bounded semantic track rather than exposing presenter bones. A track contains root samples, named socket samples, swept capsule or convex channels, optional foot-plant intervals, and a compatibility signature binding skeleton, instrument, action, and Rite timing. Samples are quantized at authoritative tick boundaries and are invariant to render interpolation. PHYS-A08 admits the resulting contact claim only inside the active Rite `WAIT`; clip notifies remain forbidden as sim input. If root resolution changes the sweep, both live in the same `PhysIsland`, so rejecting the root also rejects the hit.
+
+### PHYS-A acceptance scenes and transaction caps
+
+These fixtures are engine goldens, not title content. `Anvil` is the combined slice introduced in PHYS-A11; earlier PRs may land the named fixture data and focused tests without constructing the whole slice.
+
+| Fixture | Frozen setup | Required observation |
+| --- | --- | --- |
+| `anvil.rotated_stack` | Five 400 mm asymmetric boxes; middle box begins at 15° yaw and 5° roll; flat static floor | Fall, topple, settle, sleep after 120 quiet ticks, and wake as one island when the bottom body receives the frozen impulse |
+| `anvil.stairs_slopes` | 300/900 mm character capsule; 200 and 250 mm risers; 30° and 50° ramps | Traverse both permitted risers and 30° ramp; reject ascent on 50°; no hover, tunnel, or residual penetration over 2 mm |
+| `anvil.root_wall` | 600 mm/tick root drive toward a 100 mm closed wall | Admitted root stops at contact and presenter correction derives from that admitted displacement |
+| `anvil.weapon_crossing` | 900 mm sword sweep; one target crossed during Timing `WAIT`, one visible near-miss, and the same crossing outside `WAIT` | Exactly one semantic hit; miss and out-of-window crossing produce none; rejected root produces none |
+| `anvil.vehicle_slope` | Four-wheel ray/shape-cast rig; 15° slope; high- and low-friction surfaces | Accelerate, steer, brake, lose grip in the frozen excessive-speed case, and settle without scripted chassis translation |
+| `anvil.constraints` | One hinge and one breakable fixed constraint | Hinge stays within its angular envelope; below-threshold impulse holds; above-threshold witness produces exactly one break |
+| `anvil.platform` | Character on a platform translating 100 mm/tick and rotating 1,000 millidegrees/tick | Character follows translation and rotation with one committed spatial owner |
+| `anvil.resume` | Save during stack settling, platform motion, sword action, and vehicle motion | Load resumes to the same terminal authoritative hash under the declared platform policy |
+
+`PhysIsland` consensus caps are `bodies <= 256`, `contacts <= 1_024`, `constraints <= 512`, `breaks <= 256`, `attached_children <= 256`, and `write_loci <= 512`. The proposal encoding is length-prefixed and rejects before allocation or iteration beyond these caps. Canon may impose smaller profile caps. Static occupancy is queried but never counted as a body or used to connect islands.
+
+Island identity is `(epoch, tick, partition_id, sorted body Sigils)`. Admission requires the proposal epoch and tick to equal the live step, `partition_id != NO_ISLAND`, and body membership to equal the current K58 partition exactly. Every body and constraint must name its current Canon shape/constraint binding. Body, contact, constraint, or attached-child duplication; missing members; stale bindings; out-of-order payloads; and cap overflow reject the entire island before speculative apply.
+
+The complete write set contains every body pose, linear/angular velocity, sleep and support row; every admitted constraint-state row; and the pose/support rows of all post-Player `PilotedBy` or `AttachedTo` children. The kernel opens one speculative Projection, applies body rows in body-Sigil order, derives attached rows in child-Sigil order, verifies final geometry and claims, evaluates applicable Laws in `(LawId, body Sigil)` order against the complete proposed state, buffers semantic Trace, and publishes only if all checks pass. Any rejection leaves the Projection bytes and Trace prefix byte-identical to their pre-island values.
 
 **Nav:** `klotho-nav` builds an integer funnel on a **cooked grid derived from canonical hulls** (walkable cells), never Recast-as-truth. `klotho-mind` may depend on nav and ask for a waypoint; the pose still comes from Motion/Phys. Far LOD crowds path on that same grid. Slide-into-geometry vs hull is a cook error if the grid disagrees with `OpaqueClosed`.
 
@@ -951,16 +986,16 @@ pub enum Proposal {
     Infer(InferIntent),
     SpaceDelta { /* existing fields; vel becomes Vel3 */ },
     MotionDelta { /* existing + optional plant: Option<IVec3> */ },
-    PhysDelta {
-        mover: Sigil,
-        pose: PoseMm,
-        vel: Vel3,
-        yaw_rate: i32, pitch_rate: i32, roll_rate: i32,
-        island: u16,          // MAX_ISLANDS; not a Slot
-        sleep_ticks: u16,
-        hull: BlobId,
-        witness: HullWitness, // kernel re-derives overlap; no trusted manifold
-        support: Option<(i16, i16, i16, i32)>, // nx,ny,nz,depth_mm
+    // Landed legacy grain; removed after PHYS-A02 migration.
+    PhysDelta { /* one body; never emitted by runtime after PHYS-A02 */ },
+    PhysIsland {
+        epoch: Epoch,
+        tick: Tick,
+        island: u16,
+        bodies: Vec<BodyDelta>,
+        contacts: Vec<ContactClaim>,
+        constraints: Vec<ConstraintRef>,
+        breaks: Vec<ConstraintBreakClaim>,
     },
     Residency {
         place: Sigil,
@@ -981,7 +1016,7 @@ impl Proposal {
 }
 ```
 
-`write_cells`: spatial kinds share lane 0 **per mover**. **Admit-time K55:** `write_cells(PhysDelta)` of a parent includes every post-Player `PilotedBy`/`AttachedTo` child. A second spatial proposal for those cells is `Conflict`. Residency's conflict set is **every PackedIx** in the PlaceSnap (one transaction).
+`write_cells`: spatial kinds share lane 0 **per mover**. **Admit-time K55/K59:** `write_cells(PhysIsland)` is the union of every body row, support row, constraint-state row, and every post-Player `PilotedBy`/`AttachedTo` child row. A second spatial proposal for any of those cells is `Conflict`. Residency's conflict set is **every PackedIx** in the PlaceSnap (one transaction).
 
 **Jobs API** (AAA-04). Hearth keeps `SyncProposer::propose`. AAA adds:
 
@@ -1253,7 +1288,7 @@ flowchart LR
 
 This plan **supersedes rev 5 PRs after the already-landed 01–21 work**. Do not relitigate `klotho-core` existence. **Do not claim 27 independent merges.** Claim: each PR leaves `main` green; Hearth/Ash goldens pass (AAA-01 was the first allowed hash rewrite; later ABI flag-days already landed with 02/03/08.1). Flags keep Hearth playable if phys/stream/jobs are off.
 
-**Landed on `main` (do not re-implement; verified 2026-09-06 through AAA-27):** AAA-01 Trace tape, AAA-02 6DOF+budgets, AAA-03 `PackedIx`+CoW, AAA-04 jobs+Partition+`us_sim` telemetry, AAA-05 interest+SimLod, AAA-08.1 ISA/Verb/Rel, AAA-06 Residency, AAA-08 scalar phys, AAA-07 stream+shards, AAA-09 Ember, AAA-10 Drift, AAA-11 Manifest extract, AAA-11b VFX decals, AAA-12 PBR, AAA-13 ClipSet/MotionDb, AAA-14 glTF cook, AAA-15 editor viewport, AAA-16 spatial audio, AAA-17 Chorus, AAA-18 PoseDelta+overlay, AAA-19 rewind ring, AAA-20 save epochs, AAA-21 Cinematics, AAA-21b HUD skin, AAA-22 infer sidecar, AAA-23 Netlock, AAA-24 cook farm, AAA-25 Canon epoch packs, AAA-26 Console HAL spike, AAA-27 first-title freeze. Rev 5 amends landed K48 (exact automatic snapshots), K53 (stable Full delta baseline), and K58 (phys-body flood, `NO_ISLAND`, fail-closed size/count caps). **The planned AAA sequence is complete.**
+**Landed on `main` (do not re-implement; verified 2026-09-14 through PHYS-A01):** AAA-01 Trace tape, AAA-02 6DOF+budgets, AAA-03 `PackedIx`+CoW, AAA-04 jobs+Partition+`us_sim` telemetry, AAA-05 interest+SimLod, AAA-08.1 ISA/Verb/Rel, AAA-06 Residency, AAA-08 scalar phys, AAA-07 stream+shards, AAA-09 Ember, AAA-10 Drift, AAA-11 Manifest extract, AAA-11b VFX decals, AAA-12 PBR, AAA-13 ClipSet/MotionDb, AAA-14 glTF cook, AAA-15 editor viewport, AAA-16 spatial audio, AAA-17 Chorus, AAA-18 PoseDelta+overlay, AAA-19 rewind ring, AAA-20 save epochs, AAA-21 Cinematics, AAA-21b HUD skin, AAA-22 infer sidecar, AAA-23 Netlock, AAA-24 cook farm, AAA-25 Canon epoch packs, AAA-26 Console HAL spike, AAA-27 first-title freeze, and PHYS-A01 authority/transaction RFC. Rev 7 freezes K59–K65 for the active physics and animation-contact continuation. **The planned AAA sequence is complete; PHYS-A02 is next.**
 
 ```mermaid
 flowchart TB
@@ -1520,6 +1555,21 @@ flowchart TB
 
   Console certification/device adapters, live Canon epoch deployment, runtime infer, GPU particles, a localization/UMG framework, marketplace/UGC, 64-player scale, and virtualized geometry are also post-title-one work. Landed boundaries and regression tests remain; this freeze authorizes no architectural rollback and no deletion of those capabilities.
 
+### Physics and animation-contact continuation
+
+This series is specified in [`physics-animation-plan.md`](physics-animation-plan.md). Each PR is narrow, leaves all earlier slices green, and may update HLD claims only for evidence landed in that PR.
+
+#### PHYS-A01 — Authority and transaction RFC — **landed**
+
+- **Files:** `docs/hld.md`, `docs/physics-animation-plan.md`
+- **Depends on:** AAA-27
+- **Changes:** K59–K65 freeze island-atomic admission, payload caps and order, shared shape vocabulary, legal resting-contact policy, driven-character ownership, Rite plus contact-track authority, four-category physical ownership, and the bounded acceptance fixtures. No runtime type or behavior change.
+
+#### PHYS-A02–A12 — implementation and acceptance — **planned**
+
+- **Next:** PHYS-A02 replaces runtime `PhysDelta` with bounded `PhysIsland` admission and proves whole-island rollback.
+- **Then:** shared geometry, production contacts, terrain/constraints, character drive, semantic tracks, motion-contact admission, vehicles, breakable structures, Anvil diagnostics, and release acceptance follow in the order frozen by the plan.
+
 ---
 
-*End of successor HLD (rev 5). Klotho's product is still Canon / Intent / Trace / Projection. Pose has three channels with an explicit rebuild matrix. PackedIx is u32 (not pred Slot) and already landed. Partition produces **phys-body** islands before jobs; occupancy is not an island; oversize groups fail closed, they are not split. K55 is admit-time over-produce-then-nack. Phys is scalar XPBD with pinned FMA-off + residual gate. GI is probes+SSGI. Infer is an OS-process sidecar. Ember is ClipSet, not MotionDb. Automatic and pause saves are exact fresh snapshots. AAA is capacity, proposers, and presentation — not a component bag, not a second physics world, not Predicted-on-Trace, and not a year-1 Unreal clone. If a PR puts `&mut World` in infer, a scene file as truth, f32 in Projection, parallel admit, Jolt as hashed truth, a CombatManager crate to ship Ember, or a floor hull as one giant island, it is a bug, not a feature.*
+*End of successor HLD (rev 7). Klotho's product is still Canon / Intent / Trace / Projection. Pose has three channels with an explicit rebuild matrix. PackedIx is u32 (not pred Slot) and already landed. Partition produces **phys-body** islands before jobs; occupancy is not an island; oversize groups fail closed, they are not split. K55 is admit-time over-produce-then-nack until K63's driven-character owner lands. Physics admission is island-atomic under K59, with shared canonical geometry and Rite-gated semantic contact under K61–K65. Phys is scalar XPBD with pinned FMA-off + residual gate. GI is probes+SSGI. Infer is an OS-process sidecar. Automatic and pause saves are exact fresh snapshots. AAA is capacity, proposers, and presentation — not a component bag, not a second physics world, not Predicted-on-Trace, and not a year-1 Unreal clone. If a PR puts `&mut World` in infer, a scene file as truth, f32 in Projection, parallel admit, Jolt as hashed truth, a CombatManager crate to ship Ember, or a floor hull as one giant island, it is a bug, not a feature.*

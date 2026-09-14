@@ -11,3 +11,9 @@ target/
 .factory/
 *.swp
 .env
+
+# Access-controlled proprietary adapters (KAI-23). README files stay public.
+/private/gdk/*
+!/private/gdk/README.md
+/private/prospero/*
+!/private/prospero/README.md

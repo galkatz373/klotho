@@ -1,0 +1,17 @@
+(
+    id: "kai-console-farm-public",
+    devices: [
+        (
+            id: "gdk-mock-0",
+            target: gdk,
+            sdk_revision: "public-mock",
+            adapter_class: public_mock,
+        ),
+        (
+            id: "prospero-mock-0",
+            target: prospero,
+            sdk_revision: "public-mock",
+            adapter_class: public_mock,
+        ),
+    ],
+)

@@ -31,7 +31,7 @@ pub const REQUIRED_LOCALE_KEYS: [&str; 8] = [
     "play.complete",
 ];
 
-/// First-title desktop SKUs. Console SKUs remain KAI-23.
+/// First-title desktop SKUs. Console SKUs are KAI-23 (P0 public boundary).
 pub const DESKTOP_SKUS: [DesktopSku; 3] = [
     DesktopSku {
         id: "win-d3d12-high",

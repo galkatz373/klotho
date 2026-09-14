@@ -1,0 +1,5 @@
+(
+    skus: ["gdk-d3d12-high", "prospero-gnm-high"],
+    sdk_revision: "public-mock",
+    claim_level: "P0",
+)

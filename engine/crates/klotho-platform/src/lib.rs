@@ -24,8 +24,10 @@ pub use audio::{
     AudioDeviceError, AudioSink, MemorySink, OUTPUT_CHANNELS, OUTPUT_HZ, PCM_QUEUE_CAP,
 };
 pub use console::{
-    EvidenceError, GraphicsApi, MemoryPlatformHal, OwnedReplayEvidence, PlatformHal,
-    PlatformIdentity, PlatformTarget, REPLAY_EVIDENCE_CAP, ReplayEvidence,
+    AccessibilitySample, AdapterClass, ControllerSample, EvidenceError, GraphicsApi,
+    MemoryPlatformHal, MemorySample, NetworkSample, OwnedReplayEvidence, PlatformHal,
+    PlatformIdentity, PlatformTarget, PresentSample, REPLAY_EVIDENCE_CAP, ReplayEvidence,
+    STORAGE_SLOT_BYTES, STORAGE_SLOT_CAP, StorageSample, SuspendToken,
 };
 pub use event::{PlatEvent, apply_event, from_device_event, from_window_event};
 pub use look::LookAccum;

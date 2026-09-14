@@ -1,0 +1,13 @@
+(
+    version: 1,
+    items: [
+        (id: "kernel-replay", domain: "kernel-replay"),
+        (id: "presentation", domain: "presentation"),
+        (id: "memory", domain: "memory"),
+        (id: "storage", domain: "storage"),
+        (id: "suspend-resume", domain: "suspend-resume"),
+        (id: "controller", domain: "controller"),
+        (id: "accessibility", domain: "accessibility"),
+        (id: "network", domain: "network"),
+    ],
+)

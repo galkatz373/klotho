@@ -19,7 +19,7 @@ Greenfield Rust engine. The programming model is **Canon + Intent + Trace + Proj
 - `klotho-infer` does **not** depend on `klotho-commit`. It returns `InferIntent`.
 - `klotho-world` feature `mutate` is enabled **only** by `klotho-commit`. `klotho-stream` and `klotho-save` do not enable `mutate`.
 - `klotho-save` depends on world + trace + core only. It does **not** depend on commit or stream.
-- `klotho-release` depends on compile + save + world + trace + prove. It does **not** enable `klotho-world/mutate`, append Trace, or depend on commit, sim, infer, ai, or eval. Platform adapters may read Trace/saves/package identity; they do not mutate Projection.
+- `klotho-release` depends on compile + save + world + trace + prove + platform. It does **not** enable `klotho-world/mutate`, append Trace, or depend on commit, sim, infer, ai, or eval. Platform adapters may read Trace/saves/package identity; they do not mutate Projection.
 - Runtime (not stream) builds `Proposal::Residency`. Stream returns `Arc<PlaceSnap>` after header-validate + mmap.
 - `InferHost::{new,submit,poll}` may appear only in `engine/crates/klotho-runtime/**` and `engine/crates/klotho-infer/**` (CI allowlist).
 - Gameplay (`engine/examples/hearth-slice`, `engine/examples/ash-slice`, ember, drift, `klotho-author`, `klotho-editor`) may not import `klotho-manifest::tables` or `klotho-stream`.
@@ -37,7 +37,7 @@ Do not grow Hearth. Ash is the generality gate (K26). If Ash needs `DamageCompon
 - Ship profile: single-player action-adventure, `RuntimeProfile::AaaAdventure`, 30 Hz authoritative simulation and 60–120 Hz presentation on desktop Windows/Linux/macOS. Infer stays default-off.
 - Release-blocking slices: Hearth and Ash (ontology/determinism), Ember (action combat), Drift (Phys + two-Place residency), and Chorus (SimLod scale). Keep them as bounded goldens; do not turn them into title content.
 - Shooter-only gates are maintained regressions, not first-title blockers: `RuntimeProfile::AaaShooter`, dedicated 60 Hz simulation, lag compensation/rewind acceptance, Netlock release acceptance, multiplayer lobby scale, and the competitive render permutation.
-- Console certification, live epoch deployment, GPU particles, runtime infer, marketplace/UGC, localization/UMG, 64-player scale, and virtualized geometry are post-title-one work. Their landed boundaries and tests stay intact.
+- Console certification, live epoch deployment, GPU particles, runtime infer, marketplace/UGC, localization/UMG, 64-player scale, and virtualized geometry are post-title-one work. Their landed boundaries and tests stay intact. KAI-23 landed the P0 public console SKU contract; a certified or shipped console SKU still requires P1 hardware evidence and P2 holder acceptance.
 
 ## Vocabulary
 

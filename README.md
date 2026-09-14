@@ -71,6 +71,7 @@ KAI-19 — reference/optimized whole-title cook with predicate folding/interning
 KAI-20 — Tapestry data-only thirty-minute, eight-Place vertical route with integrated production evidence and optimized desktop packages.
 KAI-21 — Brocade 100-Place/10k-change parallel-content, incremental-cook, review-capacity, binary-lock, sampling, and package-scale gate.
 KAI-22 — Desktop platform services and release factory: signed Windows/Linux/macOS candidates, achievements, cloud-save conflict recovery, crash/replay/symbols, ratings/privacy, and named human signing.
+KAI-23 — Console SKU track: GDK/Prospero P0 public HAL, claim levels, cert suites, device farm, and redacted P1/P2 evidence ids. Not a certified or shipped console SKU.
 
 ## Build
 

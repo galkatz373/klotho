@@ -29,6 +29,10 @@ pub enum ReleaseError {
     Store(String),
     /// Crash/replay/symbol mapping failed.
     Crash(String),
+    /// Claim level, overclaim language, or evidence binding failed.
+    Claim(String),
+    /// Console certification suite or device farm failed.
+    Cert(String),
     /// Filesystem I/O failed.
     Io(String),
 }
@@ -61,6 +65,14 @@ impl ReleaseError {
     pub(crate) fn crash(msg: impl Into<String>) -> Self {
         Self::Crash(msg.into())
     }
+
+    pub(crate) fn claim(msg: impl Into<String>) -> Self {
+        Self::Claim(msg.into())
+    }
+
+    pub(crate) fn cert(msg: impl Into<String>) -> Self {
+        Self::Cert(msg.into())
+    }
 }
 
 impl fmt::Display for ReleaseError {
@@ -76,6 +88,8 @@ impl fmt::Display for ReleaseError {
             Self::Migrate(s) => write!(f, "Migrate({s})"),
             Self::Store(s) => write!(f, "Store({s})"),
             Self::Crash(s) => write!(f, "Crash({s})"),
+            Self::Claim(s) => write!(f, "Claim({s})"),
+            Self::Cert(s) => write!(f, "Cert({s})"),
             Self::Io(s) => write!(f, "Io({s})"),
         }
     }

@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Klotho platform HAL: desktop devices, console target identity, replay evidence (no world mutation)"
+description = "Klotho platform HAL: desktop devices, console target identity, replay evidence, cert samples (no world mutation)"
 readme = false
 publish = false
 
@@ -20,6 +20,7 @@ klotho-core.workspace = true
 klotho-input.workspace = true
 klotho-ir.workspace = true
 klotho-manifest.workspace = true
+serde.workspace = true
 winit = "0.30"
 
 [lints.rust]

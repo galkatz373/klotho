@@ -1,10 +1,11 @@
-//! Desktop platform services and the first-title release factory (KAI-22).
+//! Desktop platform services, release factory (KAI-22), and console SKU track (KAI-23).
 //!
 //! Adapters may read Trace, saves, and package identity. They do not mutate
 //! Projection, append Trace, or mint Agency. Achievement or telemetry failure
 //! never changes gameplay. Cloud-save resolution selects a validated whole
-//! save. Agent credentials cannot sign a release (K80). Console SKUs remain
-//! KAI-23.
+//! save. Agent credentials cannot sign a release (K80). Console candidates
+//! stay at the achieved claim level: public CI is P0 and never a certified
+//! or shipped console SKU.
 //!
 //! `#![forbid(unsafe_code)]`.
 
@@ -12,10 +13,14 @@
 #![warn(missing_docs)]
 
 mod achievement;
+mod cert;
+mod claim;
 mod cloud;
+mod console;
 mod crash;
 mod error;
 mod factory;
+mod farm;
 mod migrate;
 mod privacy;
 mod rating;
@@ -26,8 +31,21 @@ pub use achievement::{
     AchievementDef, AchievementKind, AchievementQueue, AchievementSink, AchievementUnlock,
     MemoryAchievementSink,
 };
+pub use cert::{
+    CertBudgets, CertChecklist, CertReport, ChecklistItem, REQUIRED_SUITES, import_checklist,
+    run_mock_suites, run_suites,
+};
+pub use claim::{
+    AccessWorkspace, BoundP1, ClaimLevel, EvidenceDraft, EvidenceRecord, GDK_WORKSPACE,
+    HolderAcceptance, PROSPERO_WORKSPACE, achieved_level, bind_p1, forbid_overclaim,
+};
 pub use cloud::{
     CloudResolution, CloudSlot, CloudStore, ConflictChoice, SaveIdentity, resolve_cloud,
+};
+pub use console::{
+    CONSOLE_SKUS, CertSubmission, ConsoleDashboard, ConsoleFactoryRequest, ConsolePackage,
+    ConsoleRelease, ConsoleSku, SignedConsoleSku, console_candidate_build, console_package_hash,
+    import_redacted, public_farm_gate, public_workspace_layout, submit_console_sku,
 };
 pub use crash::{CrashBundle, MappedCrash, SymbolStore, map_crash};
 pub use error::ReleaseError;
@@ -36,11 +54,16 @@ pub use factory::{
     ReleaseExtras, ReleaseRole, ReleaseSigningKey, SignedRelease, SignedSku, candidate_build,
     package_hash, verify_release,
 };
+pub use farm::{DeviceFarm, FarmDevice, run_farm};
 pub use migrate::migrate_save;
 pub use privacy::PrivacyManifest;
 pub use rating::{BoardRecord, RatingBoard, RatingEvidence};
 pub use scan::{ScanReport, scan_candidate};
 pub use store::{DesktopStorefront, DlcPack, InstalledRelease, StagedRollout, StoreIdentity};
+
+pub use klotho_platform::{
+    AdapterClass, GraphicsApi, PlatformIdentity, PlatformTarget, ReplayEvidence,
+};
 
 #[cfg(test)]
 pub(crate) mod tests_support {

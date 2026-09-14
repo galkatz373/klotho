@@ -781,6 +781,8 @@ pub fn validate_repository(root: &Path) -> Result<ValidationSummary, Vec<String>
         "ci/skus/linux-vulkan-high.ron",
         "ci/skus/mac-metal-high.ron",
         "ci/skus/desktop-minimum.ron",
+        "ci/skus/gdk-d3d12-high.ron",
+        "ci/skus/prospero-gnm-high.ron",
     ];
     let mut sku_ids = BTreeSet::new();
     for path in sku_paths {
@@ -804,7 +806,7 @@ pub fn validate_repository(root: &Path) -> Result<ValidationSummary, Vec<String>
             Err(e) => errors.push(e),
         }
     }
-    if sku_ids.len() != 4 {
+    if sku_ids.len() != 6 {
         errors.push("SKU ids must be unique".into());
     }
 
@@ -958,6 +960,8 @@ pub fn build_report(root: &Path) -> Result<BenchmarkReport, Vec<String>> {
         ("sku_linux", "ci/skus/linux-vulkan-high.ron"),
         ("sku_mac", "ci/skus/mac-metal-high.ron"),
         ("sku_minimum", "ci/skus/desktop-minimum.ron"),
+        ("sku_gdk", "ci/skus/gdk-d3d12-high.ron"),
+        ("sku_prospero", "ci/skus/prospero-gnm-high.ron"),
         ("model_artifact", "models/fixtures/replay-v1.ron"),
     ];
     let mut hashes = BTreeMap::new();
@@ -1042,7 +1046,7 @@ mod tests {
         let report = build_report(&default_root()).expect("report");
         assert_eq!(report.metrics.len(), METRICS.len());
         assert!(report.metrics.iter().all(|m| m.status == "not_run"));
-        assert_eq!(report.environment_hashes.len(), 18);
+        assert_eq!(report.environment_hashes.len(), 20);
     }
 
     #[test]

@@ -1296,6 +1296,7 @@ dependencies = [
  "klotho-input",
  "klotho-ir",
  "klotho-manifest",
+ "serde",
  "winit",
 ]
 
@@ -1318,6 +1319,7 @@ dependencies = [
  "klotho-compile",
  "klotho-core",
  "klotho-ir",
+ "klotho-platform",
  "klotho-prove",
  "klotho-runtime",
  "klotho-save",

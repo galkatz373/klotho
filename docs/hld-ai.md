@@ -5,7 +5,7 @@
 | Document | High-Level Design — AI-native production for Klotho's first AAA title |
 | Author | Gal Katz |
 | Date | 2026-09-14 |
-| Status | Active successor plan (KAI-00–22 landed; KAI-23–24 not landed) |
+| Status | Active successor plan (KAI-00–23 landed; KAI-24 not landed) |
 | Baseline | `docs/hld.md` rev 6; AAA-01–27 landed |
 | Audience | Engine, tools, gameplay, content, AI platform, build, QA, and production leads |
 | Language | Rust (edition 2024; 2021-compatible crates OK) |
@@ -1605,7 +1605,7 @@ or versioned generated artifacts, never a reverse dependency.
 | `klotho-eval` | Journeys, assertions, test selection, evidence bundles, capture orchestration | may invoke binaries; library does not enable world mutate or append Trace |
 | `klotho-dialogue` | Dialogue/loc source validation and lowering to existing IR/Manifest descriptors | `ir + manifest + prove`; no commit/world mutate |
 | `klotho-worker` | Privileged typed DCC/media worker registry and sandbox broker | studio-only; no engine workspace membership; never exposes shell to a model |
-| `klotho-release` | Desktop platform services and release factory: achievements, cloud saves, crash/replay/symbols, storefront install/update/rollback, ratings/privacy, named human signing | `compile + save + world + trace + prove`; no `world/mutate`, commit, sim, infer, ai, or eval |
+| `klotho-release` | Desktop platform services and release factory: achievements, cloud saves, crash/replay/symbols, storefront install/update/rollback, ratings/privacy, named human signing; console SKU claim levels, cert suites, device farm, and redacted evidence ids | `compile + save + world + trace + prove + platform`; no `world/mutate`, commit, sim, infer, ai, or eval |
 
 `klotho-ai` is a Klotho engine crate and a required part of the AI-native editor
 profile. Model execution backends may live under `tools/ai-backends/`, in
@@ -1631,6 +1631,7 @@ tools, transactions, evaluation, or review policy.
 | `klotho-render` | SKU permutations, scalable geometry/texture streaming, capture hooks; no gameplay imports |
 | `klotho-audio` | Mix/VO/CC metadata and deterministic offline capture; no Trace writes |
 | `klotho-runtime` | Journey/capture hooks through existing public inputs and snapshots; no authoring/provider deps in ship feature set |
+| `klotho-platform` | Console HAL samples: suspend/resume, storage, present/memory/controller/network/a11y, public-mock versus proprietary adapter class |
 
 ### Firewall additions
 
@@ -1639,6 +1640,7 @@ tools, transactions, evaluation, or review policy.
   `klotho-sim`, `klotho-runtime` ship features, proposers, or presenters.
 - `klotho-release` may not depend on `klotho-ai`, `klotho-eval`, `klotho-commit`,
   `klotho-sim`, or `klotho-infer`, and may not enable `klotho-world/mutate`.
+  It may depend on `klotho-platform` for console HAL identity and cert samples.
 - `klotho-eval` may depend on public debug/runtime test interfaces but may not
   enable `klotho-world/mutate` or construct hidden player Agency.
 - `klotho-ai` may invoke the editor/compiler/eval binaries; it does not link
@@ -1914,7 +1916,7 @@ managers.
 
 ## PR plan
 
-Landed baseline: AAA-01–27 and KAI-00–22 (2026-09-14). KAI-23–24 remain planned.
+Landed baseline: AAA-01–27 and KAI-00–23 (2026-09-14). KAI-24 remains planned.
 Each header gains `— landed` only with its implementation, tests, date bump, and
 this section's landed list update.
 
@@ -2311,7 +2313,7 @@ flowchart TB
 These do not block KAI-22 or alter the AAA-27 first-title freeze. They prevent
 “later” from remaining an unspecified promise.
 
-#### KAI-23 — Certified console SKU completion
+#### KAI-23 — Certified console SKU completion — **landed 2026-09-14**
 
 - **Files:** access-controlled GDK/Prospero adapter workspaces, platform service
   adapters, cert checklist/evidence import, device farm, performance/memory/input/
@@ -2325,7 +2327,9 @@ These do not block KAI-22 or alter the AAA-27 first-title freeze. They prevent
   storage, suspend/resume, controller, accessibility and certification suites;
   unredacted signed P1 evidence binds to the package; platform holder acceptance
   supplies P2. Until then Klotho claims only the achieved lower level, never a
-  certified or shipped console SKU.
+  certified or shipped console SKU. Landed public CI is P0: mock HAL suites,
+  native target/backend pairing, redacted evidence ids, and fail-closed
+  overclaim. P1/P2 remain blocked on licensed SDK/devkit access.
 
 #### KAI-24 — Multiplayer and live-service production track
 
@@ -2383,7 +2387,9 @@ The first title is ready to ship only when all are true:
   migration, rollback, ratings, accessibility compliance, privacy, third-party
   notices, and license audits pass with separate human authorization.
 - Console certification and multiplayer/live-service acceptance are not claimed
-  for title one; KAI-23/24 define the post-title work required to claim them.
+  for title one. KAI-23 landed the P0 public console SKU contract; certified
+  or shipped console SKUs still require P1 hardware evidence and P2 holder
+  acceptance. KAI-24 remains the multiplayer/live track.
 
 ---
 

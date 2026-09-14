@@ -132,6 +132,14 @@ impl ReleaseSigningKey {
     pub fn verifying_bytes(&self) -> [u8; 32] {
         self.sk.verifying_key().to_bytes()
     }
+
+    /// Sign arbitrary evidence bytes. Used by console P1 binding.
+    pub(crate) fn sign_bytes(&self, msg: &[u8]) -> Result<[u8; 64], crate::ReleaseError> {
+        if self.sk.verifying_key().is_weak() {
+            return Err(crate::ReleaseError::signature("weak signing key"));
+        }
+        Ok(self.sk.sign(msg).to_bytes())
+    }
 }
 
 /// Evidence packed into the candidate besides the cooked warp.
@@ -332,7 +340,10 @@ fn insert_extra<T: Serialize>(
     Ok(())
 }
 
-fn check_approvals(approvals: &[Approval], package_hash: Hash) -> Result<(), ReleaseError> {
+pub(crate) fn check_approvals(
+    approvals: &[Approval],
+    package_hash: Hash,
+) -> Result<(), ReleaseError> {
     let mut seen = BTreeSet::new();
     let mut owners = BTreeSet::new();
     for approval in approvals {

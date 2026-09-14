@@ -171,27 +171,25 @@ fn obb_obb(la: AabbMm, pa: PoseMm, lb: AabbMm, pb: PoseMm) -> Option<QuantizedCo
     let mut found = false;
 
     for (i, n) in a_axes.into_iter().enumerate() {
-        if let Some(depth) = interval_overlap_mm(&ca, &cb, n) {
+        {
+            let depth = interval_overlap_mm(&ca, &cb, n)?;
             if depth < best_depth {
                 best_depth = depth;
                 best_axis = n;
                 best_feature = i as u16;
                 found = true;
             }
-        } else {
-            return None;
         }
     }
     for (i, n) in b_axes.into_iter().enumerate() {
-        if let Some(depth) = interval_overlap_mm(&ca, &cb, n) {
+        {
+            let depth = interval_overlap_mm(&ca, &cb, n)?;
             if depth < best_depth {
                 best_depth = depth;
                 best_axis = n;
                 best_feature = 3 + i as u16;
                 found = true;
             }
-        } else {
-            return None;
         }
     }
     let mut f = 6u16;
@@ -202,15 +200,14 @@ fn obb_obb(la: AabbMm, pa: PoseMm, lb: AabbMm, pb: PoseMm) -> Option<QuantizedCo
                 f = f.saturating_add(1);
                 continue;
             }
-            if let Some(depth) = interval_overlap_mm(&ca, &cb, n) {
+            {
+                let depth = interval_overlap_mm(&ca, &cb, n)?;
                 if depth < best_depth {
                     best_depth = depth;
                     best_axis = n;
                     best_feature = f;
                     found = true;
                 }
-            } else {
-                return None;
             }
             f = f.saturating_add(1);
         }

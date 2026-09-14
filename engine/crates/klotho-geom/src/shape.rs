@@ -39,7 +39,6 @@ pub enum Shape {
 
 impl Shape {
     /// Oriented box from a non-empty local AABB.
-    #[must_use]
     pub fn oriented_box(local: AabbMm) -> Result<Self, GeomError> {
         if local.is_empty() {
             return Err(GeomError::Malformed);
@@ -48,7 +47,6 @@ impl Shape {
     }
 
     /// Sphere with a non-negative radius.
-    #[must_use]
     pub fn sphere(local_center: IVec3, radius_mm: i32) -> Result<Self, GeomError> {
         if radius_mm < 0 {
             return Err(GeomError::Malformed);
@@ -60,7 +58,6 @@ impl Shape {
     }
 
     /// Y-axis capsule with non-negative radius and half-height.
-    #[must_use]
     pub fn capsule(
         local_center: IVec3,
         radius_mm: i32,
@@ -78,7 +75,6 @@ impl Shape {
 }
 
 /// Interpret a cooked hull AABB as a PHYS-A03 primitive. Later kinds fail closed.
-#[must_use]
 pub fn cooked_shape(kind: ShapeKind, local: AabbMm) -> Result<Shape, GeomError> {
     if local.is_empty() {
         return Err(GeomError::Malformed);

@@ -395,8 +395,32 @@ mod tests {
 
     #[test]
     fn public_workspace_layout_is_present() {
-        let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        public_workspace_layout(&repo).unwrap();
+        // KAI-01: engine tests also run from a clean export containing only
+        // `engine/`, so never read the real repo root (`../../..`) here.
+        // Build a scratch repo layout instead and check the contract.
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static SERIAL: AtomicU64 = AtomicU64::new(0);
+        let serial = SERIAL.fetch_add(1, Ordering::Relaxed);
+        let repo = std::env::temp_dir().join(format!(
+            "klotho-console-layout-{}-{serial}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&repo);
+        std::fs::create_dir_all(repo.join("private/gdk")).unwrap();
+        std::fs::create_dir_all(repo.join("private/prospero")).unwrap();
+        std::fs::write(repo.join("private/gdk/README.md"), b"gdk").unwrap();
+        std::fs::write(repo.join("private/prospero/README.md"), b"prospero").unwrap();
+        let (gdk, prospero) = public_workspace_layout(&repo).unwrap();
+        assert_eq!(gdk, repo.join("private/gdk/README.md"));
+        assert_eq!(prospero, repo.join("private/prospero/README.md"));
+        assert!(
+            public_workspace_layout(&std::env::temp_dir().join(format!(
+                "klotho-console-layout-missing-{}-{serial}",
+                std::process::id()
+            )))
+            .is_err()
+        );
+        let _ = std::fs::remove_dir_all(&repo);
     }
 
     #[test]

@@ -7,9 +7,7 @@
 
 use std::collections::BTreeMap;
 
-use klotho_core::{
-    AabbMm, LocusKind, MAX_ISLAND_SIZE, MAX_ISLANDS, ShapeKind, Sigil, SimLod, Vel3,
-};
+use klotho_core::{AabbMm, BodyMode, LocusKind, MAX_ISLAND_SIZE, MAX_ISLANDS, Sigil, SimLod, Vel3};
 use klotho_ir::Rel;
 use klotho_world::WorldView;
 
@@ -173,12 +171,15 @@ pub(crate) fn partition_with_caps(
 fn posed_bounds(view: &WorldView<'_>, s: Sigil) -> Option<AabbMm> {
     let local = view.hull(s)?;
     let pose = view.pose(s)?;
-    let shape = klotho_geom::cooked_shape(ShapeKind::OrientedBox, local).ok()?;
+    let shape = klotho_geom::cooked_shape(view.body_physics(s).shape, local).ok()?;
     klotho_geom::bounds(shape, pose).ok()
 }
 
 /// Actor, or a Relic that is not idle kinematic scenery.
 fn is_phys_body(view: &WorldView<'_>, s: Sigil) -> bool {
+    if view.body_physics(s).mode != BodyMode::Dynamic {
+        return false;
+    }
     match s.kind() {
         Some(LocusKind::Actor) => true,
         Some(LocusKind::Relic) => !is_idle_scenery(view, s) || is_attach_node(view, s),

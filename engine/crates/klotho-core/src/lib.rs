@@ -33,8 +33,8 @@ pub use id::{
 pub use reject::{KernelFault, RejectReason};
 pub use rng::Rng;
 pub use space::{
-    AabbMm, HullWitness, IVec3, PhysRequest, PoseMm, QuantizedContact, ShapeKind, Support, Vel3,
-    frac_cmp,
+    AabbMm, BodyMode, BodyPhysics, HullWitness, IVec3, PhysRequest, PoseMm, QuantizedContact,
+    ShapeKind, Support, Vel3, frac_cmp,
 };
 pub use tick::{Epoch, Tick};
 pub use units::{Mm, VelFx, YawMd};

@@ -1,7 +1,8 @@
 //! Pure canonical shape queries shared by phys and commit (K61).
 //!
 //! Depends only on `klotho-core`. No `f32`, no World, no solver manifold.
-//! Convex, compound, and static terrain kinds fail closed until PHYS-A04/A05.
+//! Convex and compound queries land in PHYS-A04. Static terrain kinds remain
+//! fail-closed until PHYS-A05.
 //!
 //! `#![forbid(unsafe_code)]`.
 
@@ -14,8 +15,11 @@ mod shape;
 mod witness;
 
 pub use cast::{SweptHit, raycast, swept_against};
-pub use query::{bounds, contact, penetration_mm};
-pub use shape::{GeomError, Shape, cooked_shape};
+pub use query::{ContactManifold, bounds, contact, manifold, penetration_mm};
+pub use shape::{
+    CompoundPart, GeomError, MAX_COMPOUND_PARTS, MAX_CONVEX_VERTICES, PrimitiveShape, Shape,
+    cooked_shape,
+};
 pub use witness::{CONTACT_SLOP_MM, evidence_matches, verify_contact, verify_cooked};
 
 /// Feature ids 0..2 are A face axes, 3..5 B face axes, 6+ cross/closest-feature.
@@ -130,11 +134,16 @@ mod tests {
     }
 
     #[test]
-    fn convex_and_mesh_fail_closed() {
+    fn convex_and_compound_cook_while_mesh_fails_closed() {
         let local = box_xz(10, 10, 10);
-        assert_eq!(
-            cooked_shape(ShapeKind::Convex, local),
-            Err(GeomError::Unsupported)
+        let convex = cooked_shape(ShapeKind::Convex, local).expect("convex");
+        let compound = cooked_shape(ShapeKind::Compound, local).expect("compound");
+        assert_eq!(bounds(convex, PoseMm::default()).unwrap(), local);
+        assert_eq!(bounds(compound, PoseMm::default()).unwrap(), local);
+        assert!(
+            contact(convex, PoseMm::default(), compound, pose_at(15, 0, 0, 0))
+                .unwrap()
+                .is_some()
         );
         assert_eq!(
             cooked_shape(ShapeKind::TriangleMesh, local),
@@ -144,10 +153,54 @@ mod tests {
             cooked_shape(ShapeKind::Heightfield, local),
             Err(GeomError::Unsupported)
         );
-        assert_eq!(
-            cooked_shape(ShapeKind::Compound, local),
-            Err(GeomError::Unsupported)
-        );
+    }
+
+    #[test]
+    fn bounded_convex_and_compound_reject_malformed_payloads() {
+        assert_eq!(Shape::convex(&[IVec3::ZERO; 3]), Err(GeomError::Malformed));
+        assert_eq!(Shape::compound(&[]), Err(GeomError::Malformed));
+        let too_many = [IVec3::ZERO; MAX_CONVEX_VERTICES + 1];
+        assert_eq!(Shape::convex(&too_many), Err(GeomError::Malformed));
+    }
+
+    #[test]
+    fn manifold_is_bounded_and_canonically_ordered() {
+        let a = Shape::oriented_box(box_xz(100, 100, 100)).unwrap();
+        let b = Shape::oriented_box(box_xz(100, 100, 100)).unwrap();
+        let patch = manifold(a, pose_at(0, 0, 0, 0), b, pose_at(150, 0, 0, 0))
+            .unwrap()
+            .expect("patch");
+        assert!((1..=4).contains(&patch.len));
+        assert!(patch.as_slice().windows(2).all(|w| {
+            (w[0].point.x, w[0].point.y, w[0].point.z) <= (w[1].point.x, w[1].point.y, w[1].point.z)
+        }));
+    }
+
+    #[test]
+    fn fast_convex_cast_cannot_tunnel_through_thin_wall() {
+        let mover = cooked_shape(ShapeKind::Convex, box_xz(100, 200, 100)).unwrap();
+        let wall = Shape::oriented_box(AabbMm::new(
+            IVec3 {
+                x: -1_000,
+                y: 0,
+                z: -5,
+            },
+            IVec3 {
+                x: 1_000,
+                y: 1_000,
+                z: 5,
+            },
+        ))
+        .unwrap();
+        let hit = swept_against(
+            mover,
+            pose_at(0, 0, 0, 0),
+            pose_at(0, 0, 2_000, 0),
+            wall,
+            pose_at(0, 0, 1_000, 0),
+        )
+        .unwrap();
+        assert!(hit.crossing, "{hit:?}");
     }
 
     #[test]

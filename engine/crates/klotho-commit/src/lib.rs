@@ -44,9 +44,9 @@ mod tests {
 
     use klotho_canon::cook_diffs;
     use klotho_core::{
-        AabbMm, BlobId, Budget, Epoch, Hash, HullWitness, IVec3, LocusKind, Mm, NO_ISLAND,
-        PlayerId, PoseMm, QuantizedContact, ResourceId, ShapeKind, Sigil, Tick, Vel3, YawMd,
-        rotate_xz,
+        AabbMm, BlobId, BodyPhysics, Budget, Epoch, Hash, HullWitness, IVec3, LocusKind, Mm,
+        NO_ISLAND, PlayerId, PoseMm, QuantizedContact, ResourceId, ShapeKind, Sigil, Tick, Vel3,
+        YawMd, rotate_xz,
     };
     use klotho_ir::{
         Agency, Analog, CanonDiff, Channel, IntentTarget, MindIntent, PlayerIntent, Rel, Verb,
@@ -784,6 +784,8 @@ mod tests {
                 b,
                 shape_a: hull_id(1),
                 shape_b: hull_id(1),
+                kind_a: ShapeKind::OrientedBox,
+                kind_b: ShapeKind::OrientedBox,
                 feature: 0,
                 witness: body.witness,
             };
@@ -896,7 +898,7 @@ mod tests {
             let mut body = body_delta(mover, next);
             match case {
                 0 => body.witness.epoch = Epoch(1),
-                1 => body.witness.shape = ShapeKind::Convex,
+                1 => body.witness.shape = ShapeKind::TriangleMesh,
                 2 => body.hull = hull_id(9),
                 _ => unreachable!(),
             }
@@ -924,6 +926,45 @@ mod tests {
     }
 
     #[test]
+    fn phys_island_shape_kind_is_bound_by_canon() {
+        let mover = relic(1);
+        let mut canon = cook("[]");
+        assert!(canon.bind_physics(
+            mover,
+            BodyPhysics {
+                shape: ShapeKind::Convex,
+                ..BodyPhysics::default()
+            },
+        ));
+        let mut k = CommitKernel::new(klotho_world::World::new(Arc::new(canon), Hash::ZERO));
+        let start = PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd::ZERO);
+        let next = PoseMm::new(Mm(10), Mm(0), Mm(0), YawMd::ZERO);
+        plant_mover(&mut k, mover, start, 0, 0);
+        k.ingest(phys_island(mover, next, vec![mover]));
+        let rejected = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert_eq!(
+            rejected.rejects,
+            vec![(ProposalKind::Phys, RejectReason::WrongHull)]
+        );
+
+        let mut body = body_delta(mover, next);
+        body.witness.shape = ShapeKind::Convex;
+        k.ingest(Proposal::PhysIsland {
+            epoch: Epoch::ZERO,
+            tick: Tick(2),
+            island: 0,
+            members: vec![mover],
+            bodies: vec![body],
+            contacts: Vec::new(),
+            constraints: Vec::new(),
+            breaks: Vec::new(),
+        });
+        let admitted = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(admitted.rejects.is_empty(), "{admitted:?}");
+        assert_eq!(k.world().view().pose(mover), Some(next));
+    }
+
+    #[test]
     fn phys_island_contact_requires_reproduced_evidence_not_aabb() {
         let mut k = empty_kernel();
         let a = relic(1);
@@ -939,6 +980,8 @@ mod tests {
             b,
             shape_a: hull_id(1),
             shape_b: hull_id(1),
+            kind_a: ShapeKind::OrientedBox,
+            kind_b: ShapeKind::OrientedBox,
             feature: 0,
             witness: HullWitness::new(a, pa, true),
         };
@@ -1016,6 +1059,8 @@ mod tests {
             b: stub,
             shape_a: hull_id(1),
             shape_b: hull_id(1),
+            kind_a: ShapeKind::OrientedBox,
+            kind_b: ShapeKind::OrientedBox,
             feature: computed.feature,
             witness,
         };
@@ -1069,6 +1114,8 @@ mod tests {
                 b: stub,
                 shape_a: hull_id(1),
                 shape_b: hull_id(1),
+                kind_a: ShapeKind::OrientedBox,
+                kind_b: ShapeKind::OrientedBox,
                 feature: 0,
                 witness: fake,
             }],

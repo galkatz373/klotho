@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use klotho_core::{AffordanceId, LawId, Mm, ResourceId, Sigil};
+use klotho_core::{AffordanceId, BodyPhysics, LawId, Mm, ResourceId, Sigil};
 use klotho_ir::{Name, Rel};
 
 use crate::ast::{CookedSlot, PredId, PredProgram, RiteChunk, RiteId};
@@ -28,6 +28,8 @@ pub struct Canon {
     pub pin_names: Vec<Name>,
     /// Seed Sigil for each pin. `None` if cooked without that locus.
     pub pin_sigils: Vec<Option<Sigil>>,
+    /// Canon-bound per-locus physical configuration.
+    pub physics: BTreeMap<Sigil, BodyPhysics>,
     law_by_name: BTreeMap<Name, LawId>,
     affordance_by_name: BTreeMap<Name, AffordanceId>,
     rite_by_name: BTreeMap<Name, RiteId>,
@@ -61,11 +63,26 @@ impl Canon {
             facts,
             pin_names,
             pin_sigils,
+            physics: BTreeMap::new(),
             law_by_name,
             affordance_by_name,
             rite_by_name,
             resource_by_name,
         }
+    }
+
+    /// Bind validated physical configuration to a cooked locus.
+    pub fn bind_physics(&mut self, locus: Sigil, body: BodyPhysics) -> bool {
+        if !body.is_valid() {
+            return false;
+        }
+        self.physics.insert(locus, body).is_none()
+    }
+
+    /// Physical configuration for a cooked locus.
+    #[must_use]
+    pub fn body_physics(&self, locus: Sigil) -> Option<BodyPhysics> {
+        self.physics.get(&locus).copied()
     }
 
     /// Look up a compiled pred.

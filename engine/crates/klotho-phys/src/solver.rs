@@ -4,10 +4,10 @@ use std::collections::BTreeSet;
 
 use klotho_commit::{BodyDelta, Proposal};
 use klotho_core::{
-    AabbMm, BlobId, HullWitness, LocusKind, NO_ISLAND, PoseMm, ShapeKind, Sigil, Support, Vel3,
-    VelFx, YawMd,
+    AabbMm, BlobId, BodyMode, BodyPhysics, HullWitness, LocusKind, NO_ISLAND, PoseMm, ShapeKind,
+    Sigil, Support, Vel3, VelFx, YawMd, rotate,
 };
-use klotho_geom::{Shape, bounds, contact};
+use klotho_geom::{bounds, contact, cooked_shape, manifold};
 use klotho_world::WorldView;
 
 use crate::quant::{pose_and_residual, vel3};
@@ -15,20 +15,23 @@ use crate::quant::{pose_and_residual, vel3};
 const SUBSTEPS: u32 = 8;
 const ITERS: u32 = 8;
 const GRAVITY_MM_PER_TICK2: f32 = 2.725;
-const INV_MASS: f32 = 1.0;
+const MD_PER_RADIAN: f32 = 57_295.78;
+const ANGULAR_POSITION_SCALE: f32 = 0.02;
 
 struct Body {
     sigil: Sigil,
     local: AabbMm,
     hull: BlobId,
+    kind: ShapeKind,
     x: [f32; 3],
     v: [f32; 3],
-    yaw: YawMd,
-    pitch: YawMd,
-    roll: YawMd,
-    yaw_rate: i32,
-    pitch_rate: i32,
-    roll_rate: i32,
+    angle_md: [f32; 3],
+    omega_md: [f32; 3],
+    inv_mass: f32,
+    inv_inertia: [f32; 3],
+    center_of_mass: klotho_core::IVec3,
+    friction: f32,
+    restitution: f32,
     prev: PoseMm,
 }
 
@@ -37,11 +40,17 @@ struct Contact {
     b: Option<usize>,
     static_local: Option<AabbMm>,
     static_pose: Option<PoseMm>,
+    static_kind: Option<ShapeKind>,
+    static_friction: Option<f32>,
+    static_restitution: Option<f32>,
 }
 
 struct Occupancy {
     local: AabbMm,
+    kind: ShapeKind,
     pose: PoseMm,
+    friction: f32,
+    restitution: f32,
 }
 
 /// One island solve. Residuals are per emitted pose (max-axis mm).
@@ -82,23 +91,24 @@ pub fn solve_island(island: u16, view: &WorldView<'_>) -> SolveOut {
     for _ in 0..SUBSTEPS {
         for b in &mut bodies {
             b.v[1] -= GRAVITY_MM_PER_TICK2 * dt;
+        }
+        let impact_v: Vec<[f32; 3]> = bodies.iter().map(|b| b.v).collect();
+        for b in &mut bodies {
             b.x[0] += b.v[0] * dt;
             b.x[1] += b.v[1] * dt;
             b.x[2] += b.v[2] * dt;
+            for axis in 0..3 {
+                b.angle_md[axis] += b.omega_md[axis] * dt;
+            }
         }
-        let x0: Vec<[f32; 3]> = bodies.iter().map(|b| b.x).collect();
         let contacts = build_contacts(&bodies, &statics);
         for _ in 0..ITERS {
             for c in &contacts {
                 apply_contact(&mut bodies, c);
             }
         }
-        for (i, b) in bodies.iter_mut().enumerate() {
-            if dt > 0.0 {
-                b.v[0] = (b.x[0] - x0[i][0]) / dt;
-                b.v[1] = (b.x[1] - x0[i][1]) / dt;
-                b.v[2] = (b.x[2] - x0[i][2]) / dt;
-            }
+        for c in &contacts {
+            apply_velocity_contact(&mut bodies, c, &impact_v);
         }
         fill_support(&bodies, &contacts, &mut last_support);
     }
@@ -126,6 +136,10 @@ fn collect_bodies(island: u16, view: &WorldView<'_>) -> Vec<Body> {
         if view.attach_parent(s).is_some() {
             continue;
         }
+        let physics = view.body_physics(s);
+        if physics.mode != BodyMode::Dynamic || !physics.is_valid() {
+            continue;
+        }
         let Some(pose) = view.pose(s) else {
             continue;
         };
@@ -146,6 +160,12 @@ fn collect_bodies(island: u16, view: &WorldView<'_>) -> Vec<Body> {
             v[1] += req.lin.y as f32;
             v[2] += req.lin.z as f32;
         }
+        let mut omega_md = [yaw_rate as f32, pitch_rate as f32, roll_rate as f32];
+        if let Some(req) = view.phys_req(s) {
+            omega_md[0] += req.ang.y as f32;
+            omega_md[1] += req.ang.x as f32;
+            omega_md[2] += req.ang.z as f32;
+        }
         // Steer writes PHYS_REQ on the driver; only the Relic parent is a body.
         for child in view.loci() {
             if view.attach_parent(child) != Some(s) {
@@ -161,14 +181,16 @@ fn collect_bodies(island: u16, view: &WorldView<'_>) -> Vec<Body> {
             sigil: s,
             local,
             hull: view.hull_id(s).unwrap_or(BlobId::ZERO),
+            kind: physics.shape,
             x: [pose.x.0 as f32, pose.y.0 as f32, pose.z.0 as f32],
             v,
-            yaw: pose.yaw,
-            pitch: pose.pitch,
-            roll: pose.roll,
-            yaw_rate,
-            pitch_rate,
-            roll_rate,
+            angle_md: [pose.yaw.0 as f32, pose.pitch.0 as f32, pose.roll.0 as f32],
+            omega_md,
+            inv_mass: mass_properties(local, physics).0,
+            inv_inertia: mass_properties(local, physics).1,
+            center_of_mass: physics.center_of_mass,
+            friction: f32::from(physics.friction_permille) / 1_000.0,
+            restitution: f32::from(physics.restitution_permille) / 1_000.0,
             prev: pose,
         });
     }
@@ -187,13 +209,21 @@ fn collect_statics(view: &WorldView<'_>, bodies: &[Body]) -> Vec<Occupancy> {
         let Some(pose) = trunc_pose(b) else {
             continue;
         };
-        let Ok(shape) = Shape::oriented_box(b.local) else {
+        let Ok(shape) = cooked_shape(b.kind, b.local) else {
             continue;
         };
         let Ok(aabb) = bounds(shape, pose) else {
             continue;
         };
-        for s in view.space_candidates(aabb, false) {
+        let mut future = pose;
+        future.x.0 = future.x.0.saturating_add(b.v[0].floor() as i32);
+        future.y.0 = future
+            .y
+            .0
+            .saturating_add((b.v[1] - GRAVITY_MM_PER_TICK2).floor() as i32);
+        future.z.0 = future.z.0.saturating_add(b.v[2].floor() as i32);
+        let query = bounds(shape, future).map_or(aabb, |end| aabb.swept_union(end));
+        for s in view.space_candidates(query, false) {
             if skip.contains(&s) || !seen.insert(s) {
                 continue;
             }
@@ -206,14 +236,23 @@ fn collect_statics(view: &WorldView<'_>, bodies: &[Body]) -> Vec<Occupancy> {
             let Some(pose) = view.pose(s) else {
                 continue;
             };
-            out.push(Occupancy { local, pose });
+            let physics = view.body_physics(s);
+            out.push(Occupancy {
+                local,
+                kind: physics.shape,
+                pose,
+                friction: f32::from(physics.friction_permille) / 1_000.0,
+                restitution: f32::from(physics.restitution_permille) / 1_000.0,
+            });
         }
     }
     out
 }
 
 fn is_occupancy(view: &WorldView<'_>, s: Sigil) -> bool {
-    s.kind() == Some(LocusKind::Place) || view.opaque_closed(s)
+    s.kind() == Some(LocusKind::Place)
+        || view.opaque_closed(s)
+        || view.body_physics(s).mode != BodyMode::Dynamic
 }
 
 fn build_contacts(bodies: &[Body], statics: &[Occupancy]) -> Vec<Contact> {
@@ -226,6 +265,9 @@ fn build_contacts(bodies: &[Body], statics: &[Occupancy]) -> Vec<Contact> {
                     b: Some(j),
                     static_local: None,
                     static_pose: None,
+                    static_kind: None,
+                    static_friction: None,
+                    static_restitution: None,
                 });
             }
         }
@@ -236,6 +278,9 @@ fn build_contacts(bodies: &[Body], statics: &[Occupancy]) -> Vec<Contact> {
                     b: None,
                     static_local: Some(st.local),
                     static_pose: Some(st.pose),
+                    static_kind: Some(st.kind),
+                    static_friction: Some(st.friction),
+                    static_restitution: Some(st.restitution),
                 });
             }
         }
@@ -244,26 +289,75 @@ fn build_contacts(bodies: &[Body], statics: &[Occupancy]) -> Vec<Contact> {
 }
 
 fn trunc_pose(b: &Body) -> Option<PoseMm> {
-    pose_and_residual(b.x[0], b.x[1], b.x[2], b.yaw, b.pitch, b.roll).map(|(p, _)| p)
+    let attitude = quantized_attitude(b)?;
+    pose_and_residual(
+        b.x[0],
+        b.x[1],
+        b.x[2],
+        attitude[0],
+        attitude[1],
+        attitude[2],
+    )
+    .map(|(p, _)| p)
+}
+
+fn quantized_attitude(b: &Body) -> Option<[YawMd; 3]> {
+    let mut out = [YawMd::ZERO; 3];
+    for (i, value) in b.angle_md.into_iter().enumerate() {
+        if !value.is_finite() || value < i32::MIN as f32 || value > i32::MAX as f32 {
+            return None;
+        }
+        out[i] = YawMd(value.floor() as i32);
+    }
+    Some(out)
+}
+
+fn mass_properties(local: AabbMm, physics: BodyPhysics) -> (f32, [f32; 3]) {
+    let sx = (local.max.x - local.min.x).unsigned_abs().max(1) as f32;
+    let sy = (local.max.y - local.min.y).unsigned_abs().max(1) as f32;
+    let sz = (local.max.z - local.min.z).unsigned_abs().max(1) as f32;
+    // Uniform canonical density. The common factor cancels in contact pairs;
+    // retaining volume still gives different bodies different mass/inertia.
+    let mass = if physics.mass_grams == 0 {
+        (sx * sy * sz / 1_000.0).max(1.0)
+    } else {
+        physics.mass_grams as f32
+    };
+    let derived = [
+        mass * (sy * sy + sz * sz) / 12.0,
+        mass * (sx * sx + sz * sz) / 12.0,
+        mass * (sx * sx + sy * sy) / 12.0,
+    ];
+    let inertia: [f32; 3] = core::array::from_fn(|i| {
+        if physics.inertia_diag[i] == 0 {
+            derived[i]
+        } else {
+            physics.inertia_diag[i] as f32
+        }
+    });
+    (
+        1.0 / mass,
+        [1.0 / inertia[0], 1.0 / inertia[1], 1.0 / inertia[2]],
+    )
 }
 
 fn geom_overlap(a: &Body, b: Option<&Body>, st: Option<&Occupancy>) -> bool {
     let Some(pa) = trunc_pose(a) else {
         return false;
     };
-    let Ok(sa) = Shape::oriented_box(a.local) else {
+    let Ok(sa) = cooked_shape(a.kind, a.local) else {
         return false;
     };
     let (sb, pb) = if let Some(other) = b {
         let Some(p) = trunc_pose(other) else {
             return false;
         };
-        let Ok(s) = Shape::oriented_box(other.local) else {
+        let Ok(s) = cooked_shape(other.kind, other.local) else {
             return false;
         };
         (s, p)
     } else if let Some(occ) = st {
-        let Ok(s) = Shape::oriented_box(occ.local) else {
+        let Ok(s) = cooked_shape(occ.kind, occ.local) else {
             return false;
         };
         (s, occ.pose)
@@ -280,9 +374,22 @@ fn apply_contact(bodies: &mut [Body], c: &Contact) {
     if depth <= 0.0 {
         return;
     }
-    let wa = INV_MASS;
-    let wb = if c.b.is_some() { INV_MASS } else { 0.0 };
-    let w = wa + wb;
+    let ai = c.a;
+    let wa = bodies[ai].inv_mass;
+    let wb = c.b.map_or(0.0, |j| bodies[j].inv_mass);
+    let point = contact_point(bodies, c).unwrap_or(bodies[ai].x);
+    let ra = sub3(point, body_center(&bodies[ai]));
+    let rb =
+        c.b.map(|j| sub3(point, body_center(&bodies[j])))
+            .unwrap_or([0.0; 3]);
+    let ang_a = if c.b.is_some() {
+        angular_weight(ra, n, bodies[ai].inv_inertia)
+    } else {
+        0.0
+    };
+    let ang_b =
+        c.b.map_or(0.0, |j| angular_weight(rb, n, bodies[j].inv_inertia));
+    let w = wa + wb + ang_a + ang_b;
     if w <= 0.0 {
         return;
     }
@@ -292,29 +399,186 @@ fn apply_contact(bodies: &mut [Body], c: &Contact) {
         wa * dlambda * n[1],
         wa * dlambda * n[2],
     ];
-    let ai = c.a;
     bodies[ai].x[0] += corr[0];
     bodies[ai].x[1] += corr[1];
     bodies[ai].x[2] += corr[2];
+    // Static occupancy has no authored contact patch in A04. Applying a
+    // centroid witness as torque would invent energy on a perfectly flat
+    // floor; dynamic pairs do have a stable two-body lever arm.
+    if c.b.is_some() {
+        apply_angular_position(&mut bodies[ai], ra, n, dlambda);
+    }
     if let Some(j) = c.b {
         bodies[j].x[0] -= wb * dlambda * n[0];
         bodies[j].x[1] -= wb * dlambda * n[1];
         bodies[j].x[2] -= wb * dlambda * n[2];
+        apply_angular_position(&mut bodies[j], rb, [-n[0], -n[1], -n[2]], dlambda);
     }
+}
+
+fn contact_point(bodies: &[Body], c: &Contact) -> Option<[f32; 3]> {
+    let pa = trunc_pose(&bodies[c.a])?;
+    let sa = cooked_shape(bodies[c.a].kind, bodies[c.a].local).ok()?;
+    let (sb, pb) = if let Some(j) = c.b {
+        (
+            cooked_shape(bodies[j].kind, bodies[j].local).ok()?,
+            trunc_pose(&bodies[j])?,
+        )
+    } else {
+        (
+            cooked_shape(c.static_kind?, c.static_local?).ok()?,
+            c.static_pose?,
+        )
+    };
+    let patch = manifold(sa, pa, sb, pb).ok().flatten()?;
+    let (sum, n) = patch
+        .as_slice()
+        .iter()
+        .fold(([0i64; 3], 0i64), |(mut sum, n), hit| {
+            sum[0] += i64::from(hit.point.x);
+            sum[1] += i64::from(hit.point.y);
+            sum[2] += i64::from(hit.point.z);
+            (sum, n + 1)
+        });
+    Some([
+        sum[0] as f32 / n as f32,
+        sum[1] as f32 / n as f32,
+        sum[2] as f32 / n as f32,
+    ])
+}
+
+fn angular_weight(r: [f32; 3], n: [f32; 3], inv_i: [f32; 3]) -> f32 {
+    let rn = cross3(r, n);
+    rn[0] * rn[0] * inv_i[0] + rn[1] * rn[1] * inv_i[1] + rn[2] * rn[2] * inv_i[2]
+}
+
+fn body_center(body: &Body) -> [f32; 3] {
+    let offset = quantized_attitude(body)
+        .map(|a| rotate(body.center_of_mass, a[0], a[1], a[2]))
+        .unwrap_or(body.center_of_mass);
+    [
+        body.x[0] + offset.x as f32,
+        body.x[1] + offset.y as f32,
+        body.x[2] + offset.z as f32,
+    ]
+}
+
+fn apply_angular_position(body: &mut Body, r: [f32; 3], n: [f32; 3], lambda: f32) {
+    let torque = cross3(r, n);
+    // Solver axes are x=pitch, y=yaw, z=roll; Projection stores yaw first.
+    body.angle_md[0] +=
+        torque[1] * body.inv_inertia[1] * lambda * MD_PER_RADIAN * ANGULAR_POSITION_SCALE;
+    body.angle_md[1] +=
+        torque[0] * body.inv_inertia[0] * lambda * MD_PER_RADIAN * ANGULAR_POSITION_SCALE;
+    body.angle_md[2] +=
+        torque[2] * body.inv_inertia[2] * lambda * MD_PER_RADIAN * ANGULAR_POSITION_SCALE;
+}
+
+fn apply_velocity_contact(bodies: &mut [Body], c: &Contact, impact_v: &[[f32; 3]]) {
+    let Some((n, _)) = contact_normal_depth(bodies, c) else {
+        return;
+    };
+    let ai = c.a;
+    let bv = c.b.map_or([0.0; 3], |j| impact_v[j]);
+    let rv = sub3(impact_v[ai], bv);
+    let vn = dot3(rv, n);
+    if vn >= 0.0 {
+        return;
+    }
+    let wa = bodies[ai].inv_mass;
+    let wb = c.b.map_or(0.0, |j| bodies[j].inv_mass);
+    let denom = (wa + wb).max(f32::EPSILON);
+    let (friction, restitution) = contact_material(bodies, c);
+    let impulse_n = -(1.0 + restitution) * vn / denom;
+    let tangent_v = sub3(rv, [n[0] * vn, n[1] * vn, n[2] * vn]);
+    let speed = dot3(tangent_v, tangent_v).sqrt();
+    let tangent = if speed <= f32::EPSILON {
+        [0.0; 3]
+    } else {
+        [
+            tangent_v[0] / speed,
+            tangent_v[1] / speed,
+            tangent_v[2] / speed,
+        ]
+    };
+    let impulse_t = if speed <= f32::EPSILON {
+        0.0
+    } else {
+        (-speed / denom).clamp(-friction * impulse_n, friction * impulse_n)
+    };
+    let impulse = [
+        n[0] * impulse_n + tangent[0] * impulse_t,
+        n[1] * impulse_n + tangent[1] * impulse_t,
+        n[2] * impulse_n + tangent[2] * impulse_t,
+    ];
+    for (axis, impulse_axis) in impulse.into_iter().enumerate() {
+        bodies[ai].v[axis] += impulse_axis * wa;
+        if let Some(j) = c.b {
+            bodies[j].v[axis] -= impulse_axis * wb;
+        }
+    }
+    if let Some(j) = c.b {
+        let point = contact_point(bodies, c).unwrap_or(body_center(&bodies[ai]));
+        let ra = sub3(point, body_center(&bodies[ai]));
+        apply_angular_velocity(&mut bodies[ai], ra, impulse);
+        let rb = sub3(point, body_center(&bodies[j]));
+        apply_angular_velocity(&mut bodies[j], rb, [-impulse[0], -impulse[1], -impulse[2]]);
+    }
+}
+
+fn apply_angular_velocity(body: &mut Body, r: [f32; 3], impulse: [f32; 3]) {
+    let torque = cross3(r, impulse);
+    let delta = [
+        torque[1] * body.inv_inertia[1] * MD_PER_RADIAN,
+        torque[0] * body.inv_inertia[0] * MD_PER_RADIAN,
+        torque[2] * body.inv_inertia[2] * MD_PER_RADIAN,
+    ];
+    for (rate, change) in body.omega_md.iter_mut().zip(delta) {
+        *rate += change.clamp(-100.0, 100.0);
+    }
+}
+
+fn contact_material(bodies: &[Body], c: &Contact) -> (f32, f32) {
+    let a = &bodies[c.a];
+    if let Some(j) = c.b {
+        (
+            a.friction.min(bodies[j].friction),
+            a.restitution.max(bodies[j].restitution),
+        )
+    } else {
+        (
+            a.friction.min(c.static_friction.unwrap_or(0.9)),
+            a.restitution.max(c.static_restitution.unwrap_or(0.0)),
+        )
+    }
+}
+
+fn sub3(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+}
+fn dot3(a: [f32; 3], b: [f32; 3]) -> f32 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+fn cross3(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
 }
 
 fn contact_normal_depth(bodies: &[Body], c: &Contact) -> Option<([f32; 3], f32)> {
     let pa = trunc_pose(&bodies[c.a])?;
-    let sa = Shape::oriented_box(bodies[c.a].local).ok()?;
+    let sa = cooked_shape(bodies[c.a].kind, bodies[c.a].local).ok()?;
     let (sb, pb) = if let Some(j) = c.b {
         (
-            Shape::oriented_box(bodies[j].local).ok()?,
+            cooked_shape(bodies[j].kind, bodies[j].local).ok()?,
             trunc_pose(&bodies[j])?,
         )
     } else {
         let local = c.static_local?;
         let pose = c.static_pose?;
-        (Shape::oriented_box(local).ok()?, pose)
+        (cooked_shape(c.static_kind?, local).ok()?, pose)
     };
     let hit = contact(sa, pa, sb, pb).ok().flatten()?;
     let s = 32767.0;
@@ -390,9 +654,18 @@ fn emit(
     let mut residuals_mm = Vec::with_capacity(bodies.len());
     let mut rejected_non_finite = Vec::new();
     for (i, b) in bodies.iter().enumerate() {
-        let Some((pose, residual)) =
-            pose_and_residual(b.x[0], b.x[1], b.x[2], b.yaw, b.pitch, b.roll)
-        else {
+        let Some(attitude) = quantized_attitude(b) else {
+            rejected_non_finite.push(b.sigil);
+            continue;
+        };
+        let Some((pose, residual)) = pose_and_residual(
+            b.x[0],
+            b.x[1],
+            b.x[2],
+            attitude[0],
+            attitude[1],
+            attitude[2],
+        ) else {
             rejected_non_finite.push(b.sigil);
             continue;
         };
@@ -403,14 +676,14 @@ fn emit(
         let hint = hits_closed_oriented(view, b.sigil, b.local, b.prev, pose);
         let mut witness = HullWitness::new(b.sigil, pose, hint);
         witness.epoch = view.epoch();
-        witness.shape = ShapeKind::OrientedBox;
+        witness.shape = b.kind;
         deltas.push(BodyDelta {
             mover: b.sigil,
             pose,
             vel,
-            yaw_rate: b.yaw_rate,
-            pitch_rate: b.pitch_rate,
-            roll_rate: b.roll_rate,
+            yaw_rate: b.omega_md[0].floor() as i32,
+            pitch_rate: b.omega_md[1].floor() as i32,
+            roll_rate: b.omega_md[2].floor() as i32,
             sleep_ticks: 0,
             hull: b.hull,
             witness,
@@ -446,7 +719,7 @@ fn hits_closed_oriented(
     prev: PoseMm,
     pose: PoseMm,
 ) -> bool {
-    let Ok(shape) = Shape::oriented_box(local) else {
+    let Ok(shape) = cooked_shape(view.body_physics(mover).shape, local) else {
         return false;
     };
     let Ok(a) = bounds(shape, prev) else {
@@ -467,4 +740,91 @@ fn hits_closed_oriented(
         }
     }
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use klotho_core::{AabbMm, BlobId, BodyPhysics, IVec3, PoseMm, ShapeKind, Sigil};
+
+    use super::{Body, Contact, apply_velocity_contact, mass_properties};
+
+    fn cube() -> AabbMm {
+        AabbMm::new(
+            IVec3 {
+                x: -200,
+                y: -200,
+                z: -200,
+            },
+            IVec3 {
+                x: 200,
+                y: 200,
+                z: 200,
+            },
+        )
+    }
+
+    #[test]
+    fn canonical_mass_and_inertia_change_solver_weights() {
+        let light = BodyPhysics {
+            mass_grams: 1_000,
+            inertia_diag: [10_000; 3],
+            ..BodyPhysics::default()
+        };
+        let heavy = BodyPhysics {
+            mass_grams: 10_000,
+            inertia_diag: [100_000; 3],
+            ..BodyPhysics::default()
+        };
+        let (light_m, light_i) = mass_properties(cube(), light);
+        let (heavy_m, heavy_i) = mass_properties(cube(), heavy);
+        assert!(light_m > heavy_m);
+        assert!(light_i.into_iter().zip(heavy_i).all(|(a, b)| a > b));
+    }
+
+    fn body(sigil: Sigil, x: [f32; 3], v: [f32; 3]) -> Body {
+        let physics = BodyPhysics::default();
+        let (inv_mass, inv_inertia) = mass_properties(cube(), physics);
+        Body {
+            sigil,
+            local: cube(),
+            hull: BlobId::ZERO,
+            kind: ShapeKind::OrientedBox,
+            x,
+            v,
+            angle_md: [0.0; 3],
+            omega_md: [0.0; 3],
+            inv_mass,
+            inv_inertia,
+            center_of_mass: IVec3::ZERO,
+            friction: 0.9,
+            restitution: 0.0,
+            prev: PoseMm::default(),
+        }
+    }
+
+    #[test]
+    fn off_center_impact_produces_angular_impulse() {
+        let a = Sigil::from_raw(1);
+        let b = Sigil::from_raw(2);
+        let mut bodies = vec![
+            body(a, [0.0, 200.0, 0.0], [40.0, 0.0, 0.0]),
+            body(b, [350.0, 0.0, 0.0], [0.0; 3]),
+        ];
+        let impact = bodies.iter().map(|body| body.v).collect::<Vec<_>>();
+        apply_velocity_contact(
+            &mut bodies,
+            &Contact {
+                a: 0,
+                b: Some(1),
+                static_local: None,
+                static_pose: None,
+                static_kind: None,
+                static_friction: None,
+                static_restitution: None,
+            },
+            &impact,
+        );
+        assert!(bodies[0].omega_md.iter().any(|rate| rate.abs() > 0.01));
+        assert!(bodies[1].omega_md.iter().any(|rate| rate.abs() > 0.01));
+    }
 }

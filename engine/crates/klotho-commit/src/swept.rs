@@ -73,14 +73,16 @@ pub fn check_phys_body(
     if witness.epoch != view.epoch() {
         return Err(RejectReason::StaleEpoch);
     }
-    if witness.shape != ShapeKind::OrientedBox {
+    if !witness.shape.is_dynamic() {
         return Err(RejectReason::WitnessMismatch);
+    }
+    if witness.shape != view.body_physics(mover).shape {
+        return Err(RejectReason::WrongHull);
     }
     let Some(local) = view.hull(mover) else {
         return Ok(false);
     };
-    let shape =
-        cooked_shape(ShapeKind::OrientedBox, local).map_err(|_| RejectReason::WitnessMismatch)?;
+    let shape = cooked_shape(witness.shape, local).map_err(|_| RejectReason::WitnessMismatch)?;
     let prev = view.pose(mover).unwrap_or(proposed);
     let start_b = bounds(shape, prev).map_err(|_| RejectReason::WitnessMismatch)?;
     let end_b = bounds(shape, proposed).map_err(|_| RejectReason::WitnessMismatch)?;

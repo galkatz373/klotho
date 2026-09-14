@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Active — PHYS-A01–A03 landed; PHYS-A04 next |
+| Status | Active — PHYS-A01–A04 landed; PHYS-A05 next |
 | Date | 2026-09-14 |
 | Scope | Production 3D physics, character resolution, vehicles, destruction, and animation-driven contact |
 | Preserves | Canon + Intent + Trace + Projection; K21 atomic commit; crate firewalls |
@@ -369,7 +369,7 @@ Each PR leaves the tree green and preserves existing non-Phys goldens.
 3. **PHYS-A03 — Shared geometry and oriented primitives — landed**
    Land the shared dependency boundary, oriented boxes, spheres, capsules, casts, and witness validation.
 
-4. **PHYS-A04 — Convex/compound contact and CCD**
+4. **PHYS-A04 — Convex/compound contact and CCD — landed**
    Add convex and compound hulls, stable manifolds, friction, restitution, mass/inertia, angular response, and thin-wall goldens.
 
 5. **PHYS-A05 — Static terrain and constraints**

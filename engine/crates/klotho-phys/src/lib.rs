@@ -88,8 +88,8 @@ mod tests {
     use klotho_canon::cook_diffs;
     use klotho_commit::{BodyDelta, CommitKernel, Proposal};
     use klotho_core::{
-        AabbMm, BlobId, Budget, Hash, HullWitness, IVec3, LocusKind, Mm, NO_ISLAND, PhysRequest,
-        PlayerId, PoseMm, RejectReason, Sigil, Tick, Vel3, VelFx, YawMd,
+        AabbMm, BlobId, BodyPhysics, Budget, Hash, HullWitness, IVec3, LocusKind, Mm, NO_ISLAND,
+        PhysRequest, PlayerId, PoseMm, RejectReason, Sigil, Tick, Vel3, VelFx, YawMd,
     };
     use klotho_ir::{CanonDiff, Rel, from_ron};
     use klotho_motion::Motion;
@@ -163,6 +163,15 @@ mod tests {
     fn empty_world() -> World {
         let d: Vec<CanonDiff> = from_ron("[]").unwrap();
         World::new(Arc::new(cook_diffs(&d).unwrap()), Hash::ZERO)
+    }
+
+    fn world_with_physics(bindings: &[(Sigil, BodyPhysics)]) -> World {
+        let d: Vec<CanonDiff> = from_ron("[]").unwrap();
+        let mut canon = cook_diffs(&d).unwrap();
+        for &(locus, body) in bindings {
+            assert!(canon.bind_physics(locus, body));
+        }
+        World::new(Arc::new(canon), Hash::ZERO)
     }
 
     fn plant_crate(k: &mut CommitKernel, s: Sigil, y: i32, sleep: u16) {
@@ -323,7 +332,9 @@ mod tests {
                     .view()
                     .posed_hull(bottom)
                     .is_some_and(|h| h.min.y <= 4),
-            "bottom lost the floor"
+            "bottom lost the floor: pose={:?} support={:?}",
+            k.world().view().pose(bottom),
+            k.world().view().support(bottom)
         );
         let hb = k.world().view().posed_hull(bottom).unwrap();
         let hm = k.world().view().posed_hull(mid).unwrap();
@@ -553,6 +564,68 @@ mod tests {
             !part.iter().any(|(_, m)| m.contains(&s)),
             "cleared phys_req must not keep seeding: {part:?}"
         );
+    }
+
+    #[test]
+    fn angular_request_integrates_authoritative_attitude() {
+        let mut k = CommitKernel::new(empty_world());
+        let _floor = plant_floor(&mut k);
+        let s = relic(1);
+        plant_crate(&mut k, s, 800, 0);
+        k.world_mut()
+            .set_phys_req(
+                s,
+                PhysRequest {
+                    lin: IVec3::ZERO,
+                    ang: IVec3 {
+                        x: 2_000,
+                        y: 3_000,
+                        z: 4_000,
+                    },
+                },
+            )
+            .unwrap();
+        k.partition();
+        let mut phys = Phys;
+        let d = k.step(Tick(1), Budget::HEARTH, &mut [&mut phys]).unwrap();
+        assert!(d.rejects.is_empty(), "{d:?}");
+        let pose = k.world().view().pose(s).unwrap();
+        assert_eq!(
+            (pose.yaw.0, pose.pitch.0, pose.roll.0),
+            (3_000, 2_000, 4_000)
+        );
+        assert_eq!(k.world().view().rates(s), Some((3_000, 2_000, 4_000)));
+    }
+
+    #[test]
+    fn canonical_restitution_produces_repeatable_bounce() {
+        fn run() -> i32 {
+            let bouncy = BodyPhysics {
+                restitution_permille: 800,
+                ..BodyPhysics::default()
+            };
+            let mut k = CommitKernel::new(world_with_physics(&[(relic(1), bouncy)]));
+            let _floor = plant_floor(&mut k);
+            let s = relic(1);
+            plant_crate(&mut k, s, 0, 0);
+            k.world_mut()
+                .set_vel(
+                    s,
+                    Vel3::new(VelFx::ZERO, VelFx::from_mm_per_tick(-20), VelFx::ZERO),
+                    0,
+                )
+                .unwrap();
+            k.partition();
+            assert_eq!(k.world().view().body_physics(s).restitution_permille, 800);
+            let mut phys = Phys;
+            let d = k.step(Tick(1), Budget::HEARTH, &mut [&mut phys]).unwrap();
+            assert!(d.rejects.is_empty(), "{d:?}");
+            k.world().view().vel(s).unwrap().0.y.0
+        }
+        let a = run();
+        let b = run();
+        assert_eq!(a, b);
+        assert!(a > 0, "restitution should reverse downward velocity: {a}");
     }
 
     #[test]

@@ -2,7 +2,9 @@
 
 use std::sync::Arc;
 
-use klotho_core::{BlobId, Epoch, Hash, HullWitness, IVec3, PoseMm, Sigil, Support, Tick, Vel3};
+use klotho_core::{
+    BlobId, Epoch, Hash, HullWitness, IVec3, PoseMm, ShapeKind, Sigil, Support, Tick, Vel3,
+};
 use klotho_ir::{InferIntent, MindIntent, PlayerIntent};
 use klotho_trace::ProposalKind;
 use klotho_world::PlaceSnap;
@@ -67,6 +69,10 @@ pub struct ContactClaim {
     pub shape_a: BlobId,
     /// Shape binding for `b`.
     pub shape_b: BlobId,
+    /// Cooked shape kind for `a`.
+    pub kind_a: ShapeKind,
+    /// Cooked shape kind for `b`.
+    pub kind_b: ShapeKind,
     /// Deterministic solver feature id.
     pub feature: u16,
     /// Quantized A-side witness. Broad-phase AABB is never enough.

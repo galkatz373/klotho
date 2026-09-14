@@ -1,9 +1,9 @@
 //! Read path. Same API from live `World` and `WorldSnapshot`.
 
-use klotho_canon::{PredStore, RiteId};
+use klotho_canon::{Canon, PredStore, RiteId};
 use klotho_core::{
-    AabbMm, AffordanceId, Epoch, Hash, IVec3, LocusKind, PackedIx, PhysRequest, PoseMm, ResourceId,
-    Sigil, SimLod, Support, Tick, Vel3, frac_cmp,
+    AabbMm, AffordanceId, BodyPhysics, Epoch, Hash, IVec3, LocusKind, PackedIx, PhysRequest,
+    PoseMm, ResourceId, Sigil, SimLod, Support, Tick, Vel3, frac_cmp,
 };
 use klotho_ir::{Channel, Rel};
 
@@ -18,6 +18,7 @@ pub struct WorldView<'a> {
     pub(crate) proj: &'a Projection,
     pub(crate) epoch: Epoch,
     pub(crate) tick: Tick,
+    pub(crate) canon: Option<&'a Canon>,
 }
 
 impl WorldView<'_> {
@@ -36,7 +37,27 @@ impl WorldView<'_> {
     /// Wrap a projection at its Canon epoch and tick.
     #[must_use]
     pub fn at_epoch(proj: &Projection, epoch: Epoch, tick: Tick) -> WorldView<'_> {
-        WorldView { proj, epoch, tick }
+        WorldView {
+            proj,
+            epoch,
+            tick,
+            canon: None,
+        }
+    }
+
+    /// Wrap a live or snapshotted Projection with its frozen Canon.
+    pub(crate) fn with_canon<'a>(
+        proj: &'a Projection,
+        canon: &'a Canon,
+        epoch: Epoch,
+        tick: Tick,
+    ) -> WorldView<'a> {
+        WorldView {
+            proj,
+            epoch,
+            tick,
+            canon: Some(canon),
+        }
     }
 
     /// Canon epoch this view was taken at.
@@ -228,6 +249,14 @@ impl WorldView<'_> {
     #[must_use]
     pub fn hull_id(&self, s: Sigil) -> Option<klotho_core::BlobId> {
         self.proj.hull_id(s)
+    }
+
+    /// Canon-bound body properties, or the frozen default for legacy hulls.
+    #[must_use]
+    pub fn body_physics(&self, s: Sigil) -> BodyPhysics {
+        self.canon
+            .and_then(|canon| canon.body_physics(s))
+            .unwrap_or_default()
     }
 
     /// Local (unposed) hull AABB.

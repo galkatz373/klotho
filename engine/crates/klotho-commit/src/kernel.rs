@@ -879,6 +879,8 @@ fn validate_contact_headers(
         }
         if view.hull_id(claim.a) != Some(claim.shape_a)
             || view.hull_id(claim.b) != Some(claim.shape_b)
+            || view.body_physics(claim.a).shape != claim.kind_a
+            || view.body_physics(claim.b).shape != claim.kind_b
         {
             return Err(RejectReason::WrongHull);
         }
@@ -903,7 +905,9 @@ fn validate_contact_claims(
         if claim.witness.epoch != view.epoch() {
             return Err(RejectReason::StaleEpoch);
         }
-        if claim.witness.shape != klotho_core::ShapeKind::OrientedBox
+        if claim.witness.shape != claim.kind_a
+            || !claim.kind_a.is_dynamic()
+            || !claim.kind_b.is_dynamic()
             || claim.witness.evidence.is_none()
         {
             return Err(RejectReason::WitnessMismatch);
@@ -915,10 +919,10 @@ fn validate_contact_claims(
         klotho_geom::verify_cooked(
             claim.witness,
             view.epoch(),
-            klotho_core::ShapeKind::OrientedBox,
+            claim.kind_a,
             local_a,
             pose_a,
-            klotho_core::ShapeKind::OrientedBox,
+            claim.kind_b,
             local_b,
             pose_b,
         )

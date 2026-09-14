@@ -6,6 +6,23 @@ use crate::shape::{GeomError, Shape};
 
 const FX: i64 = 65_536;
 
+/// Bounded, deterministically ordered contact patch.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default)]
+pub struct ContactManifold {
+    /// Fixed point storage; only the first `len` entries participate.
+    pub points: [QuantizedContact; 4],
+    /// Number of live points.
+    pub len: u8,
+}
+
+impl ContactManifold {
+    /// Live contact points in canonical point order.
+    #[must_use]
+    pub fn as_slice(&self) -> &[QuantizedContact] {
+        &self.points[..usize::from(self.len)]
+    }
+}
+
 /// Conservative world AABB of `shape` at `pose`.
 pub fn bounds(shape: Shape, pose: PoseMm) -> Result<AabbMm, GeomError> {
     match shape {
@@ -45,6 +62,26 @@ pub fn bounds(shape: Shape, pose: PoseMm) -> Result<AabbMm, GeomError> {
                 a.max.wrapping_add(pad),
             ))
         }
+        Shape::Convex { vertices, len } => {
+            let points = convex_points(&vertices, len, pose)?;
+            Ok(points_bounds(&points))
+        }
+        Shape::Compound { parts, len } => {
+            let mut iter = parts.iter().take(usize::from(len));
+            let Some(first) = iter.next() else {
+                return Err(GeomError::Malformed);
+            };
+            let mut out = bounds(first.shape.as_shape(), compose_pose(pose, first.local_pose))?;
+            for part in iter {
+                let child_pose = compose_pose(pose, part.local_pose);
+                out = out.union(bounds(part.shape.as_shape(), child_pose)?);
+            }
+            if out.is_empty() {
+                Err(GeomError::Malformed)
+            } else {
+                Ok(out)
+            }
+        }
     }
 }
 
@@ -66,6 +103,17 @@ pub fn contact(
     pose_b: PoseMm,
 ) -> Result<Option<QuantizedContact>, GeomError> {
     match (a, b) {
+        (Shape::Compound { parts, len }, other) => {
+            compound_contact(parts, len, pose_a, other, pose_b, false)
+        }
+        (other, Shape::Compound { parts, len }) => {
+            compound_contact(parts, len, pose_b, other, pose_a, true)
+        }
+        (Shape::Convex { .. }, Shape::Convex { .. })
+        | (Shape::Convex { .. }, Shape::OrientedBox { .. })
+        | (Shape::OrientedBox { .. }, Shape::Convex { .. }) => {
+            convex_poly_contact(a, pose_a, b, pose_b)
+        }
         (Shape::OrientedBox { local: la }, Shape::OrientedBox { local: lb }) => {
             Ok(obb_obb(la, pose_a, lb, pose_b))
         }
@@ -89,7 +137,226 @@ pub fn contact(
         (Shape::Capsule { .. }, Shape::Sphere { .. }) => {
             Ok(sphere_capsule(b, pose_b, a, pose_a, true))
         }
+        _ => Err(GeomError::Unsupported),
     }
+}
+
+/// Stable contact patch with at most four quantized points.
+pub fn manifold(
+    a: Shape,
+    pose_a: PoseMm,
+    b: Shape,
+    pose_b: PoseMm,
+) -> Result<Option<ContactManifold>, GeomError> {
+    let Some(primary) = contact(a, pose_a, b, pose_b)? else {
+        return Ok(None);
+    };
+    let mut candidates = Vec::new();
+    if let Ok(points) = poly_points(a, pose_a) {
+        let bb = bounds(b, pose_b)?;
+        candidates.extend(points.into_iter().filter(|&p| bb.contains_point(p)));
+    }
+    if let Ok(points) = poly_points(b, pose_b) {
+        let ba = bounds(a, pose_a)?;
+        candidates.extend(points.into_iter().filter(|&p| ba.contains_point(p)));
+    }
+    candidates.push(primary.point);
+    candidates.sort_unstable_by_key(|p| (p.x, p.y, p.z));
+    candidates.dedup();
+    let mut out = ContactManifold::default();
+    for (i, point) in candidates.into_iter().take(4).enumerate() {
+        out.points[i] = QuantizedContact {
+            point,
+            feature: primary.feature.saturating_add(i as u16),
+            ..primary
+        };
+        out.len += 1;
+    }
+    Ok(Some(out))
+}
+
+fn compound_contact(
+    parts: [crate::shape::CompoundPart; crate::shape::MAX_COMPOUND_PARTS],
+    len: u8,
+    compound_pose: PoseMm,
+    other: Shape,
+    other_pose: PoseMm,
+    flip: bool,
+) -> Result<Option<QuantizedContact>, GeomError> {
+    if len == 0 || usize::from(len) > parts.len() {
+        return Err(GeomError::Malformed);
+    }
+    let mut best: Option<QuantizedContact> = None;
+    for (i, part) in parts.iter().take(usize::from(len)).enumerate() {
+        let child_pose = compose_pose(compound_pose, part.local_pose);
+        let mut hit = if flip {
+            contact(other, other_pose, part.shape.as_shape(), child_pose)?
+        } else {
+            contact(part.shape.as_shape(), child_pose, other, other_pose)?
+        };
+        if let Some(ref mut h) = hit {
+            h.feature = ((i as u16) << 8) | (h.feature & 0xff);
+        }
+        if hit.is_some_and(|h| {
+            best.is_none_or(|old| {
+                (h.depth_mm, core::cmp::Reverse(h.feature))
+                    > (old.depth_mm, core::cmp::Reverse(old.feature))
+            })
+        }) {
+            best = hit;
+        }
+    }
+    Ok(best)
+}
+
+fn compose_pose(parent: PoseMm, local: PoseMm) -> PoseMm {
+    let t = posed_point(local.translation(), parent);
+    PoseMm {
+        x: Mm(t.x),
+        y: Mm(t.y),
+        z: Mm(t.z),
+        yaw: YawMd(parent.yaw.0.wrapping_add(local.yaw.0)),
+        pitch: YawMd(parent.pitch.0.wrapping_add(local.pitch.0)),
+        roll: YawMd(parent.roll.0.wrapping_add(local.roll.0)),
+    }
+}
+
+fn convex_points(
+    vertices: &[IVec3; crate::shape::MAX_CONVEX_VERTICES],
+    len: u8,
+    pose: PoseMm,
+) -> Result<Vec<IVec3>, GeomError> {
+    if !(4..=crate::shape::MAX_CONVEX_VERTICES).contains(&usize::from(len)) {
+        return Err(GeomError::Malformed);
+    }
+    Ok(vertices
+        .iter()
+        .take(usize::from(len))
+        .map(|&v| posed_point(v, pose))
+        .collect())
+}
+
+fn poly_points(shape: Shape, pose: PoseMm) -> Result<Vec<IVec3>, GeomError> {
+    match shape {
+        Shape::OrientedBox { local } => Ok(corners(local, pose).to_vec()),
+        Shape::Convex { vertices, len } => convex_points(&vertices, len, pose),
+        _ => Err(GeomError::Unsupported),
+    }
+}
+
+fn points_bounds(points: &[IVec3]) -> AabbMm {
+    let mut iter = points.iter().copied();
+    let Some(first) = iter.next() else {
+        return AabbMm::new(IVec3 { x: 1, y: 1, z: 1 }, IVec3::ZERO);
+    };
+    let mut out = AabbMm::from_point(first);
+    for p in iter {
+        out = out.union(AabbMm::from_point(p));
+    }
+    out
+}
+
+fn convex_poly_contact(
+    a: Shape,
+    pose_a: PoseMm,
+    b: Shape,
+    pose_b: PoseMm,
+) -> Result<Option<QuantizedContact>, GeomError> {
+    let pa = poly_points(a, pose_a)?;
+    let pb = poly_points(b, pose_b)?;
+    let ca = centroid_slice(&pa);
+    let cb = centroid_slice(&pb);
+    let mut axes = Vec::new();
+    axes.extend(pa.iter().map(|&p| p.wrapping_sub(ca)));
+    axes.extend(pb.iter().map(|&p| p.wrapping_sub(cb)));
+    for aw in pa.windows(2) {
+        let ea = aw[1].wrapping_sub(aw[0]);
+        for bw in pb.windows(2) {
+            axes.push(cross_plain(ea, bw[1].wrapping_sub(bw[0])));
+        }
+    }
+    let mut best_depth = i32::MAX;
+    let mut best_axis = IVec3::ZERO;
+    let mut best_feature = 0u16;
+    for (i, axis) in axes.into_iter().enumerate() {
+        if l1(axis) < 2 {
+            continue;
+        }
+        let Some(depth) = interval_overlap_slice(&pa, &pb, axis) else {
+            return Ok(None);
+        };
+        if depth < best_depth {
+            best_depth = depth;
+            best_axis = axis;
+            best_feature = u16::try_from(i).unwrap_or(u16::MAX);
+        }
+    }
+    if best_axis == IVec3::ZERO {
+        return Err(GeomError::Malformed);
+    }
+    Ok(Some(QuantizedContact {
+        point: midpoint(support(&pa, neg(best_axis)), support(&pb, best_axis)),
+        normal: pack_normal(
+            best_axis,
+            if dot_i(ca.wrapping_sub(cb), best_axis) >= 0 {
+                1
+            } else {
+                -1
+            },
+        ),
+        depth_mm: best_depth,
+        feature: best_feature,
+    }))
+}
+
+fn interval_overlap_slice(a: &[IVec3], b: &[IVec3], n: IVec3) -> Option<i32> {
+    let project_one = |points: &[IVec3]| {
+        points.iter().fold((i64::MAX, i64::MIN), |(lo, hi), &p| {
+            let d = dot_i(p, n);
+            (lo.min(d), hi.max(d))
+        })
+    };
+    let (amin, amax) = project_one(a);
+    let (bmin, bmax) = project_one(b);
+    let overlap = amax.min(bmax) - amin.max(bmin);
+    (overlap >= 0).then(|| {
+        let mag = isqrt(dot_i(n, n)).max(1);
+        (overlap / mag).clamp(0, i64::from(i32::MAX)) as i32
+    })
+}
+
+fn centroid_slice(points: &[IVec3]) -> IVec3 {
+    let n = points.len() as i64;
+    let sum = points.iter().fold([0i64; 3], |mut s, p| {
+        s[0] += i64::from(p.x);
+        s[1] += i64::from(p.y);
+        s[2] += i64::from(p.z);
+        s
+    });
+    IVec3 {
+        x: (sum[0] / n) as i32,
+        y: (sum[1] / n) as i32,
+        z: (sum[2] / n) as i32,
+    }
+}
+
+fn cross_plain(a: IVec3, b: IVec3) -> IVec3 {
+    IVec3 {
+        x: (i64::from(a.y) * i64::from(b.z) - i64::from(a.z) * i64::from(b.y))
+            .clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32,
+        y: (i64::from(a.z) * i64::from(b.x) - i64::from(a.x) * i64::from(b.z))
+            .clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32,
+        z: (i64::from(a.x) * i64::from(b.y) - i64::from(a.y) * i64::from(b.x))
+            .clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32,
+    }
+}
+
+fn support(points: &[IVec3], direction: IVec3) -> IVec3 {
+    points
+        .iter()
+        .copied()
+        .max_by_key(|&p| (dot_i(p, direction), p.x, p.y, p.z))
+        .unwrap_or(IVec3::ZERO)
 }
 
 pub(crate) fn posed_point(local: IVec3, pose: PoseMm) -> IVec3 {

@@ -331,11 +331,75 @@ pub enum ShapeKind {
     Heightfield = 6,
 }
 
+/// Canonical rigid-body mode.
+#[repr(u8)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Serialize, Deserialize)]
+pub enum BodyMode {
+    /// Integrated and contact-resolved by Phys.
+    #[default]
+    Dynamic = 0,
+    /// Canon trajectory drives pose; contacts see infinite mass.
+    Kinematic = 1,
+    /// Immutable occupancy; never a dynamic-island member.
+    Static = 2,
+}
+
+/// Canon-bound material and mass properties. Integers keep this configuration
+/// portable; `klotho-phys` alone converts them to its pinned scalar lane.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
+pub struct BodyPhysics {
+    /// Body mode.
+    pub mode: BodyMode,
+    /// Canonical cooked collision kind for the bound hull blob.
+    pub shape: ShapeKind,
+    /// Mass in grams. Zero requests deterministic volume-derived mass.
+    pub mass_grams: u32,
+    /// Local centre of mass, millimetres.
+    pub center_of_mass: IVec3,
+    /// Diagonal inertia in gram-square-millimetres. Zero entries are derived.
+    pub inertia_diag: [u64; 3],
+    /// Coulomb coefficient, permille.
+    pub friction_permille: u16,
+    /// Normal restitution, permille.
+    pub restitution_permille: u16,
+}
+
+impl Default for BodyPhysics {
+    fn default() -> Self {
+        Self {
+            mode: BodyMode::Dynamic,
+            shape: ShapeKind::OrientedBox,
+            mass_grams: 0,
+            center_of_mass: IVec3::ZERO,
+            inertia_diag: [0; 3],
+            friction_permille: 900,
+            restitution_permille: 0,
+        }
+    }
+}
+
+impl BodyPhysics {
+    /// Values accepted by the scalar solver. Invalid Canon fails closed.
+    #[must_use]
+    pub const fn is_valid(self) -> bool {
+        self.friction_permille <= 2_000 && self.restitution_permille <= 1_000
+    }
+}
+
 impl ShapeKind {
     /// True for the PHYS-A03 dynamic primitives the kernel can reproduce.
     #[must_use]
     pub const fn is_oriented_primitive(self) -> bool {
         matches!(self, Self::OrientedBox | Self::Sphere | Self::Capsule)
+    }
+
+    /// True for a shape kind legal on an authoritative dynamic body.
+    #[must_use]
+    pub const fn is_dynamic(self) -> bool {
+        matches!(
+            self,
+            Self::OrientedBox | Self::Sphere | Self::Capsule | Self::Convex | Self::Compound
+        )
     }
 }
 
@@ -474,6 +538,25 @@ mod tests {
         assert_eq!(w.epoch, Epoch::ZERO);
         assert_eq!(w.shape, ShapeKind::OrientedBox);
         assert!(w.evidence.is_none());
+    }
+
+    #[test]
+    fn body_physics_material_bounds_fail_closed() {
+        assert!(BodyPhysics::default().is_valid());
+        assert!(
+            !BodyPhysics {
+                friction_permille: 2_001,
+                ..BodyPhysics::default()
+            }
+            .is_valid()
+        );
+        assert!(
+            !BodyPhysics {
+                restitution_permille: 1_001,
+                ..BodyPhysics::default()
+            }
+            .is_valid()
+        );
     }
 
     fn unit_box() -> AabbMm {

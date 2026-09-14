@@ -39,6 +39,7 @@ pub struct WorldSnapshot {
     /// K19 ancestry of this checkpoint.
     pub trace_prefix_hash: Hash,
     blob: Arc<Projection>,
+    canon: Arc<Canon>,
 }
 
 impl World {
@@ -76,7 +77,7 @@ impl World {
     /// Live read view. Same query API as [`WorldSnapshot::view`].
     #[must_use]
     pub fn view(&self) -> WorldView<'_> {
-        WorldView::at_epoch(&self.view, self.epoch, self.tick)
+        WorldView::with_canon(&self.view, &self.canon, self.epoch, self.tick)
     }
 
     /// Frozen Canon.
@@ -134,6 +135,7 @@ impl World {
             canon_hash: self.canon_hash,
             trace_prefix_hash: self.trace.prefix_hash(),
             blob: Arc::new(self.view.clone()),
+            canon: Arc::clone(&self.canon),
         });
         self.snaps[i] = Some(Arc::clone(&snap));
         self.snap_i = i;
@@ -173,7 +175,7 @@ impl WorldSnapshot {
     /// Same query API as [`World::view`].
     #[must_use]
     pub fn view(&self) -> WorldView<'_> {
-        WorldView::at_epoch(&self.blob, self.epoch, self.tick)
+        WorldView::with_canon(&self.blob, &self.canon, self.epoch, self.tick)
     }
 
     /// Apply the state changes represented by a committed Trace suffix.
@@ -194,6 +196,7 @@ impl WorldSnapshot {
             canon_hash: self.canon_hash,
             trace_prefix_hash: fold_prefix(self.trace_prefix_hash, suffix),
             blob: Arc::new(projection),
+            canon: Arc::clone(&self.canon),
         }
     }
 
@@ -231,6 +234,7 @@ impl WorldSnapshot {
             canon_hash,
             trace_prefix_hash,
             blob: Arc::new(blob),
+            canon: Arc::new(Canon::default()),
         })
     }
 

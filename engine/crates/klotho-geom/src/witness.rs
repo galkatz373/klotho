@@ -49,7 +49,7 @@ pub fn verify_contact(
     if witness.epoch != live_epoch {
         return Err(GeomError::Malformed);
     }
-    if !witness.shape.is_oriented_primitive() {
+    if !witness.shape.is_dynamic() {
         return Err(GeomError::Unsupported);
     }
     let Some(claimed) = witness.evidence else {

@@ -70,6 +70,7 @@ KAI-18 — multimodal quality evaluation: aligned captures, pinned SSIM/LPIPS pl
 KAI-19 — reference/optimized whole-title cook with predicate folding/interning, stable table and Place/SKU plans, Trace-equivalence fallback, debug source maps, and authoring-free ship packages.
 KAI-20 — Tapestry data-only thirty-minute, eight-Place vertical route with integrated production evidence and optimized desktop packages.
 KAI-21 — Brocade 100-Place/10k-change parallel-content, incremental-cook, review-capacity, binary-lock, sampling, and package-scale gate.
+KAI-22 — Desktop platform services and release factory: signed Windows/Linux/macOS candidates, achievements, cloud-save conflict recovery, crash/replay/symbols, ratings/privacy, and named human signing.
 
 ## Build
 
@@ -118,9 +119,11 @@ klotho/
   studio/crates/klotho-pattern/ # Deterministic pattern expansion and standard library v1
   studio/examples/spindle-slice/ # KAI-09 data-only request, approved kit, and journeys
   studio/examples/tapestry-slice/ # KAI-20 data-only eight-Place vertical-route acceptance
+  studio/examples/desktop-release/ # KAI-22 signed desktop candidate, ratings, privacy, runbook
   studio/crates/klotho-dcc/ # glTF 2.0 cook → quantized KLTH mesh/hull/clip
   engine/crates/klotho-stream/   # Place shard pager, KCAS volumes (mmap after header validate)
   engine/crates/klotho-save/     # epoch compaction, K19/K48 I/O
+  engine/crates/klotho-release/  # KAI-22 desktop platform services and release factory
   engine/crates/klotho-platform/ # window, OS events, Look accum, audio device (no world mutation)
   engine/crates/klotho-render/   # wgpu clustered meshes, Presenter, render thread
   engine/crates/klotho-audio/    # grains from Trace, one bed, integer mix, device output

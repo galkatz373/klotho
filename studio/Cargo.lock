@@ -1086,6 +1086,7 @@ dependencies = [
  "klotho-manifest",
  "klotho-pattern",
  "klotho-prove",
+ "klotho-release",
  "klotho-render",
  "klotho-runtime",
  "klotho-save",
@@ -1237,6 +1238,23 @@ version = "0.1.0"
 dependencies = [
  "blake3",
  "klotho-core",
+ "serde",
+]
+
+[[package]]
+name = "klotho-release"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "klotho-canon",
+ "klotho-compile",
+ "klotho-core",
+ "klotho-ir",
+ "klotho-prove",
+ "klotho-save",
+ "klotho-trace",
+ "klotho-world",
+ "ron",
  "serde",
 ]
 

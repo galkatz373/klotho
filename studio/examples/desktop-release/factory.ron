@@ -1,0 +1,5 @@
+(
+    skus: ["win-d3d12-high", "linux-vulkan-high", "mac-metal-high"],
+    claim_level: "P0",
+    offline: true,
+)

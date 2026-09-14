@@ -1,0 +1,7 @@
+(
+    install: "Install the signed desktop package for the SKU.",
+    update: "Apply the next signed candidate then verify journeys.",
+    rollback: "Restore the previous signed candidate and save.",
+    crash: "Map the crash bundle through the symbol store and replay.",
+    support: "Collect the signed evidence bundle and privacy-gated logs.",
+)

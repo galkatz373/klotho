@@ -36,6 +36,7 @@ serde.workspace = true
 [dev-dependencies]
 klotho-runtime.workspace = true
 klotho-save.workspace = true
+klotho-release.workspace = true
 
 [lints]
 workspace = true

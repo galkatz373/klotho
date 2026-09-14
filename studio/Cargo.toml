@@ -36,6 +36,7 @@ klotho-render = { path = "../engine/crates/klotho-render" }
 klotho-ui = { path = "../engine/crates/klotho-ui" }
 klotho-runtime = { path = "../engine/crates/klotho-runtime" }
 klotho-save = { path = "../engine/crates/klotho-save" }
+klotho-release = { path = "../engine/crates/klotho-release" }
 klotho-schema = { path = "crates/klotho-schema" }
 klotho-author = { path = "crates/klotho-author" }
 klotho-ai = { path = "crates/klotho-ai" }

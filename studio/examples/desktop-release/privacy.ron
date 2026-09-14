@@ -1,0 +1,9 @@
+(
+    consent: true,
+    crash_upload_consent: true,
+    export_route: "export.klotho",
+    deletion_route: "delete.klotho",
+    retention_days: 30,
+    regional: { "eu": true, "jp": true },
+    telemetry_aggregated: true,
+)

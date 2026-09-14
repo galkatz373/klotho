@@ -1,0 +1,5 @@
+(
+    id: "desktop.offline-critical",
+    steps: ["install", "play", "save", "achievement", "quit"],
+    network: false,
+)

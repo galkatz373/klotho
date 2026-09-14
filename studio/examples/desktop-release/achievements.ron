@@ -1,0 +1,4 @@
+[
+    (id: "opened", kind: Learned(fact: 1)),
+    (id: "knows-key", kind: KnowsRel),
+]

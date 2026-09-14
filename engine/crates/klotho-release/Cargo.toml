@@ -1,0 +1,30 @@
+[package]
+name = "klotho-release"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Klotho desktop platform services and release factory (KAI-22)"
+readme = false
+publish = false
+
+[dependencies]
+ed25519-dalek = { workspace = true }
+klotho-canon.workspace = true
+klotho-compile.workspace = true
+klotho-core.workspace = true
+klotho-ir.workspace = true
+klotho-prove.workspace = true
+klotho-save.workspace = true
+klotho-trace.workspace = true
+klotho-world.workspace = true
+ron.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+hearth-slice = { path = "../../examples/hearth-slice" }
+klotho-runtime = { path = "../klotho-runtime" }
+
+[lints]
+workspace = true

@@ -258,6 +258,24 @@ if [[ -d engine/crates/klotho-save ]]; then
   fi
 fi
 
+if [[ -d engine/crates/klotho-release ]]; then
+  if command -v rg >/dev/null 2>&1; then
+    if rg -n --glob '!target/**' 'klotho_commit::|klotho-commit|klotho_sim::|klotho-sim|klotho_infer::|klotho-infer|klotho_ai::|klotho-ai|klotho_eval::|klotho-eval' engine/crates/klotho-release; then
+      echo "klotho-release must not import commit, sim, infer, ai, or eval" >&2
+      fail=1
+    fi
+  else
+    if grep -RIn -E 'klotho_commit::|klotho-commit|klotho_sim::|klotho-sim|klotho_infer::|klotho-infer|klotho_ai::|klotho-ai|klotho_eval::|klotho-eval' engine/crates/klotho-release >/dev/null 2>&1; then
+      echo "klotho-release must not import commit, sim, infer, ai, or eval" >&2
+      fail=1
+    fi
+  fi
+  if grep -E 'mutate' engine/crates/klotho-release/Cargo.toml >/dev/null 2>&1; then
+    echo "klotho-release must not enable klotho-world/mutate" >&2
+    fail=1
+  fi
+fi
+
 # The world write path (`mutate`) may be enabled in [dependencies] solely by
 # klotho-commit. Any crate may enable it in [dev-dependencies] for tests:
 # dev-dependencies never ship, so that cannot unify the write API into

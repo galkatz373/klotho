@@ -1309,6 +1309,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "klotho-release"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "hearth-slice",
+ "klotho-canon",
+ "klotho-compile",
+ "klotho-core",
+ "klotho-ir",
+ "klotho-prove",
+ "klotho-runtime",
+ "klotho-save",
+ "klotho-trace",
+ "klotho-world",
+ "ron",
+ "serde",
+]
+
+[[package]]
 name = "klotho-render"
 version = "0.1.0"
 dependencies = [

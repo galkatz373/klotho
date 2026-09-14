@@ -79,8 +79,8 @@ pub fn check_phys_body(
     let Some(local) = view.hull(mover) else {
         return Ok(false);
     };
-    let shape = cooked_shape(ShapeKind::OrientedBox, local)
-        .map_err(|_| RejectReason::WitnessMismatch)?;
+    let shape =
+        cooked_shape(ShapeKind::OrientedBox, local).map_err(|_| RejectReason::WitnessMismatch)?;
     let prev = view.pose(mover).unwrap_or(proposed);
     let start_b = bounds(shape, prev).map_err(|_| RejectReason::WitnessMismatch)?;
     let end_b = bounds(shape, proposed).map_err(|_| RejectReason::WitnessMismatch)?;
@@ -97,8 +97,8 @@ pub fn check_phys_body(
         let Some(opose) = view.pose(s) else {
             continue;
         };
-        let occ = cooked_shape(ShapeKind::OrientedBox, ol)
-            .map_err(|_| RejectReason::WitnessMismatch)?;
+        let occ =
+            cooked_shape(ShapeKind::OrientedBox, ol).map_err(|_| RejectReason::WitnessMismatch)?;
         let hit = swept_against(shape, prev, proposed, occ, opose)
             .map_err(|_| RejectReason::WitnessMismatch)?;
         if hit.crossing || hit.end_depth_mm > CONTACT_SLOP_MM {

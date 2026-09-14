@@ -7,7 +7,9 @@
 
 use std::collections::BTreeMap;
 
-use klotho_core::{AabbMm, LocusKind, MAX_ISLAND_SIZE, MAX_ISLANDS, ShapeKind, Sigil, SimLod, Vel3};
+use klotho_core::{
+    AabbMm, LocusKind, MAX_ISLAND_SIZE, MAX_ISLANDS, ShapeKind, Sigil, SimLod, Vel3,
+};
 use klotho_ir::Rel;
 use klotho_world::WorldView;
 

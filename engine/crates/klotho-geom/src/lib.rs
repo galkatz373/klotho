@@ -80,8 +80,16 @@ mod tests {
         let pose = pose_at(10, 0, -4, 0);
         let sb = bounds(sphere, pose).unwrap();
         let cb = bounds(capsule, pose).unwrap();
-        assert!(sb.contains_point(IVec3 { x: 10, y: 400, z: -4 }));
-        assert!(cb.contains_point(IVec3 { x: 10, y: 400, z: -4 }));
+        assert!(sb.contains_point(IVec3 {
+            x: 10,
+            y: 400,
+            z: -4
+        }));
+        assert!(cb.contains_point(IVec3 {
+            x: 10,
+            y: 400,
+            z: -4
+        }));
         assert!(!sb.is_empty());
         assert!(!cb.is_empty());
     }
@@ -146,10 +154,7 @@ mod tests {
     fn malformed_shapes_fail_closed() {
         let empty = AabbMm::new(IVec3 { x: 5, y: 0, z: 0 }, IVec3 { x: 1, y: 0, z: 0 });
         assert_eq!(Shape::oriented_box(empty), Err(GeomError::Malformed));
-        assert_eq!(
-            Shape::sphere(IVec3::ZERO, -1),
-            Err(GeomError::Malformed)
-        );
+        assert_eq!(Shape::sphere(IVec3::ZERO, -1), Err(GeomError::Malformed));
         assert_eq!(
             Shape::capsule(IVec3::ZERO, 10, -4),
             Err(GeomError::Malformed)
@@ -208,7 +213,10 @@ mod tests {
         let dir = IVec3 { x: 20, y: 0, z: 0 };
         let geom = raycast(shape, pose, origin, dir).unwrap().expect("hit");
         let aabb = local.segment_hit(origin, dir).expect("aabb");
-        assert_eq!(frac_cmp(geom.0, geom.1, aabb.0, aabb.1), core::cmp::Ordering::Equal);
+        assert_eq!(
+            frac_cmp(geom.0, geom.1, aabb.0, aabb.1),
+            core::cmp::Ordering::Equal
+        );
     }
 
     #[test]

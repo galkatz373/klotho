@@ -99,9 +99,10 @@ pub fn cooked_shape(kind: ShapeKind, local: AabbMm) -> Result<Shape, GeomError> 
             let half_height = hy.saturating_sub(radius).max(0);
             Shape::capsule(centre, radius, half_height)
         }
-        ShapeKind::Convex | ShapeKind::Compound | ShapeKind::TriangleMesh | ShapeKind::Heightfield => {
-            Err(GeomError::Unsupported)
-        }
+        ShapeKind::Convex
+        | ShapeKind::Compound
+        | ShapeKind::TriangleMesh
+        | ShapeKind::Heightfield => Err(GeomError::Unsupported),
     }
 }
 

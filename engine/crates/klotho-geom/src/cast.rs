@@ -33,7 +33,12 @@ pub fn raycast(
         Shape::Sphere {
             local_center,
             radius_mm,
-        } => Ok(ray_sphere(posed_point(local_center, pose), radius_mm, origin, dir)),
+        } => Ok(ray_sphere(
+            posed_point(local_center, pose),
+            radius_mm,
+            origin,
+            dir,
+        )),
         Shape::Capsule { .. } => {
             let b = bounds(shape, pose)?;
             Ok(b.segment_hit(origin, dir))
@@ -67,19 +72,19 @@ pub fn swept_against(
     let expanded = minkowski_sum(occ, a0);
     let origin = aabb_center(a0);
     let dir = aabb_center(a1).wrapping_sub(origin);
-    let (enter_n, enter_d, exit_n, exit_d, origin_inside) = match slab_interval(expanded, origin, dir)
-    {
-        None => {
-            return Ok(SweptHit {
-                enter_n: 0,
-                enter_d: 1,
-                start_depth_mm: start_depth,
-                end_depth_mm: end_depth,
-                crossing: false,
-            });
-        }
-        Some(v) => v,
-    };
+    let (enter_n, enter_d, exit_n, exit_d, origin_inside) =
+        match slab_interval(expanded, origin, dir) {
+            None => {
+                return Ok(SweptHit {
+                    enter_n: 0,
+                    enter_d: 1,
+                    start_depth_mm: start_depth,
+                    end_depth_mm: end_depth,
+                    crossing: false,
+                });
+            }
+            Some(v) => v,
+        };
     let start_free = start_depth == 0 && !a0.intersects(occ);
     let went_through = origin_inside
         || (frac_cmp(enter_n, enter_d, 0, 1) != core::cmp::Ordering::Less
@@ -88,7 +93,9 @@ pub fn swept_against(
     let end_free = end_depth == 0 && !a1.intersects(occ);
     let crossing = start_free
         && went_through
-        && (end_depth > CONTACT_SLOP_MM || (exited_before_end && end_free) || end_depth > start_depth);
+        && (end_depth > CONTACT_SLOP_MM
+            || (exited_before_end && end_free)
+            || end_depth > start_depth);
     Ok(SweptHit {
         enter_n,
         enter_d,
@@ -186,10 +193,34 @@ fn slab_interval(aabb: AabbMm, origin: IVec3, dir: IVec3) -> Option<(i64, i64, i
     let mut tmin_d = 1i64;
     let mut tmax_n = 1i64;
     let mut tmax_d = 1i64;
-    if !clip(origin.x, dir.x, aabb.min.x, aabb.max.x, &mut tmin_n, &mut tmin_d, &mut tmax_n, &mut tmax_d)
-        || !clip(origin.y, dir.y, aabb.min.y, aabb.max.y, &mut tmin_n, &mut tmin_d, &mut tmax_n, &mut tmax_d)
-        || !clip(origin.z, dir.z, aabb.min.z, aabb.max.z, &mut tmin_n, &mut tmin_d, &mut tmax_n, &mut tmax_d)
-    {
+    if !clip(
+        origin.x,
+        dir.x,
+        aabb.min.x,
+        aabb.max.x,
+        &mut tmin_n,
+        &mut tmin_d,
+        &mut tmax_n,
+        &mut tmax_d,
+    ) || !clip(
+        origin.y,
+        dir.y,
+        aabb.min.y,
+        aabb.max.y,
+        &mut tmin_n,
+        &mut tmin_d,
+        &mut tmax_n,
+        &mut tmax_d,
+    ) || !clip(
+        origin.z,
+        dir.z,
+        aabb.min.z,
+        aabb.max.z,
+        &mut tmin_n,
+        &mut tmin_d,
+        &mut tmax_n,
+        &mut tmax_d,
+    ) {
         return None;
     }
     if frac_cmp(tmin_n, tmin_d, tmax_n, tmax_d) == core::cmp::Ordering::Greater {

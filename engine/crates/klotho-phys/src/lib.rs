@@ -394,10 +394,9 @@ mod tests {
         });
         let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
         assert!(
-            d.rejects.iter().any(|(_, r)| matches!(
-                r,
-                RejectReason::WitnessMismatch | RejectReason::Law(_)
-            )),
+            d.rejects
+                .iter()
+                .any(|(_, r)| matches!(r, RejectReason::WitnessMismatch | RejectReason::Law(_))),
             "{d:?}"
         );
         assert_eq!(k.world().view().pose(player).unwrap().z, Mm(1400));

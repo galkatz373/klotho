@@ -1,8 +1,6 @@
 //! Bounds, distance, and contact for PHYS-A03 primitives.
 
-use klotho_core::{
-    AabbMm, IVec3, Mm, PoseMm, QuantizedContact, YawMd, rotate, rotation_axes,
-};
+use klotho_core::{AabbMm, IVec3, Mm, PoseMm, QuantizedContact, YawMd, rotate, rotation_axes};
 
 use crate::shape::{GeomError, Shape};
 
@@ -85,8 +83,12 @@ pub fn contact(
         (Shape::OrientedBox { local }, Shape::Capsule { .. }) => {
             Ok(capsule_obb(b, pose_b, local, pose_a, true))
         }
-        (Shape::Sphere { .. }, Shape::Capsule { .. }) => Ok(sphere_capsule(a, pose_a, b, pose_b, false)),
-        (Shape::Capsule { .. }, Shape::Sphere { .. }) => Ok(sphere_capsule(b, pose_b, a, pose_a, true)),
+        (Shape::Sphere { .. }, Shape::Capsule { .. }) => {
+            Ok(sphere_capsule(a, pose_a, b, pose_b, false))
+        }
+        (Shape::Capsule { .. }, Shape::Sphere { .. }) => {
+            Ok(sphere_capsule(b, pose_b, a, pose_a, true))
+        }
     }
 }
 
@@ -342,7 +344,9 @@ fn midpoint(a: IVec3, b: IVec3) -> IVec3 {
 }
 
 fn dot_i(a: IVec3, b: IVec3) -> i64 {
-    i64::from(a.x) * i64::from(b.x) + i64::from(a.y) * i64::from(b.y) + i64::from(a.z) * i64::from(b.z)
+    i64::from(a.x) * i64::from(b.x)
+        + i64::from(a.y) * i64::from(b.y)
+        + i64::from(a.z) * i64::from(b.z)
 }
 
 fn sphere_sphere(a: Shape, pa: PoseMm, b: Shape, pb: PoseMm) -> Option<QuantizedContact> {
@@ -433,7 +437,10 @@ fn sphere_obb(
                 z: ((i64::from(d.z) * FX) / dist) as i32,
             }
         };
-        (n, (i64::from(radius_mm) - dist).clamp(0, i64::from(i32::MAX)) as i32)
+        (
+            n,
+            (i64::from(radius_mm) - dist).clamp(0, i64::from(i32::MAX)) as i32,
+        )
     };
     let sign = if flip { -1 } else { 1 };
     Some(QuantizedContact {
@@ -458,7 +465,14 @@ fn closest_on_obb(world: IVec3, local: AabbMm, pose: PoseMm) -> (IVec3, bool, IV
     let cy = ly.clamp(local.min.y, local.max.y);
     let cz = lz.clamp(local.min.z, local.max.z);
     let inside = cx == lx && cy == ly && cz == lz;
-    let closest = posed_point(IVec3 { x: cx, y: cy, z: cz }, pose);
+    let closest = posed_point(
+        IVec3 {
+            x: cx,
+            y: cy,
+            z: cz,
+        },
+        pose,
+    );
     let (ax, ay, az) = rotation_axes(pose.yaw, pose.pitch, pose.roll);
     let inward = nearest_face_axis(lx, ly, lz, local, ax, ay, az);
     (closest, inside, inward)
@@ -506,15 +520,13 @@ fn neg(v: IVec3) -> IVec3 {
 fn to_local(world: IVec3, pose: PoseMm) -> (i32, i32, i32) {
     let d = world.wrapping_sub(pose.translation());
     let (ax, ay, az) = rotation_axes(pose.yaw, pose.pitch, pose.roll);
-    (
-        dot_axis(d, ax),
-        dot_axis(d, ay),
-        dot_axis(d, az),
-    )
+    (dot_axis(d, ax), dot_axis(d, ay), dot_axis(d, az))
 }
 
 fn dot_axis(v: IVec3, a: IVec3) -> i32 {
-    ((i64::from(v.x) * i64::from(a.x) + i64::from(v.y) * i64::from(a.y) + i64::from(v.z) * i64::from(a.z))
+    ((i64::from(v.x) * i64::from(a.x)
+        + i64::from(v.y) * i64::from(a.y)
+        + i64::from(v.z) * i64::from(a.z))
         >> 16) as i32
 }
 

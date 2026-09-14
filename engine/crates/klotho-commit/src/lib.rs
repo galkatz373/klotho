@@ -44,8 +44,9 @@ mod tests {
 
     use klotho_canon::cook_diffs;
     use klotho_core::{
-        AabbMm, BlobId, Budget, Epoch, Hash, HullWitness, IVec3, LocusKind, Mm, NO_ISLAND, PlayerId,
-        PoseMm, QuantizedContact, ResourceId, ShapeKind, Sigil, Tick, Vel3, YawMd, rotate_xz,
+        AabbMm, BlobId, Budget, Epoch, Hash, HullWitness, IVec3, LocusKind, Mm, NO_ISLAND,
+        PlayerId, PoseMm, QuantizedContact, ResourceId, ShapeKind, Sigil, Tick, Vel3, YawMd,
+        rotate_xz,
     };
     use klotho_ir::{
         Agency, Analog, CanonDiff, Channel, IntentTarget, MindIntent, PlayerIntent, Rel, Verb,
@@ -1029,7 +1030,10 @@ mod tests {
             breaks: Vec::new(),
         });
         let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
-        assert!(d.rejects.is_empty(), "yaw0 must admit reproduced contact: {d:?}");
+        assert!(
+            d.rejects.is_empty(),
+            "yaw0 must admit reproduced contact: {d:?}"
+        );
 
         let mut k90 = empty_kernel();
         {
@@ -1045,7 +1049,11 @@ mod tests {
         }
         let mut fake = HullWitness::new(long, pa90, false);
         fake.evidence = Some(QuantizedContact {
-            point: IVec3 { x: 300, y: 50, z: 0 },
+            point: IVec3 {
+                x: 300,
+                y: 50,
+                z: 0,
+            },
             normal: (32767, 0, 0),
             depth_mm: 1,
             feature: 0,

@@ -7,7 +7,7 @@
 
 use std::collections::BTreeMap;
 
-use klotho_core::{LocusKind, MAX_ISLAND_SIZE, MAX_ISLANDS, Sigil, SimLod, Vel3};
+use klotho_core::{AabbMm, LocusKind, MAX_ISLAND_SIZE, MAX_ISLANDS, ShapeKind, Sigil, SimLod, Vel3};
 use klotho_ir::Rel;
 use klotho_world::WorldView;
 
@@ -43,12 +43,12 @@ pub(crate) fn partition_with_caps(
     max_islands: u16,
     max_size: u16,
 ) -> Partition {
-    let mut hulls: Vec<(Sigil, klotho_core::AabbMm)> = Vec::new();
+    let mut hulls: Vec<(Sigil, AabbMm)> = Vec::new();
     for s in view.loci() {
         if !is_phys_body(view, s) {
             continue;
         }
-        if let Some(aabb) = view.posed_hull(s) {
+        if let Some(aabb) = posed_bounds(view, s) {
             hulls.push((s, aabb));
         }
     }
@@ -116,7 +116,7 @@ pub(crate) fn partition_with_caps(
                 if j == u {
                     continue;
                 }
-                let Some(other) = view.posed_hull(o) else {
+                let Some(other) = posed_bounds(view, o) else {
                     continue;
                 };
                 if !aabb.intersects(other) {
@@ -166,6 +166,13 @@ pub(crate) fn partition_with_caps(
         omitted_too_large,
         omitted_too_many,
     }
+}
+
+fn posed_bounds(view: &WorldView<'_>, s: Sigil) -> Option<AabbMm> {
+    let local = view.hull(s)?;
+    let pose = view.pose(s)?;
+    let shape = klotho_geom::cooked_shape(ShapeKind::OrientedBox, local).ok()?;
+    klotho_geom::bounds(shape, pose).ok()
 }
 
 /// Actor, or a Relic that is not idle kinematic scenery.

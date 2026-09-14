@@ -12,6 +12,7 @@ publish = false
 [dependencies]
 klotho-canon.workspace = true
 klotho-core.workspace = true
+klotho-geom.workspace = true
 klotho-ir.workspace = true
 klotho-trace.workspace = true
 klotho-world = { workspace = true, features = ["mutate"] }

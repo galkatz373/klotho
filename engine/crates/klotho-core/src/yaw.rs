@@ -40,6 +40,77 @@ pub fn rotate_xz(v: IVec3, yaw: YawMd) -> IVec3 {
     }
 }
 
+/// 16.16 images of the local X, Y, Z axes after `Ry(yaw) * Rx(pitch) * Rz(roll)`.
+#[must_use]
+pub fn rotation_axes(yaw: YawMd, pitch: YawMd, roll: YawMd) -> (IVec3, IVec3, IVec3) {
+    let (cy, sy) = cos_sin_deg(yaw.normalize().0.div_euclid(1000));
+    let pitch_deg = pitch.0.div_euclid(1000).clamp(-90, 90);
+    let (cp, sp) = cos_sin_pitch_deg(pitch_deg);
+    let (cr, sr) = cos_sin_deg(roll.normalize().0.div_euclid(1000));
+    let ry = [[cy, 0, sy], [0, COS[0], 0], [-sy, 0, cy]];
+    // +pitch lifts +Z toward +Y so look_offset and rotate agree.
+    let rx = [[COS[0], 0, 0], [0, cp, sp], [0, -sp, cp]];
+    let rz = [[cr, -sr, 0], [sr, cr, 0], [0, 0, COS[0]]];
+    let r = mat_mul(ry, mat_mul(rx, rz));
+    (
+        IVec3 {
+            x: r[0][0],
+            y: r[1][0],
+            z: r[2][0],
+        },
+        IVec3 {
+            x: r[0][1],
+            y: r[1][1],
+            z: r[2][1],
+        },
+        IVec3 {
+            x: r[0][2],
+            y: r[1][2],
+            z: r[2][2],
+        },
+    )
+}
+
+/// Rotate a millimetre vector by the pose attitude. Pitch and roll of zero
+/// match [`rotate_xz`] bit-for-bit.
+#[must_use]
+pub fn rotate(v: IVec3, yaw: YawMd, pitch: YawMd, roll: YawMd) -> IVec3 {
+    if pitch.0 == 0 && roll.0 == 0 {
+        return rotate_xz(v, yaw);
+    }
+    let (ax, ay, az) = rotation_axes(yaw, pitch, roll);
+    apply_axes(v, ax, ay, az)
+}
+
+fn mat_mul(a: [[i32; 3]; 3], b: [[i32; 3]; 3]) -> [[i32; 3]; 3] {
+    let mut c = [[0; 3]; 3];
+    for i in 0..3 {
+        for j in 0..3 {
+            c[i][j] = fx_mul(a[i][0], b[0][j])
+                .wrapping_add(fx_mul(a[i][1], b[1][j]))
+                .wrapping_add(fx_mul(a[i][2], b[2][j]));
+        }
+    }
+    c
+}
+
+fn fx_mul(a: i32, b: i32) -> i32 {
+    ((i64::from(a) * i64::from(b)) >> 16) as i32
+}
+
+pub(crate) fn apply_axes(v: IVec3, ax: IVec3, ay: IVec3, az: IVec3) -> IVec3 {
+    IVec3 {
+        x: fx_axis(v.x, ax.x, v.y, ay.x, v.z, az.x),
+        y: fx_axis(v.x, ax.y, v.y, ay.y, v.z, az.y),
+        z: fx_axis(v.x, ax.z, v.y, ay.z, v.z, az.z),
+    }
+}
+
+fn fx_axis(x: i32, ax: i32, y: i32, ay: i32, z: i32, az: i32) -> i32 {
+    ((i64::from(x) * i64::from(ax) + i64::from(y) * i64::from(ay) + i64::from(z) * i64::from(az))
+        >> 16) as i32
+}
+
 fn cos_sin_deg(deg: i32) -> (i32, i32) {
     let d = deg.rem_euclid(360);
     let q = d / 90;
@@ -104,6 +175,31 @@ mod tests {
             z: 0,
         };
         assert_eq!(rotate_xz(v, YawMd(45_000)).y, 1800);
+    }
+
+    #[test]
+    fn rotate_zero_pitch_roll_matches_rotate_xz() {
+        let v = IVec3 {
+            x: 400,
+            y: 90,
+            z: -250,
+        };
+        for yaw in [0, 45_000, 90_000, 180_000, 270_000, -15_000] {
+            assert_eq!(
+                rotate(v, YawMd(yaw), YawMd::ZERO, YawMd::ZERO),
+                rotate_xz(v, YawMd(yaw)),
+                "yaw={yaw}"
+            );
+        }
+    }
+
+    #[test]
+    fn quarter_pitch_lifts_forward() {
+        let v = IVec3 { x: 0, y: 0, z: 20 };
+        let r = rotate(v, YawMd::ZERO, YawMd(YawMd::QUARTER_TURN), YawMd::ZERO);
+        assert_eq!(r.x, 0);
+        assert_eq!(r.y, 20);
+        assert_eq!(r.z, 0);
     }
 
     #[test]

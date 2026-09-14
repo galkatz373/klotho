@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Active — PHYS-A01–A02 landed; PHYS-A03 next |
+| Status | Active — PHYS-A01–A03 landed; PHYS-A04 next |
 | Date | 2026-09-14 |
 | Scope | Production 3D physics, character resolution, vehicles, destruction, and animation-driven contact |
 | Preserves | Canon + Intent + Trace + Projection; K21 atomic commit; crate firewalls |
@@ -366,7 +366,7 @@ Each PR leaves the tree green and preserves existing non-Phys goldens.
 2. **PHYS-A02 — Atomic `PhysIsland` admission — landed**
    Add bounded batch proposal, complete write sets, full speculative apply, deterministic Law order, rejection tests, and legacy migration.
 
-3. **PHYS-A03 — Shared geometry and oriented primitives**
+3. **PHYS-A03 — Shared geometry and oriented primitives — landed**
    Land the shared dependency boundary, oriented boxes, spheres, capsules, casts, and witness validation.
 
 4. **PHYS-A04 — Convex/compound contact and CCD**

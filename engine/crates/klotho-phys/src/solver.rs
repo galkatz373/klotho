@@ -1,13 +1,14 @@
-//! Sequential positional correction on AABB rigid bodies. Contacts rebuilt each substep.
+//! Sequential positional correction on oriented boxes. Contacts rebuilt each substep.
 
 use std::collections::BTreeSet;
 
 use klotho_commit::{BodyDelta, Proposal};
 use klotho_core::{
-    AabbMm, BlobId, HullWitness, IVec3, LocusKind, NO_ISLAND, PoseMm, Sigil, Support, Vel3, VelFx,
-    YawMd,
+    AabbMm, BlobId, HullWitness, LocusKind, NO_ISLAND, PoseMm, ShapeKind, Sigil, Support, Vel3,
+    VelFx, YawMd,
 };
-use klotho_world::{WorldView, world_aabb};
+use klotho_geom::{Shape, bounds, contact};
+use klotho_world::WorldView;
 
 use crate::quant::{pose_and_residual, vel3};
 
@@ -15,52 +16,6 @@ const SUBSTEPS: u32 = 8;
 const ITERS: u32 = 8;
 const GRAVITY_MM_PER_TICK2: f32 = 2.725;
 const INV_MASS: f32 = 1.0;
-
-#[derive(Clone, Copy)]
-struct AabbF {
-    min: [f32; 3],
-    max: [f32; 3],
-}
-
-impl AabbF {
-    fn from_local(local: AabbMm, x: [f32; 3]) -> Self {
-        Self {
-            min: [
-                local.min.x as f32 + x[0],
-                local.min.y as f32 + x[1],
-                local.min.z as f32 + x[2],
-            ],
-            max: [
-                local.max.x as f32 + x[0],
-                local.max.y as f32 + x[1],
-                local.max.z as f32 + x[2],
-            ],
-        }
-    }
-
-    fn centre(self) -> [f32; 3] {
-        [
-            0.5 * (self.min[0] + self.max[0]),
-            0.5 * (self.min[1] + self.max[1]),
-            0.5 * (self.min[2] + self.max[2]),
-        ]
-    }
-
-    fn query_mm(self) -> AabbMm {
-        AabbMm {
-            min: IVec3 {
-                x: self.min[0].floor() as i32 - 1,
-                y: self.min[1].floor() as i32 - 1,
-                z: self.min[2].floor() as i32 - 1,
-            },
-            max: IVec3 {
-                x: self.max[0].ceil() as i32 + 1,
-                y: self.max[1].ceil() as i32 + 1,
-                z: self.max[2].ceil() as i32 + 1,
-            },
-        }
-    }
-}
 
 struct Body {
     sigil: Sigil,
@@ -80,7 +35,13 @@ struct Body {
 struct Contact {
     a: usize,
     b: Option<usize>,
-    static_aabb: Option<AabbF>,
+    static_local: Option<AabbMm>,
+    static_pose: Option<PoseMm>,
+}
+
+struct Occupancy {
+    local: AabbMm,
+    pose: PoseMm,
 }
 
 /// One island solve. Residuals are per emitted pose (max-axis mm).
@@ -215,7 +176,7 @@ fn collect_bodies(island: u16, view: &WorldView<'_>) -> Vec<Body> {
     out
 }
 
-fn collect_statics(view: &WorldView<'_>, bodies: &[Body]) -> Vec<AabbF> {
+fn collect_statics(view: &WorldView<'_>, bodies: &[Body]) -> Vec<Occupancy> {
     let mut skip: BTreeSet<Sigil> = BTreeSet::new();
     for b in bodies {
         skip.insert(b.sigil);
@@ -223,7 +184,15 @@ fn collect_statics(view: &WorldView<'_>, bodies: &[Body]) -> Vec<AabbF> {
     let mut out = Vec::new();
     let mut seen: BTreeSet<Sigil> = BTreeSet::new();
     for b in bodies {
-        let aabb = AabbF::from_local(b.local, b.x).query_mm();
+        let Some(pose) = trunc_pose(b) else {
+            continue;
+        };
+        let Ok(shape) = Shape::oriented_box(b.local) else {
+            continue;
+        };
+        let Ok(aabb) = bounds(shape, pose) else {
+            continue;
+        };
         for s in view.space_candidates(aabb, false) {
             if skip.contains(&s) || !seen.insert(s) {
                 continue;
@@ -231,13 +200,13 @@ fn collect_statics(view: &WorldView<'_>, bodies: &[Body]) -> Vec<AabbF> {
             if !is_occupancy(view, s) {
                 continue;
             }
-            let Some(h) = view.posed_hull(s) else {
+            let Some(local) = view.hull(s) else {
                 continue;
             };
-            out.push(AabbF {
-                min: [h.min.x as f32, h.min.y as f32, h.min.z as f32],
-                max: [h.max.x as f32, h.max.y as f32, h.max.z as f32],
-            });
+            let Some(pose) = view.pose(s) else {
+                continue;
+            };
+            out.push(Occupancy { local, pose });
         }
     }
     out
@@ -247,27 +216,26 @@ fn is_occupancy(view: &WorldView<'_>, s: Sigil) -> bool {
     s.kind() == Some(LocusKind::Place) || view.opaque_closed(s)
 }
 
-fn build_contacts(bodies: &[Body], statics: &[AabbF]) -> Vec<Contact> {
+fn build_contacts(bodies: &[Body], statics: &[Occupancy]) -> Vec<Contact> {
     let mut out = Vec::new();
     for i in 0..bodies.len() {
         for j in (i + 1)..bodies.len() {
-            let a = AabbF::from_local(bodies[i].local, bodies[i].x);
-            let b = AabbF::from_local(bodies[j].local, bodies[j].x);
-            if overlap_n(a, b).is_some() {
+            if geom_overlap(&bodies[i], Some(&bodies[j]), None) {
                 out.push(Contact {
                     a: i,
                     b: Some(j),
-                    static_aabb: None,
+                    static_local: None,
+                    static_pose: None,
                 });
             }
         }
-        let a = AabbF::from_local(bodies[i].local, bodies[i].x);
-        for &st in statics {
-            if overlap_n(a, st).is_some() {
+        for st in statics {
+            if geom_overlap(&bodies[i], None, Some(st)) {
                 out.push(Contact {
                     a: i,
                     b: None,
-                    static_aabb: Some(st),
+                    static_local: Some(st.local),
+                    static_pose: Some(st.pose),
                 });
             }
         }
@@ -275,35 +243,38 @@ fn build_contacts(bodies: &[Body], statics: &[AabbF]) -> Vec<Contact> {
     out
 }
 
-fn overlap_n(a: AabbF, b: AabbF) -> Option<([f32; 3], f32)> {
-    let ox = a.max[0].min(b.max[0]) - a.min[0].max(b.min[0]);
-    let oy = a.max[1].min(b.max[1]) - a.min[1].max(b.min[1]);
-    let oz = a.max[2].min(b.max[2]) - a.min[2].max(b.min[2]);
-    if ox < 0.0 || oy < 0.0 || oz < 0.0 {
-        return None;
-    }
-    let ac = a.centre();
-    let bc = b.centre();
-    if ox <= oy && ox <= oz {
-        let n = if ac[0] >= bc[0] { 1.0 } else { -1.0 };
-        Some(([n, 0.0, 0.0], ox))
-    } else if oy <= oz {
-        let n = if ac[1] >= bc[1] { 1.0 } else { -1.0 };
-        Some(([0.0, n, 0.0], oy))
+fn trunc_pose(b: &Body) -> Option<PoseMm> {
+    pose_and_residual(b.x[0], b.x[1], b.x[2], b.yaw, b.pitch, b.roll).map(|(p, _)| p)
+}
+
+fn geom_overlap(a: &Body, b: Option<&Body>, st: Option<&Occupancy>) -> bool {
+    let Some(pa) = trunc_pose(a) else {
+        return false;
+    };
+    let Ok(sa) = Shape::oriented_box(a.local) else {
+        return false;
+    };
+    let (sb, pb) = if let Some(other) = b {
+        let Some(p) = trunc_pose(other) else {
+            return false;
+        };
+        let Ok(s) = Shape::oriented_box(other.local) else {
+            return false;
+        };
+        (s, p)
+    } else if let Some(occ) = st {
+        let Ok(s) = Shape::oriented_box(occ.local) else {
+            return false;
+        };
+        (s, occ.pose)
     } else {
-        let n = if ac[2] >= bc[2] { 1.0 } else { -1.0 };
-        Some(([0.0, 0.0, n], oz))
-    }
+        return false;
+    };
+    contact(sa, pa, sb, pb).ok().flatten().is_some()
 }
 
 fn apply_contact(bodies: &mut [Body], c: &Contact) {
-    let a_aabb = AabbF::from_local(bodies[c.a].local, bodies[c.a].x);
-    let b_aabb = match (c.b, c.static_aabb) {
-        (Some(j), _) => AabbF::from_local(bodies[j].local, bodies[j].x),
-        (None, Some(st)) => st,
-        (None, None) => return,
-    };
-    let Some((n, depth)) = overlap_n(a_aabb, b_aabb) else {
+    let Some((n, depth)) = contact_normal_depth(bodies, c) else {
         return;
     };
     if depth <= 0.0 {
@@ -332,17 +303,35 @@ fn apply_contact(bodies: &mut [Body], c: &Contact) {
     }
 }
 
+fn contact_normal_depth(bodies: &[Body], c: &Contact) -> Option<([f32; 3], f32)> {
+    let pa = trunc_pose(&bodies[c.a])?;
+    let sa = Shape::oriented_box(bodies[c.a].local).ok()?;
+    let (sb, pb) = if let Some(j) = c.b {
+        (
+            Shape::oriented_box(bodies[j].local).ok()?,
+            trunc_pose(&bodies[j])?,
+        )
+    } else {
+        let local = c.static_local?;
+        let pose = c.static_pose?;
+        (Shape::oriented_box(local).ok()?, pose)
+    };
+    let hit = contact(sa, pa, sb, pb).ok().flatten()?;
+    let s = 32767.0;
+    let n = [
+        f32::from(hit.normal.0) / s,
+        f32::from(hit.normal.1) / s,
+        f32::from(hit.normal.2) / s,
+    ];
+    if !n.into_iter().all(f32::is_finite) {
+        return None;
+    }
+    Some((n, hit.depth_mm as f32))
+}
+
 fn fill_support(bodies: &[Body], contacts: &[Contact], out: &mut [Option<Support>]) {
     for c in contacts {
-        let a_aabb = AabbF::from_local(bodies[c.a].local, bodies[c.a].x);
-        let b_aabb = match c.b {
-            Some(j) => AabbF::from_local(bodies[j].local, bodies[j].x),
-            None => match c.static_aabb {
-                Some(s) => s,
-                None => continue,
-            },
-        };
-        let Some((n, depth)) = overlap_n(a_aabb, b_aabb) else {
+        let Some((n, depth)) = contact_normal_depth(bodies, c) else {
             continue;
         };
         if n[1] <= 0.0 {
@@ -411,9 +400,10 @@ fn emit(
             rejected_non_finite.push(b.sigil);
             continue;
         };
-        let from = world_aabb(b.local, b.prev.translation());
-        let to = world_aabb(b.local, pose.translation());
-        let hint = hits_closed(view, b.sigil, from.swept_union(to));
+        let hint = hits_closed_oriented(view, b.sigil, b.local, b.prev, pose);
+        let mut witness = HullWitness::new(b.sigil, pose, hint);
+        witness.epoch = view.epoch();
+        witness.shape = ShapeKind::OrientedBox;
         deltas.push(BodyDelta {
             mover: b.sigil,
             pose,
@@ -423,7 +413,7 @@ fn emit(
             roll_rate: b.roll_rate,
             sleep_ticks: 0,
             hull: b.hull,
-            witness: HullWitness::new(b.sigil, pose, hint),
+            witness,
             support: support[i],
         });
         residuals_mm.push(residual);
@@ -449,7 +439,23 @@ fn emit(
     }
 }
 
-fn hits_closed(view: &WorldView<'_>, mover: Sigil, swept: AabbMm) -> bool {
+fn hits_closed_oriented(
+    view: &WorldView<'_>,
+    mover: Sigil,
+    local: AabbMm,
+    prev: PoseMm,
+    pose: PoseMm,
+) -> bool {
+    let Ok(shape) = Shape::oriented_box(local) else {
+        return false;
+    };
+    let Ok(a) = bounds(shape, prev) else {
+        return false;
+    };
+    let Ok(b) = bounds(shape, pose) else {
+        return false;
+    };
+    let swept = a.swept_union(b);
     for o in view.space_candidates(swept, true) {
         if o == mover {
             continue;

@@ -12,6 +12,7 @@ publish = false
 [dependencies]
 klotho-commit.workspace = true
 klotho-core.workspace = true
+klotho-geom.workspace = true
 klotho-world.workspace = true
 
 [dev-dependencies]

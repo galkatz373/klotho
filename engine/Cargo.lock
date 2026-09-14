@@ -1133,6 +1133,7 @@ version = "0.1.0"
 dependencies = [
  "klotho-canon",
  "klotho-core",
+ "klotho-geom",
  "klotho-ir",
  "klotho-trace",
  "klotho-world",
@@ -1177,6 +1178,13 @@ dependencies = [
  "klotho-trace",
  "klotho-ui",
  "klotho-world",
+]
+
+[[package]]
+name = "klotho-geom"
+version = "0.1.0"
+dependencies = [
+ "klotho-core",
 ]
 
 [[package]]
@@ -1293,6 +1301,7 @@ dependencies = [
  "klotho-canon",
  "klotho-commit",
  "klotho-core",
+ "klotho-geom",
  "klotho-ir",
  "klotho-motion",
  "klotho-world",

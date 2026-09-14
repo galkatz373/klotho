@@ -38,6 +38,25 @@ check_gameplay_tables studio/crates/klotho-dcc
 check_gameplay_tables studio/crates/klotho-pattern
 check_gameplay_tables studio/crates/klotho-eval
 
+# klotho-geom may depend only on klotho-core (K61).
+if [[ -d engine/crates/klotho-geom ]]; then
+  if command -v rg >/dev/null 2>&1; then
+    if rg -n --glob '!target/**' 'klotho_(commit|world|phys|sim|stream|save|canon)::|klotho-(commit|world|phys|sim|stream|save|canon)' engine/crates/klotho-geom; then
+      echo "klotho-geom must depend on klotho-core only" >&2
+      fail=1
+    fi
+  else
+    if grep -RIn -E 'klotho_(commit|world|phys|sim|stream|save|canon)::|klotho-(commit|world|phys|sim|stream|save|canon)' engine/crates/klotho-geom >/dev/null 2>&1; then
+      echo "klotho-geom must depend on klotho-core only" >&2
+      fail=1
+    fi
+  fi
+  if grep -E 'klotho-(commit|world|phys|sim|stream|save|canon)' engine/crates/klotho-geom/Cargo.toml >/dev/null 2>&1; then
+    echo "klotho-geom Cargo.toml must depend on klotho-core only" >&2
+    fail=1
+  fi
+fi
+
 # klotho-interest may not import commit (K49).
 if command -v rg >/dev/null 2>&1; then
   if rg -n --glob '!target/**' 'klotho_commit::|klotho-commit' engine/crates/klotho-interest; then

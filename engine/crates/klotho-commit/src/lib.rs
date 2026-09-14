@@ -44,8 +44,8 @@ mod tests {
 
     use klotho_canon::cook_diffs;
     use klotho_core::{
-        AabbMm, BlobId, Budget, Hash, HullWitness, IVec3, LocusKind, Mm, NO_ISLAND, PlayerId,
-        PoseMm, ResourceId, Sigil, Tick, Vel3, YawMd, rotate_xz,
+        AabbMm, BlobId, Budget, Epoch, Hash, HullWitness, IVec3, LocusKind, Mm, NO_ISLAND, PlayerId,
+        PoseMm, QuantizedContact, ResourceId, ShapeKind, Sigil, Tick, Vel3, YawMd, rotate_xz,
     };
     use klotho_ir::{
         Agency, Analog, CanonDiff, Channel, IntentTarget, MindIntent, PlayerIntent, Rel, Verb,
@@ -742,7 +742,7 @@ mod tests {
                     members.pop();
                 }
                 3 => {
-                    bodies.push(bodies[0].clone());
+                    bodies.push(bodies[0]);
                 }
                 _ => unreachable!(),
             }
@@ -814,6 +814,293 @@ mod tests {
             );
             assert_eq!(k.world().view().pose(a), Some(start));
         }
+    }
+
+    fn plant_closed(k: &mut CommitKernel, s: Sigil, pose: PoseMm, hull: AabbMm, id: BlobId) {
+        let opaque = k.canon().affordance_id("Opaque");
+        let mut w = k.world_mut();
+        w.insert_locus(s, LocusKind::Relic).unwrap();
+        w.set_hull(s, hull, id).unwrap();
+        w.set_pose(s, pose).unwrap();
+        w.set_island(s, 1, 12).unwrap();
+        if let Some(a) = opaque {
+            w.set_affordance(s, a, true).unwrap();
+        }
+        w.add_rel(s, Rel::LockedBy, s).unwrap();
+    }
+
+    #[test]
+    fn phys_island_resting_contact_is_legal() {
+        let mut k = opaque_kernel();
+        let mover = relic(1);
+        let wall = relic(2);
+        let start = PoseMm::new(Mm(0), Mm(0), Mm(100), YawMd::ZERO);
+        plant_mover(&mut k, mover, start, 0, 0);
+        plant_closed(
+            &mut k,
+            wall,
+            PoseMm::new(Mm(0), Mm(0), Mm(250), YawMd::ZERO),
+            box_xz(400, 2_000, 50),
+            hull_id(2),
+        );
+        k.ingest(phys_island(mover, start, vec![mover]));
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(d.rejects.is_empty(), "{d:?}");
+        assert_eq!(k.world().view().pose(mover), Some(start));
+    }
+
+    #[test]
+    fn phys_island_thin_wall_crossing_fails_closed() {
+        let mut k = opaque_kernel();
+        let mover = relic(1);
+        let wall = relic(2);
+        let start = PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd::ZERO);
+        let end = PoseMm::new(Mm(0), Mm(0), Mm(2_000), YawMd::ZERO);
+        plant_mover(&mut k, mover, start, 0, 0);
+        plant_closed(
+            &mut k,
+            wall,
+            PoseMm::new(Mm(0), Mm(0), Mm(1_000), YawMd::ZERO),
+            AabbMm::new(
+                IVec3 {
+                    x: -10_000,
+                    y: 0,
+                    z: -5,
+                },
+                IVec3 {
+                    x: 10_000,
+                    y: 2_000,
+                    z: 5,
+                },
+            ),
+            hull_id(2),
+        );
+        k.ingest(phys_island(mover, end, vec![mover]));
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert_eq!(
+            d.rejects,
+            vec![(ProposalKind::Phys, RejectReason::WitnessMismatch)]
+        );
+        assert_eq!(k.world().view().pose(mover), Some(start));
+    }
+
+    #[test]
+    fn phys_island_stale_shape_and_epoch_witnesses_fail_closed() {
+        let mover = relic(1);
+        let start = PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd::ZERO);
+        let next = PoseMm::new(Mm(10), Mm(0), Mm(0), YawMd::ZERO);
+        for case in 0..3 {
+            let mut k = empty_kernel();
+            plant_mover(&mut k, mover, start, 0, 0);
+            let mut body = body_delta(mover, next);
+            match case {
+                0 => body.witness.epoch = Epoch(1),
+                1 => body.witness.shape = ShapeKind::Convex,
+                2 => body.hull = hull_id(9),
+                _ => unreachable!(),
+            }
+            k.ingest(Proposal::PhysIsland {
+                epoch: Epoch::ZERO,
+                tick: Tick(1),
+                island: 0,
+                members: vec![mover],
+                bodies: vec![body],
+                contacts: Vec::new(),
+                constraints: Vec::new(),
+                breaks: Vec::new(),
+            });
+            let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+            let want = if case == 0 {
+                RejectReason::StaleEpoch
+            } else if case == 2 {
+                RejectReason::WrongHull
+            } else {
+                RejectReason::WitnessMismatch
+            };
+            assert_eq!(d.rejects, vec![(ProposalKind::Phys, want)], "case {case}");
+            assert_eq!(k.world().view().pose(mover), Some(start));
+        }
+    }
+
+    #[test]
+    fn phys_island_contact_requires_reproduced_evidence_not_aabb() {
+        let mut k = empty_kernel();
+        let a = relic(1);
+        let b = relic(2);
+        let pa = PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd::ZERO);
+        let pb = PoseMm::new(Mm(150), Mm(0), Mm(0), YawMd::ZERO);
+        plant_mover(&mut k, a, pa, 0, 0);
+        plant_mover(&mut k, b, pb, 0, 0);
+        let body_a = body_delta(a, pa);
+        let body_b = body_delta(b, pb);
+        let aabb_only = ContactClaim {
+            a,
+            b,
+            shape_a: hull_id(1),
+            shape_b: hull_id(1),
+            feature: 0,
+            witness: HullWitness::new(a, pa, true),
+        };
+        k.ingest(Proposal::PhysIsland {
+            epoch: Epoch::ZERO,
+            tick: Tick(1),
+            island: 0,
+            members: vec![a, b],
+            bodies: vec![body_a, body_b],
+            contacts: vec![aabb_only],
+            constraints: Vec::new(),
+            breaks: Vec::new(),
+        });
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert_eq!(
+            d.rejects,
+            vec![(ProposalKind::Phys, RejectReason::WitnessMismatch)]
+        );
+        assert_eq!(k.world().view().pose(a), Some(pa));
+        assert_eq!(k.world().view().pose(b), Some(pb));
+    }
+
+    #[test]
+    fn phys_island_rotated_box_changes_admitted_contact() {
+        let local = AabbMm::new(
+            IVec3 {
+                x: -1_000,
+                y: 0,
+                z: -50,
+            },
+            IVec3 {
+                x: 1_000,
+                y: 100,
+                z: 50,
+            },
+        );
+        let other_local = box_xz(50, 100, 50);
+        let long = relic(1);
+        let stub = relic(2);
+        let pa0 = PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd::ZERO);
+        let pa90 = PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(YawMd::QUARTER_TURN));
+        let pb = PoseMm::new(Mm(600), Mm(0), Mm(0), YawMd::ZERO);
+        let shape = klotho_geom::Shape::oriented_box(local).unwrap();
+        let other = klotho_geom::Shape::oriented_box(other_local).unwrap();
+        assert!(
+            klotho_geom::contact(shape, pa0, other, pb)
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            klotho_geom::contact(shape, pa90, other, pb)
+                .unwrap()
+                .is_none()
+        );
+
+        let mut k = empty_kernel();
+        {
+            let mut w = k.world_mut();
+            w.insert_locus(long, LocusKind::Relic).unwrap();
+            w.insert_locus(stub, LocusKind::Relic).unwrap();
+            w.set_hull(long, local, hull_id(1)).unwrap();
+            w.set_hull(stub, other_local, hull_id(1)).unwrap();
+            w.set_pose(long, pa0).unwrap();
+            w.set_pose(stub, pb).unwrap();
+            w.set_island(long, 0, 0).unwrap();
+            w.set_island(stub, 0, 0).unwrap();
+        }
+        let computed = klotho_geom::contact(shape, pa0, other, pb)
+            .unwrap()
+            .expect("yaw0 contact");
+        let mut witness = HullWitness::new(long, pa0, false);
+        witness.evidence = Some(computed);
+        let claim = ContactClaim {
+            a: long,
+            b: stub,
+            shape_a: hull_id(1),
+            shape_b: hull_id(1),
+            feature: computed.feature,
+            witness,
+        };
+        k.ingest(Proposal::PhysIsland {
+            epoch: Epoch::ZERO,
+            tick: Tick(1),
+            island: 0,
+            members: vec![long, stub],
+            bodies: vec![body_delta(long, pa0), body_delta(stub, pb)],
+            contacts: vec![claim],
+            constraints: Vec::new(),
+            breaks: Vec::new(),
+        });
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(d.rejects.is_empty(), "yaw0 must admit reproduced contact: {d:?}");
+
+        let mut k90 = empty_kernel();
+        {
+            let mut w = k90.world_mut();
+            w.insert_locus(long, LocusKind::Relic).unwrap();
+            w.insert_locus(stub, LocusKind::Relic).unwrap();
+            w.set_hull(long, local, hull_id(1)).unwrap();
+            w.set_hull(stub, other_local, hull_id(1)).unwrap();
+            w.set_pose(long, pa90).unwrap();
+            w.set_pose(stub, pb).unwrap();
+            w.set_island(long, 0, 0).unwrap();
+            w.set_island(stub, 0, 0).unwrap();
+        }
+        let mut fake = HullWitness::new(long, pa90, false);
+        fake.evidence = Some(QuantizedContact {
+            point: IVec3 { x: 300, y: 50, z: 0 },
+            normal: (32767, 0, 0),
+            depth_mm: 1,
+            feature: 0,
+        });
+        k90.ingest(Proposal::PhysIsland {
+            epoch: Epoch::ZERO,
+            tick: Tick(1),
+            island: 0,
+            members: vec![long, stub],
+            bodies: vec![body_delta(long, pa90), body_delta(stub, pb)],
+            contacts: vec![ContactClaim {
+                a: long,
+                b: stub,
+                shape_a: hull_id(1),
+                shape_b: hull_id(1),
+                feature: 0,
+                witness: fake,
+            }],
+            constraints: Vec::new(),
+            breaks: Vec::new(),
+        });
+        let d90 = k90.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert_eq!(
+            d90.rejects,
+            vec![(ProposalKind::Phys, RejectReason::WitnessMismatch)]
+        );
+    }
+
+    #[test]
+    fn phys_island_broadphase_order_does_not_change_admission() {
+        let mut k = opaque_kernel();
+        let mover = relic(1);
+        let w0 = relic(2);
+        let w1 = relic(3);
+        let start = PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd::ZERO);
+        plant_mover(&mut k, mover, start, 0, 0);
+        plant_closed(
+            &mut k,
+            w0,
+            PoseMm::new(Mm(-8_000), Mm(0), Mm(0), YawMd::ZERO),
+            box_xz(100, 2_000, 100),
+            hull_id(2),
+        );
+        plant_closed(
+            &mut k,
+            w1,
+            PoseMm::new(Mm(8_000), Mm(0), Mm(0), YawMd::ZERO),
+            box_xz(100, 2_000, 100),
+            hull_id(3),
+        );
+        let next = PoseMm::new(Mm(20), Mm(0), Mm(0), YawMd::ZERO);
+        k.ingest(phys_island(mover, next, vec![mover]));
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(d.rejects.is_empty(), "{d:?}");
+        assert_eq!(k.world().view().pose(mover), Some(next));
     }
 
     #[test]

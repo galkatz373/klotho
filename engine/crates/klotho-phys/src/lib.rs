@@ -394,12 +394,87 @@ mod tests {
         });
         let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
         assert!(
-            d.rejects
-                .iter()
-                .any(|(_, r)| matches!(r, RejectReason::Law(_))),
+            d.rejects.iter().any(|(_, r)| matches!(
+                r,
+                RejectReason::WitnessMismatch | RejectReason::Law(_)
+            )),
             "{d:?}"
         );
         assert_eq!(k.world().view().pose(player).unwrap().z, Mm(1400));
+    }
+
+    #[test]
+    fn rotating_a_box_changes_solver_contact() {
+        let d: Vec<CanonDiff> = from_ron(
+            r#"[AddAffordance(Affordance(id: "Opaque", requires: [], grants: [], conflicts: []))]"#,
+        )
+        .unwrap();
+        let mut k = CommitKernel::new(World::new(Arc::new(cook_diffs(&d).unwrap()), Hash::ZERO));
+        let opaque = k.canon().affordance_id("Opaque").unwrap();
+        let _floor = plant_floor(&mut k);
+        let s = relic(1);
+        let wall = relic(2);
+        let long = AabbMm::new(
+            IVec3 {
+                x: -1_000,
+                y: 0,
+                z: -400,
+            },
+            IVec3 {
+                x: 1_000,
+                y: 400,
+                z: 400,
+            },
+        );
+        let wall_hull = AabbMm::new(
+            IVec3 {
+                x: -50,
+                y: 0,
+                z: -400,
+            },
+            IVec3 {
+                x: 50,
+                y: 2_000,
+                z: 400,
+            },
+        );
+        {
+            let mut w = k.world_mut();
+            w.insert_locus(s, LocusKind::Relic).unwrap();
+            w.set_hull(s, long, hull_id(1)).unwrap();
+            w.set_pose(s, PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd::ZERO))
+                .unwrap();
+            w.set_island(s, 0, 0).unwrap();
+            w.insert_locus(wall, LocusKind::Relic).unwrap();
+            w.set_hull(wall, wall_hull, hull_id(2)).unwrap();
+            w.set_pose(wall, PoseMm::new(Mm(800), Mm(0), Mm(0), YawMd::ZERO))
+                .unwrap();
+            w.set_affordance(wall, opaque, true).unwrap();
+            w.add_rel(wall, Rel::LockedBy, wall).unwrap();
+            w.set_island(wall, 1, 12).unwrap();
+        }
+        k.partition();
+        let island = k.world().view().island(s).unwrap().0;
+        let yaw0 = solve_island(island, &k.world().view());
+        k.world_mut()
+            .set_pose(
+                s,
+                PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(YawMd::QUARTER_TURN)),
+            )
+            .unwrap();
+        k.partition();
+        let island = k.world().view().island(s).unwrap().0;
+        let yaw90 = solve_island(island, &k.world().view());
+        let x0 = match &yaw0.proposals[0] {
+            Proposal::PhysIsland { bodies, .. } => bodies[0].pose.x.0,
+            _ => panic!("expected island"),
+        };
+        let x90 = match &yaw90.proposals[0] {
+            Proposal::PhysIsland { bodies, .. } => bodies[0].pose.x.0,
+            _ => panic!("expected island"),
+        };
+        assert!(x0 < -10, "yaw 0 must be pushed off the wall, x={x0}");
+        assert!(x90.abs() < 8, "yaw 90 must not hit the wall, x={x90}");
     }
 
     #[test]

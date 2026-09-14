@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
     "crates/klotho-core",
+    "crates/klotho-geom",
     "crates/klotho-prove",
     "crates/klotho-ir",
     "crates/klotho-canon",
@@ -52,6 +53,7 @@ repository = "https://github.com/galkatz373/klotho"
 [workspace.dependencies]
 blake3 = "=1.8.7"
 klotho-core = { path = "crates/klotho-core" }
+klotho-geom = { path = "crates/klotho-geom" }
 klotho-prove = { path = "crates/klotho-prove" }
 klotho-ir = { path = "crates/klotho-ir" }
 klotho-canon = { path = "crates/klotho-canon" }

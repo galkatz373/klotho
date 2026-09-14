@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Mm, Sigil, VelFx, YawMd};
+use crate::{Epoch, Mm, Sigil, VelFx, YawMd};
 
 /// Integer 3-vector in millimetres. Y is height.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Serialize, Deserialize)]
@@ -26,6 +26,16 @@ impl IVec3 {
             x: self.x.wrapping_add(rhs.x),
             y: self.y.wrapping_add(rhs.y),
             z: self.z.wrapping_add(rhs.z),
+        }
+    }
+
+    /// Component-wise wrapping sub.
+    #[must_use]
+    pub const fn wrapping_sub(self, rhs: Self) -> Self {
+        Self {
+            x: self.x.wrapping_sub(rhs.x),
+            y: self.y.wrapping_sub(rhs.y),
+            z: self.z.wrapping_sub(rhs.z),
         }
     }
 
@@ -298,6 +308,50 @@ impl PoseMm {
     }
 }
 
+/// Cooked collision primitive. Identifiers live here (K61); queries live in
+/// `klotho-geom`. Convex, compound, and terrain kinds fail closed until later
+/// PHYS-A PRs land their validators.
+#[repr(u8)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Serialize, Deserialize)]
+pub enum ShapeKind {
+    /// Local AABB transformed by the locus pose.
+    #[default]
+    OrientedBox = 0,
+    /// Sphere about the local AABB centre.
+    Sphere = 1,
+    /// Y-axis capsule transformed by the locus pose.
+    Capsule = 2,
+    /// Convex hull. PHYS-A04.
+    Convex = 3,
+    /// Compound of the first five dynamic kinds. PHYS-A04.
+    Compound = 4,
+    /// Static triangle mesh occupancy. PHYS-A05.
+    TriangleMesh = 5,
+    /// Static heightfield occupancy. PHYS-A05.
+    Heightfield = 6,
+}
+
+impl ShapeKind {
+    /// True for the PHYS-A03 dynamic primitives the kernel can reproduce.
+    #[must_use]
+    pub const fn is_oriented_primitive(self) -> bool {
+        matches!(self, Self::OrientedBox | Self::Sphere | Self::Capsule)
+    }
+}
+
+/// Bounded quantized contact evidence. Not a solver manifold.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Serialize, Deserialize)]
+pub struct QuantizedContact {
+    /// Contact point, millimetres.
+    pub point: IVec3,
+    /// Unit-ish normal, 32767 scale, pointing from `b` toward `a`.
+    pub normal: (i16, i16, i16),
+    /// Penetration along `normal`, millimetres. Zero is touching.
+    pub depth_mm: i32,
+    /// Deterministic feature id (SAT axis or closest-feature index).
+    pub feature: u16,
+}
+
 /// Collision witness a proposer attaches to a `SpaceDelta` / `MotionDelta`.
 ///
 /// The kernel **ignores any proposer-supplied swept volume** (K24). It derives
@@ -305,6 +359,9 @@ impl PoseMm {
 /// rechecks `OpaqueClosed`. `overlaps_closed_opaque` is a hint: if it says no
 /// overlap and the kernel finds one, the reject is
 /// [`crate::RejectReason::WitnessMismatch`].
+///
+/// `evidence` is required for gameplay-visible [`QuantizedContact`] claims;
+/// the kernel reproduces it and never trusts an opaque manifold.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
 pub struct HullWitness {
     /// Locus whose hull is being moved.
@@ -313,16 +370,29 @@ pub struct HullWitness {
     pub proposed: PoseMm,
     /// Proposer hint only. Kernel recomputes overlap against `OpaqueClosed`.
     pub overlaps_closed_opaque: bool,
+    /// Canon epoch observed with this witness. Mismatch → `StaleEpoch`.
+    #[serde(default)]
+    pub epoch: Epoch,
+    /// Claimed cooked primitive. Kernel reproduces from the canonical hull.
+    #[serde(default)]
+    pub shape: ShapeKind,
+    /// Optional quantized contact. Required for gameplay contact claims.
+    #[serde(default)]
+    pub evidence: Option<QuantizedContact>,
 }
 
 impl HullWitness {
     /// Construct a witness. `overlaps_closed_opaque` is the K21 hint.
+    /// Epoch is zero, shape is an oriented box, and evidence is absent.
     #[must_use]
     pub const fn new(mover: Sigil, proposed: PoseMm, overlaps_closed_opaque: bool) -> Self {
         Self {
             mover,
             proposed,
             overlaps_closed_opaque,
+            epoch: Epoch::ZERO,
+            shape: ShapeKind::OrientedBox,
+            evidence: None,
         }
     }
 }
@@ -401,6 +471,9 @@ mod tests {
         let w = HullWitness::new(mover, PoseMm::default(), true);
         assert!(w.overlaps_closed_opaque);
         assert_eq!(w.mover, mover);
+        assert_eq!(w.epoch, Epoch::ZERO);
+        assert_eq!(w.shape, ShapeKind::OrientedBox);
+        assert!(w.evidence.is_none());
     }
 
     fn unit_box() -> AabbMm {

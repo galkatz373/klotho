@@ -25,7 +25,7 @@ use crate::proposal::{
     MAX_PHYS_ISLAND_MEMBERS, MAX_PHYS_ISLAND_WRITE_LOCI, Proposal, ResidencyOp,
 };
 use crate::rite::drive_rite;
-use crate::swept::check_space;
+use crate::swept::{check_phys_body, check_space};
 
 /// Only this type commits. Everyone else proposes.
 pub struct CommitKernel {
@@ -536,12 +536,12 @@ impl CommitKernel {
             {
                 return Err(RejectReason::WitnessMismatch);
             }
-            swept_hits.push(check_space(
+            swept_hits.push(check_phys_body(
                 &view,
                 body.mover,
                 body.pose,
                 body.hull,
-                body.witness.overlaps_closed_opaque,
+                body.witness,
             )?);
         }
         // PHYS-A06 adds driven Actors. Until then every unattached Relic is a
@@ -900,11 +900,29 @@ fn validate_contact_claims(
     contacts: &[ContactClaim],
 ) -> Result<(), RejectReason> {
     for claim in contacts {
-        let a = view.posed_hull(claim.a).ok_or(RejectReason::WrongHull)?;
-        let b = view.posed_hull(claim.b).ok_or(RejectReason::WrongHull)?;
-        if !a.intersects(b) {
+        if claim.witness.epoch != view.epoch() {
+            return Err(RejectReason::StaleEpoch);
+        }
+        if claim.witness.shape != klotho_core::ShapeKind::OrientedBox
+            || claim.witness.evidence.is_none()
+        {
             return Err(RejectReason::WitnessMismatch);
         }
+        let local_a = view.hull(claim.a).ok_or(RejectReason::WrongHull)?;
+        let local_b = view.hull(claim.b).ok_or(RejectReason::WrongHull)?;
+        let pose_a = view.pose(claim.a).ok_or(RejectReason::WitnessMismatch)?;
+        let pose_b = view.pose(claim.b).ok_or(RejectReason::WitnessMismatch)?;
+        klotho_geom::verify_cooked(
+            claim.witness,
+            view.epoch(),
+            klotho_core::ShapeKind::OrientedBox,
+            local_a,
+            pose_a,
+            klotho_core::ShapeKind::OrientedBox,
+            local_b,
+            pose_b,
+        )
+        .map_err(|_| RejectReason::WitnessMismatch)?;
     }
     Ok(())
 }

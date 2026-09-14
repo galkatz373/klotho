@@ -369,11 +369,14 @@ fn golden_06_locked_door_in_b_blocks_when_loaded() {
     let proposal = phys_island(&mut k, vehicle, blocked_at, BlobId::ZERO, true);
     k.ingest(proposal);
     let blocked = k.step(Tick(1), Budget::AAA_ADVENTURE, &mut []).unwrap();
+    // PHYS-A03: deep penetration of a closed barrier fails closed at witness
+    // validation (WitnessMismatch), before laws run. Resting contact within
+    // CONTACT_SLOP_MM remains legal; this move stays >slop deep.
     assert!(
         blocked
             .rejects
             .iter()
-            .any(|(_, r)| matches!(r, RejectReason::Law(_))),
+            .any(|(_, r)| *r == RejectReason::WitnessMismatch),
         "{blocked:?}"
     );
     assert_eq!(k.world().view().pose(vehicle).unwrap().z, Mm(1400));

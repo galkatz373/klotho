@@ -1,0 +1,16 @@
+[package]
+name = "klotho-geom"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Klotho geom: pure canonical shape queries and witness verification (K61)"
+readme = false
+publish = false
+
+[dependencies]
+klotho-core.workspace = true
+
+[lints]
+workspace = true

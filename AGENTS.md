@@ -15,7 +15,7 @@ Greenfield Rust engine. The programming model is **Canon + Intent + Trace + Proj
 ## Crate graph (do not violate)
 
 - `klotho-sim` does **not** depend on infer, render, mind, space, motion, jobs, or stream.
-- `klotho-commit` does **not** depend on space/motion/mind types. `HullWitness` lives in `klotho-core`. Commit does **not** depend on stream.
+- `klotho-commit` does **not** depend on space/motion/mind types. `HullWitness` lives in `klotho-core`. Commit may depend on `klotho-geom` (core only) but does **not** depend on phys or stream. `klotho-geom` depends only on `klotho-core`.
 - `klotho-infer` does **not** depend on `klotho-commit`. It returns `InferIntent`.
 - `klotho-world` feature `mutate` is enabled **only** by `klotho-commit`. `klotho-stream` and `klotho-save` do not enable `mutate`.
 - `klotho-save` depends on world + trace + core only. It does **not** depend on commit or stream.

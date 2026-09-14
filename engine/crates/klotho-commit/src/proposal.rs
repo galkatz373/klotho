@@ -56,7 +56,7 @@ pub struct BodyDelta {
     pub support: Option<Support>,
 }
 
-/// Bounded gameplay-visible contact claim. PHYS-A03 strengthens its geometry.
+/// Bounded gameplay-visible contact claim. Kernel reproduces the witness.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct ContactClaim {
     /// Canonical lower endpoint. Must be less than `b`.
@@ -69,7 +69,7 @@ pub struct ContactClaim {
     pub shape_b: BlobId,
     /// Deterministic solver feature id.
     pub feature: u16,
-    /// Quantized A-side witness. PHYS-A03 replaces broad AABB evidence.
+    /// Quantized A-side witness. Broad-phase AABB is never enough.
     pub witness: HullWitness,
 }
 

@@ -32,6 +32,76 @@ impl DccLease {
         }
         Ok(())
     }
+
+    /// Transfer an unexpired lease to its predeclared recipient.
+    pub fn handoff(
+        self,
+        actor: &str,
+        recipient: &str,
+        now_ms: u64,
+        expires_ms: u64,
+    ) -> Result<Self, DccError> {
+        self.permits(actor, now_ms)?;
+        if self.handoff_to.as_deref() != Some(recipient)
+            || recipient.trim().is_empty()
+            || expires_ms <= now_ms
+        {
+            return Err(DccError::Policy("invalid DCC lease handoff".into()));
+        }
+        Ok(Self {
+            source: self.source,
+            owner: recipient.to_owned(),
+            expires_ms,
+            handoff_to: None,
+        })
+    }
+}
+
+/// Versioned binary-source pointer protected by an exclusive lease.
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DccSourceLock {
+    /// Current approved large-source pointer.
+    pub pointer: LfsPointer,
+    /// Current exclusive lease.
+    pub lease: DccLease,
+    /// Monotonic update generation used to reject stale writes.
+    pub generation: u64,
+}
+
+impl DccSourceLock {
+    /// Replace the pointer if ownership and expected generation are current.
+    pub fn update(
+        &mut self,
+        actor: &str,
+        now_ms: u64,
+        expected_generation: u64,
+        pointer: LfsPointer,
+    ) -> Result<(), DccError> {
+        self.lease.permits(actor, now_ms)?;
+        pointer.validate()?;
+        if expected_generation != self.generation {
+            return Err(DccError::Policy("stale DCC source generation".into()));
+        }
+        self.pointer = pointer;
+        self.generation = self.generation.saturating_add(1);
+        Ok(())
+    }
+
+    /// Transfer ownership while preserving the current pointer and generation.
+    pub fn handoff(
+        &mut self,
+        actor: &str,
+        recipient: &str,
+        now_ms: u64,
+        expires_ms: u64,
+    ) -> Result<(), DccError> {
+        self.lease = self
+            .lease
+            .clone()
+            .handoff(actor, recipient, now_ms, expires_ms)?;
+        Ok(())
+    }
 }
 
 /// Hash pointer for an approved large source in LFS/object storage.
@@ -181,6 +251,66 @@ mod tests {
         assert_eq!(lease.permits("artist.a", 99), Ok(()));
         assert!(lease.permits("artist.b", 99).is_err());
         assert!(lease.permits("artist.a", 100).is_err());
+    }
+
+    #[test]
+    fn handoff_preserves_latest_binary_update_and_rejects_stale_writer() {
+        let mut locked = DccSourceLock {
+            pointer: LfsPointer {
+                object: hash(1),
+                bytes: 10,
+                namespace: "approved_sources".into(),
+            },
+            lease: DccLease {
+                source: hash(9),
+                owner: "artist.a".into(),
+                expires_ms: 100,
+                handoff_to: Some("artist.b".into()),
+            },
+            generation: 4,
+        };
+        locked
+            .update(
+                "artist.a",
+                50,
+                4,
+                LfsPointer {
+                    object: hash(2),
+                    bytes: 20,
+                    namespace: "approved_sources".into(),
+                },
+            )
+            .unwrap();
+        locked.handoff("artist.a", "artist.b", 60, 200).unwrap();
+        assert_eq!(locked.generation, 5);
+        assert_eq!(locked.pointer.object, hash(2));
+        assert!(
+            locked
+                .update(
+                    "artist.a",
+                    70,
+                    4,
+                    LfsPointer {
+                        object: hash(3),
+                        bytes: 30,
+                        namespace: "approved_sources".into(),
+                    },
+                )
+                .is_err()
+        );
+        locked
+            .update(
+                "artist.b",
+                70,
+                5,
+                LfsPointer {
+                    object: hash(4),
+                    bytes: 40,
+                    namespace: "approved_sources".into(),
+                },
+            )
+            .unwrap();
+        assert_eq!(locked.generation, 6);
     }
 
     #[test]

@@ -69,6 +69,7 @@ KAI-17 — production presentation: GPU particles/ribbons, scalable geometry and
 KAI-18 — multimodal quality evaluation: aligned captures, pinned SSIM/LPIPS plugins, farm-derived lane SLOs, flake policy, signed sample review, and advisory critics that cannot change pass/fail.
 KAI-19 — reference/optimized whole-title cook with predicate folding/interning, stable table and Place/SKU plans, Trace-equivalence fallback, debug source maps, and authoring-free ship packages.
 KAI-20 — Tapestry data-only thirty-minute, eight-Place vertical route with integrated production evidence and optimized desktop packages.
+KAI-21 — Brocade 100-Place/10k-change parallel-content, incremental-cook, review-capacity, binary-lock, sampling, and package-scale gate.
 
 ## Build
 

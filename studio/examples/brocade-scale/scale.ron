@@ -1,0 +1,23 @@
+(
+  places: 100,
+  changes_per_place: 100,
+  shared_assets: 20,
+  maximum_unique_bytes: 1048576,
+  maximum_package_bytes: 2097152,
+  review_periods: 6,
+  capacities: [
+    (owner:"art.owner",service_minutes:120,maximum_backlog:360,absent_periods:[2]),
+    (owner:"design.owner",service_minutes:100,maximum_backlog:300,absent_periods:[]),
+  ],
+  arrivals: [
+    (period:0,owner:"art.owner",minutes:80),
+    (period:1,owner:"art.owner",minutes:80),
+    (period:2,owner:"art.owner",minutes:200),
+    (period:3,owner:"art.owner",minutes:80),
+    (period:4,owner:"art.owner",minutes:80),
+    (period:0,owner:"design.owner",minutes:70),
+    (period:1,owner:"design.owner",minutes:70),
+    (period:2,owner:"design.owner",minutes:170),
+    (period:3,owner:"design.owner",minutes:70),
+  ],
+)

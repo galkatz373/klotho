@@ -63,9 +63,10 @@ pub use klotho_prove::{Cas, LicenseSpan, MAX_BLOB_BYTES, MAX_BLOBS, ProvenanceDa
 pub use material::{ShaderPerm, compile_material, prune_permutations};
 pub use optimize::{
     EquivalenceReport, OptimizationPass, OptimizationReport, OptimizedSourceMap, PackedRow,
-    PassReport, PlaceBundlePlan, PlacePlanInput, SkuBundlePlan, SkuPlanInput, SourceMapEntry,
-    TraceRun, WholeTitleCook, WholeTitlePlan, WholeTitleRequest, compare_trace_runs,
-    cook_whole_project, cook_whole_title, decode_whole_title_plan, encode_whole_title_plan,
+    PassReport, PlaceBundlePlan, PlacePlanInput, ScaleLimits, ScaleReport, SkuBundlePlan,
+    SkuPlanInput, SourceMapEntry, TraceRun, WholeTitleCook, WholeTitlePlan, WholeTitleRequest,
+    check_scale, compare_trace_runs, cook_whole_project, cook_whole_title, decode_whole_title_plan,
+    encode_whole_title_plan, measure_scale,
 };
 pub use package::{
     AccessibilitySettings, CreditEntry, CreditsRoll, DESKTOP_SKUS, DesktopPackage, DesktopSku,

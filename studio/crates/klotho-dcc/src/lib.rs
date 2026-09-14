@@ -45,7 +45,8 @@ pub use qualification::{
     RouteReveal,
 };
 pub use vcs::{
-    DccLease, DisclosureManifest, LfsPointer, QuarantineDrop, QuarantineState, VendorWorkspace,
+    DccLease, DccSourceLock, DisclosureManifest, LfsPointer, QuarantineDrop, QuarantineState,
+    VendorWorkspace,
 };
 
 use klotho_compile::DccArtifact;

@@ -5,7 +5,7 @@
 | Document | High-Level Design — AI-native production for Klotho's first AAA title |
 | Author | Gal Katz |
 | Date | 2026-09-14 |
-| Status | Active successor plan (KAI-00–20 landed; KAI-21–24 not landed) |
+| Status | Active successor plan (KAI-00–21 landed; KAI-22–24 not landed) |
 | Baseline | `docs/hld.md` rev 6; AAA-01–27 landed |
 | Audience | Engine, tools, gameplay, content, AI platform, build, QA, and production leads |
 | Language | Rust (edition 2024; 2021-compatible crates OK) |
@@ -1911,7 +1911,7 @@ managers.
 
 ## PR plan
 
-Landed baseline: AAA-01–27 and KAI-00–20 (2026-09-14). KAI-21–24 remain planned.
+Landed baseline: AAA-01–27 and KAI-00–21 (2026-09-14). KAI-22–24 remain planned.
 Each header gains `— landed` only with its implementation, tests, date bump, and
 this section's landed list update.
 
@@ -2269,7 +2269,7 @@ flowchart TB
   reachability envelope; fresh team reproduces from brief and approved refs
   within the locked benchmark lanes.
 
-#### KAI-21 — Brocade parallel-content and review scale
+#### KAI-21 — Brocade parallel-content and review scale — **landed 2026-09-14**
 
 - **Files:** farm/orchestration fixtures, semantic merge benchmarks, large
   modular project, DCC lock/VCS fixtures, review queue model, optimizer/package

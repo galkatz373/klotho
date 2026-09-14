@@ -69,4 +69,6 @@ mod kai18_tests;
 #[cfg(test)]
 mod kai20_tests;
 #[cfg(test)]
+mod kai21_tests;
+#[cfg(test)]
 mod tests;

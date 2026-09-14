@@ -28,6 +28,7 @@ mod model;
 mod ops;
 mod policy;
 mod review;
+mod scale;
 mod service;
 mod store;
 mod tools;
@@ -76,6 +77,10 @@ pub use review::{
     ArtifactClass, BatchItem, FrozenBatch, OwnerBudget, OwnerQueues, R0Rule, RiskInput, RiskLevel,
     RiskPolicy, SampleAudit, SampleDisposition, SampleRecord, SamplingPolicy, assigned_level,
     refuse_lower, refuse_replace, refuse_split,
+};
+pub use scale::{
+    CapacityReport, EvidenceItem, EvidenceRollup, ImpactGraph, OwnershipScheduler, ReviewArrival,
+    ReviewCapacity, ScaleWork, rollup_evidence, simulate_capacity,
 };
 pub use service::{KlothoAi, RepairOutcome, ReviewPackage};
 pub use store::{AuthoringTransaction, TransactionStore, TxStatus};

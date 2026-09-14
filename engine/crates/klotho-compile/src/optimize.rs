@@ -13,6 +13,7 @@ use klotho_ir::{
     AnchorId, AnchorKind, CanonDiff, Flattened, IntentDoc, IntentModule, IntentProject, Name, Pred,
     RiteGraph, RiteNode, RiteOp, SourceSpan, SpanKind, blame_anchor, to_ron,
 };
+use klotho_prove::Cas;
 use klotho_trace::TraceDelta;
 
 use crate::QualityTier;
@@ -232,6 +233,86 @@ pub struct WholeTitlePlan {
     pub stripped_paths: Vec<String>,
     /// Content hash of the deterministic encoded plan.
     pub hash: Hash,
+}
+
+/// Content-scale accounting over an optimized Place/CAS plan.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct ScaleReport {
+    /// Number of logical Places.
+    pub places: usize,
+    /// Total Place-to-blob references after per-Place deduplication.
+    pub references: usize,
+    /// Distinct referenced CAS blobs.
+    pub unique_blobs: usize,
+    /// Bytes occupied by distinct referenced blobs.
+    pub unique_bytes: usize,
+    /// Unique bytes plus the encoded runtime plan.
+    pub package_bytes: usize,
+    /// References per unique blob in fixed-point thousandths.
+    pub instancing_ratio_milli: u32,
+}
+
+/// Hard product limits for a content-scale plan.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct ScaleLimits {
+    /// Maximum logical Places.
+    pub places: usize,
+    /// Maximum distinct referenced blobs.
+    pub unique_blobs: usize,
+    /// Maximum distinct blob bytes.
+    pub unique_bytes: usize,
+    /// Maximum complete package bytes.
+    pub package_bytes: usize,
+}
+
+/// Measure unique/package bytes and enforce that every plan reference exists in CAS.
+pub fn measure_scale(cas: &Cas, plan: &WholeTitlePlan) -> Result<ScaleReport, CompileError> {
+    let references: usize = plan.places.iter().map(|place| place.assets.len()).sum();
+    let unique: BTreeSet<_> = plan
+        .places
+        .iter()
+        .flat_map(|place| place.assets.iter().copied())
+        .collect();
+    let mut unique_bytes = 0usize;
+    for id in &unique {
+        let bytes = cas
+            .get(*id)
+            .ok_or_else(|| CompileError::Optimization(format!("missing scale-report blob {id}")))?;
+        unique_bytes = unique_bytes
+            .checked_add(bytes.len())
+            .ok_or_else(|| CompileError::Optimization("scale byte count overflow".into()))?;
+    }
+    let plan_bytes = encode_whole_title_plan(plan)?.len();
+    let package_bytes = unique_bytes
+        .checked_add(plan_bytes)
+        .ok_or_else(|| CompileError::Optimization("package byte count overflow".into()))?;
+    let instancing_ratio_milli = if unique.is_empty() {
+        0
+    } else {
+        u32::try_from(references.saturating_mul(1_000) / unique.len()).unwrap_or(u32::MAX)
+    };
+    Ok(ScaleReport {
+        places: plan.places.len(),
+        references,
+        unique_blobs: unique.len(),
+        unique_bytes,
+        package_bytes,
+        instancing_ratio_milli,
+    })
+}
+
+/// Fail when a measured scale plan exceeds any checked-in product cap.
+pub fn check_scale(report: &ScaleReport, limits: &ScaleLimits) -> Result<(), CompileError> {
+    if report.places > limits.places
+        || report.unique_blobs > limits.unique_blobs
+        || report.unique_bytes > limits.unique_bytes
+        || report.package_bytes > limits.package_bytes
+    {
+        return Err(CompileError::Optimization(
+            "content-scale plan exceeds product limits".into(),
+        ));
+    }
+    Ok(())
 }
 
 /// Debug-only map from optimized semantic rows to authoring identity.

@@ -5,7 +5,7 @@
 | Document | High-Level Design — AI-native production for Klotho's first AAA title |
 | Author | Gal Katz |
 | Date | 2026-09-14 |
-| Status | Active successor plan (KAI-00–23 landed; KAI-24 not landed) |
+| Status | Active successor plan (KAI-00–24 landed) |
 | Baseline | `docs/hld.md` rev 6; AAA-01–27 landed |
 | Audience | Engine, tools, gameplay, content, AI platform, build, QA, and production leads |
 | Language | Rust (edition 2024; 2021-compatible crates OK) |
@@ -1632,6 +1632,7 @@ tools, transactions, evaluation, or review policy.
 | `klotho-audio` | Mix/VO/CC metadata and deterministic offline capture; no Trace writes |
 | `klotho-runtime` | Journey/capture hooks through existing public inputs and snapshots; no authoring/provider deps in ship feature set |
 | `klotho-platform` | Console HAL samples: suspend/resume, storage, present/memory/controller/network/a11y, public-mock versus proprietary adapter class |
+| `klotho-live` | Post-title multiplayer/live P0 service plane: approved profile, replicated encounter contracts, matchmaking/reconnect/failover, signed economy/experiments, moderation/privacy, failure matrices, deployment rehearsal, and P0/P1/P2 claim enforcement; no World/commit/Trace authority |
 
 ### Firewall additions
 
@@ -1646,6 +1647,9 @@ tools, transactions, evaluation, or review policy.
 - `klotho-ai` may invoke the editor/compiler/eval binaries; it does not link
   `klotho-commit` to mutate a live world.
 - `klotho-dialogue` lowers at cook and cannot be imported by gameplay slices.
+- `klotho-live` may depend on `klotho-net`, core ids, and proof hashing. It may
+  not depend on `klotho-world`, `klotho-commit`, `klotho-trace`, or
+  `klotho-runtime`; service assignments and telemetry never mutate Projection.
 - Existing gameplay bans on `klotho-manifest::tables` and `klotho-stream` stay.
 - The `InferHost::{new,submit,poll}` allowlist remains unchanged. Klotho AI
   backend hosts use different types and cannot appear in runtime crates.
@@ -1916,7 +1920,7 @@ managers.
 
 ## PR plan
 
-Landed baseline: AAA-01–27 and KAI-00–23 (2026-09-14). KAI-24 remains planned.
+Landed baseline: AAA-01–27 and KAI-00–24 (2026-09-14).
 Each header gains `— landed` only with its implementation, tests, date bump, and
 this section's landed list update.
 
@@ -2331,7 +2335,7 @@ These do not block KAI-22 or alter the AAA-27 first-title freeze. They prevent
   native target/backend pairing, redacted evidence ids, and fail-closed
   overclaim. P1/P2 remain blocked on licensed SDK/devkit access.
 
-#### KAI-24 — Multiplayer and live-service production track
+#### KAI-24 — Multiplayer and live-service production track — **landed 2026-09-14**
 
 - **Files:** Netlock-derived production project, matchmaking/lobby/session,
   balancing/economy configuration, lag/packet/rewind matrix, moderation/reporting,
@@ -2348,7 +2352,13 @@ These do not block KAI-22 or alter the AAA-27 first-title freeze. They prevent
   rehearsals pass. Deterministic/network-emulation/core failure suites remain P0;
   private service, security, moderation, and scale results require signed P1
   evidence; any external platform/service acceptance requires P2. Netlock
-  remains a regression until this track is selected.
+  remains a regression until this track is selected. Landed public CI is P0: an
+  approved 32-player shooter profile, typed replicated-encounter contract,
+  deterministic matchmaking/reconnect/failover, signed economy/experiment
+  configs, read-only anti-cheat routing, privacy-bounded moderation/telemetry,
+  network/service-failure matrices, and staged deploy/rollback rehearsals. P1/P2
+  remain blocked on private services, protected evidence, external acceptance,
+  and separately funded production scale.
 
 ---
 
@@ -2387,9 +2397,9 @@ The first title is ready to ship only when all are true:
   migration, rollback, ratings, accessibility compliance, privacy, third-party
   notices, and license audits pass with separate human authorization.
 - Console certification and multiplayer/live-service acceptance are not claimed
-  for title one. KAI-23 landed the P0 public console SKU contract; certified
-  or shipped console SKUs still require P1 hardware evidence and P2 holder
-  acceptance. KAI-24 remains the multiplayer/live track.
+  for title one. KAI-23 and KAI-24 landed their P0 public boundaries; certified
+  or shipped console SKUs and multiplayer/live-service production claims still
+  require their declared P1 confidential evidence and P2 external acceptance.
 
 ---
 

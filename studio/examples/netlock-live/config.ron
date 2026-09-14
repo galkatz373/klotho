@@ -1,0 +1,18 @@
+(
+  economy: (
+    id: "arena-economy",
+    version: 1,
+    values: {
+      "match_reward": 100,
+      "win_bonus": 50,
+    },
+    canon_epoch: "1111111111111111111111111111111111111111111111111111111111111111",
+  ),
+  experiments: [
+    (
+      id: "matchmaking-window",
+      variants: ["control", "wide"],
+      weights_permille: [500, 500],
+    ),
+  ],
+)

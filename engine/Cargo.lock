@@ -1230,6 +1230,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "klotho-live"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "klotho-core",
+ "klotho-net",
+ "klotho-prove",
+ "serde",
+]
+
+[[package]]
 name = "klotho-manifest"
 version = "0.1.0"
 dependencies = [

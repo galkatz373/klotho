@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Klotho desktop and console platform services, release factory, and cert evidence (KAI-22/23)"
+description = "Klotho desktop and console platform services, release factory, and cert evidence (KAI-22/23); live release orchestration is klotho-live"
 readme = false
 publish = false
 

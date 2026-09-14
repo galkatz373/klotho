@@ -1,0 +1,9 @@
+[
+  (
+    id: "public-regional-outage",
+    staged_deploy: true,
+    rollback: true,
+    regional_failover: true,
+    support_handoff: true,
+  ),
+]

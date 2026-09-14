@@ -25,6 +25,7 @@ Greenfield Rust engine. The programming model is **Canon + Intent + Trace + Proj
 - Gameplay (`engine/examples/hearth-slice`, `engine/examples/ash-slice`, ember, drift, `klotho-author`, `klotho-editor`) may not import `klotho-manifest::tables` or `klotho-stream`.
 - `klotho-dialogue` lowers at cook and cannot be imported by gameplay slices. It does not depend on commit, world, infer, or ai.
 - `klotho-eval` may depend on public debug/runtime test interfaces but may not enable `klotho-world/mutate`, append Trace, or mint player Agency. Engine never depends on `klotho-eval`.
+- `klotho-live` is an out-of-band service plane over `klotho-net`; it does not depend on world, commit, trace, or runtime. Matchmaking, experiments, moderation, anti-cheat, and telemetry never mutate Projection.
 
 ## PR plan (merge order)
 
@@ -37,7 +38,7 @@ Do not grow Hearth. Ash is the generality gate (K26). If Ash needs `DamageCompon
 - Ship profile: single-player action-adventure, `RuntimeProfile::AaaAdventure`, 30 Hz authoritative simulation and 60–120 Hz presentation on desktop Windows/Linux/macOS. Infer stays default-off.
 - Release-blocking slices: Hearth and Ash (ontology/determinism), Ember (action combat), Drift (Phys + two-Place residency), and Chorus (SimLod scale). Keep them as bounded goldens; do not turn them into title content.
 - Shooter-only gates are maintained regressions, not first-title blockers: `RuntimeProfile::AaaShooter`, dedicated 60 Hz simulation, lag compensation/rewind acceptance, Netlock release acceptance, multiplayer lobby scale, and the competitive render permutation.
-- Console certification, live epoch deployment, GPU particles, runtime infer, marketplace/UGC, localization/UMG, 64-player scale, and virtualized geometry are post-title-one work. Their landed boundaries and tests stay intact. KAI-23 landed the P0 public console SKU contract; a certified or shipped console SKU still requires P1 hardware evidence and P2 holder acceptance.
+- Console certification, live epoch deployment, GPU particles, runtime infer, marketplace/UGC, localization/UMG, 64-player scale, and virtualized geometry are post-title-one work. Their landed boundaries and tests stay intact. KAI-23 and KAI-24 landed P0 public console and multiplayer/live boundaries; production/certification claims still require signed P1 confidential evidence and P2 external acceptance.
 
 ## Vocabulary
 

@@ -1,0 +1,12 @@
+(
+  id: "replicated-arena-v1",
+  players: 32,
+  balance: {
+    "health": 100,
+    "ammo": 64,
+    "hit_damage": 25,
+    "respawn_ticks": 300,
+  },
+  journeys: ["join", "fire", "respawn", "reconnect", "late_join"],
+  network_cases: ["lan", "wan", "loss", "rewind-bound"],
+)

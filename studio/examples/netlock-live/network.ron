@@ -1,0 +1,10 @@
+(
+  version: 1,
+  cases: [
+    (id: "lan", rtt_ms: 30, loss_permille: 0, reorder_permille: 0, fire_age_ticks: 2, reconnect_expected: true, passed: true),
+    (id: "wan", rtt_ms: 120, loss_permille: 10, reorder_permille: 5, fire_age_ticks: 6, reconnect_expected: true, passed: true),
+    (id: "loss", rtt_ms: 80, loss_permille: 50, reorder_permille: 20, fire_age_ticks: 8, reconnect_expected: true, passed: true),
+    (id: "rewind-bound", rtt_ms: 80, loss_permille: 10, reorder_permille: 0, fire_age_ticks: 13, reconnect_expected: true, passed: true),
+  ],
+  failures: [matchmaker_region, session_reconnect, config_signature, telemetry_sink, moderation_queue],
+)

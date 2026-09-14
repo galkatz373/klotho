@@ -634,9 +634,9 @@ dependencies = [
 
 [[package]]
 name = "getrandom"
-version = "0.2.17"
+version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff2abc00be7fca6ebc474524697ae276ad847ad0a6b3faa4bcb027e9a4614ad0"
+checksum = "335ff9f135e4384c8150d6f27c6daed433577f86b4750418338c01a1a2528592"
 dependencies = [
  "cfg-if",
  "libc",
@@ -1083,7 +1083,9 @@ dependencies = [
  "klotho-input",
  "klotho-ir",
  "klotho-kai-bench",
+ "klotho-live",
  "klotho-manifest",
+ "klotho-net",
  "klotho-pattern",
  "klotho-prove",
  "klotho-release",
@@ -1171,6 +1173,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "klotho-live"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "klotho-core",
+ "klotho-net",
+ "klotho-prove",
+ "serde",
+]
+
+[[package]]
 name = "klotho-manifest"
 version = "0.1.0"
 dependencies = [
@@ -1198,6 +1211,19 @@ dependencies = [
  "klotho-core",
  "klotho-ir",
  "klotho-world",
+]
+
+[[package]]
+name = "klotho-net"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "getrandom 0.2.16",
+ "klotho-core",
+ "klotho-ir",
+ "klotho-prove",
+ "klotho-trace",
+ "serde",
 ]
 
 [[package]]
@@ -2026,7 +2052,7 @@ version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
 dependencies = [
- "getrandom 0.2.17",
+ "getrandom 0.2.16",
 ]
 
 [[package]]

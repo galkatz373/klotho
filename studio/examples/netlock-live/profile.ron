@@ -1,0 +1,20 @@
+(
+  id: "netlock-shooter-32p",
+  auth_hz: 60,
+  intent_hz: 60,
+  max_players: 32,
+  min_players: 2,
+  max_rtt_ms: 120,
+  max_loss_permille: 50,
+  rewind_ticks: 12,
+  reconnect_seconds: 30,
+  regions: ["eu-central", "us-east"],
+  platforms: ["desktop-crossplay"],
+  approvals: [
+    (role: design, human: "Design Owner"),
+    (role: network, human: "Network Owner"),
+    (role: security, human: "Security Owner"),
+    (role: trust, human: "Trust Owner"),
+    (role: release, human: "Release Owner"),
+  ],
+)

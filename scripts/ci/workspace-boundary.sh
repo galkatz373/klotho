@@ -37,7 +37,10 @@ if bad_studio:
 PY
 
 mkdir "$tmp/export"
-cp -R "$root/engine/." "$tmp/export/"
+# Copy only checked-in engine inputs. A developer's local target cache may be
+# many GiB and is neither source nor part of the clean-export contract.
+cp "$root/engine/Cargo.toml" "$root/engine/Cargo.lock" "$tmp/export/"
+cp -R "$root/engine/crates" "$root/engine/examples" "$root/engine/data" "$tmp/export/"
 if [[ -e "$tmp/export/../studio" ]]; then
   echo "clean export unexpectedly contains studio" >&2
   exit 1

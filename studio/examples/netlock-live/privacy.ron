@@ -1,0 +1,5 @@
+(
+  max_retention_days: 30,
+  minimum_cohort: 20,
+  aggregate_fields: ["match_duration_ms", "disconnect_rate_permille", "win_rate_permille"],
+)

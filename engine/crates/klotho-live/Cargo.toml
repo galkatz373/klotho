@@ -1,0 +1,20 @@
+[package]
+name = "klotho-live"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Klotho multiplayer and live-service public boundary (KAI-24)"
+readme = false
+publish = false
+
+[dependencies]
+ed25519-dalek.workspace = true
+klotho-core.workspace = true
+klotho-net.workspace = true
+klotho-prove.workspace = true
+serde.workspace = true
+
+[lints]
+workspace = true

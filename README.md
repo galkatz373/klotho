@@ -72,6 +72,7 @@ KAI-20 — Tapestry data-only thirty-minute, eight-Place vertical route with int
 KAI-21 — Brocade 100-Place/10k-change parallel-content, incremental-cook, review-capacity, binary-lock, sampling, and package-scale gate.
 KAI-22 — Desktop platform services and release factory: signed Windows/Linux/macOS candidates, achievements, cloud-save conflict recovery, crash/replay/symbols, ratings/privacy, and named human signing.
 KAI-23 — Console SKU track: GDK/Prospero P0 public HAL, claim levels, cert suites, device farm, and redacted P1/P2 evidence ids. Not a certified or shipped console SKU.
+KAI-24 — Multiplayer/live P0 public boundary: approved profile, replicated encounter contract, matchmaking/reconnect/failover, signed economy/experiments, moderation/privacy, network/failure matrix, and deploy/rollback rehearsals. P1/P2 remain private/external evidence gates.
 
 ## Build
 

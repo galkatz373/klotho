@@ -276,6 +276,22 @@ if [[ -d engine/crates/klotho-release ]]; then
   fi
 fi
 
+# Live services are out-of-band. They may consume net observations but cannot
+# gain authoritative world, commit, Trace, or runtime access.
+if [[ -d engine/crates/klotho-live ]]; then
+  if command -v rg >/dev/null 2>&1; then
+    if rg -n --glob '!target/**' 'klotho_world::|klotho-world|klotho_commit::|klotho-commit|klotho_trace::|klotho-trace|klotho_runtime::|klotho-runtime' engine/crates/klotho-live; then
+      echo "klotho-live must not import world, commit, trace, or runtime" >&2
+      fail=1
+    fi
+  else
+    if grep -RIn -E 'klotho_world::|klotho-world|klotho_commit::|klotho-commit|klotho_trace::|klotho-trace|klotho_runtime::|klotho-runtime' engine/crates/klotho-live >/dev/null 2>&1; then
+      echo "klotho-live must not import world, commit, trace, or runtime" >&2
+      fail=1
+    fi
+  fi
+fi
+
 # The world write path (`mutate`) may be enabled in [dependencies] solely by
 # klotho-commit. Any crate may enable it in [dev-dependencies] for tests:
 # dev-dependencies never ship, so that cannot unify the write API into

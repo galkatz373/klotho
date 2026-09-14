@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use klotho_canon::{Canon, EpochMap, OPAQUE, RiteId};
 use klotho_core::{
-    AabbMm, AffordanceId, BlobId, Hash, IVec3, LocusKind, PackedIx, PhysRequest, PoseMm,
-    ResourceId, Sigil, SimLod, Support, Vel3, rotate_xz,
+    AabbMm, AffordanceId, BlobId, ConstraintState, Hash, IVec3, LocusKind, PackedIx, PhysRequest,
+    PoseMm, ResourceId, Sigil, SimLod, Support, Vel3, rotate_xz,
 };
 use klotho_ir::{Channel, Rel};
 use klotho_trace::{RelTag, TraceBody, TraceEvent};
@@ -44,6 +44,8 @@ pub struct Projection {
     rels: Arc<BTreeMap<(PackedIx, u8), Neighbors>>,
     qty: Arc<BTreeMap<(PackedIx, ResourceId), i32>>,
     phys_req: Arc<BTreeMap<PackedIx, PhysRequest>>,
+    /// Constraint identity → last admitted impulse/break. Not a packed row.
+    constraint_state: Arc<BTreeMap<Sigil, ConstraintState>>,
     rites: Arc<BTreeMap<(PackedIx, u16), RiteMachine>>,
     knows: Arc<BTreeSet<(PackedIx, u16)>>,
     space_ix: Arc<PlaceIndex>,
@@ -167,6 +169,7 @@ impl Projection {
             rels: Arc::new(BTreeMap::new()),
             qty: Arc::new(BTreeMap::new()),
             phys_req: Arc::new(BTreeMap::new()),
+            constraint_state: Arc::new(BTreeMap::new()),
             rites: Arc::new(BTreeMap::new()),
             knows: Arc::new(BTreeSet::new()),
             space_ix: Arc::new(PlaceIndex::new()),
@@ -963,6 +966,28 @@ impl Projection {
         self.phys_req.get(&i).copied()
     }
 
+    pub(crate) fn set_constraint_state(&mut self, id: Sigil, state: ConstraintState) {
+        Arc::make_mut(&mut self.constraint_state).insert(id, state);
+    }
+
+    /// Last admitted constraint row.
+    #[must_use]
+    pub fn constraint_state(&self, id: Sigil) -> Option<ConstraintState> {
+        self.constraint_state.get(&id).copied()
+    }
+
+    pub(crate) fn constraint_states(&self) -> impl Iterator<Item = (Sigil, ConstraintState)> + '_ {
+        self.constraint_state.iter().map(|(&id, &s)| (id, s))
+    }
+
+    pub(crate) fn restore_constraint_states(&mut self, rows: &[(Sigil, ConstraintState)]) {
+        let map = Arc::make_mut(&mut self.constraint_state);
+        map.clear();
+        for &(id, state) in rows {
+            map.insert(id, state);
+        }
+    }
+
     pub(crate) fn add_rel(&mut self, a: Sigil, r: Rel, b: Sigil) -> Result<(), WorldError> {
         let ia = self.add_rel_raw(a, r, b)?;
         if (r == Rel::AttachedTo || r == Rel::PilotedBy)
@@ -1407,6 +1432,7 @@ impl Projection {
         }
         bytes += self.qty.len() * 8;
         bytes += self.phys_req.len() * 24;
+        bytes += self.constraint_state.len() * 24;
         bytes += self.rites.len() * 16;
         bytes += self.knows.len() * 4;
         bytes += self.space_ix.approx_bytes();

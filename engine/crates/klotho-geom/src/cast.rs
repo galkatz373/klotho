@@ -43,7 +43,10 @@ pub fn raycast(
             let b = bounds(shape, pose)?;
             Ok(b.segment_hit(origin, dir))
         }
-        Shape::Convex { .. } | Shape::Compound { .. } => {
+        Shape::Convex { .. }
+        | Shape::Compound { .. }
+        | Shape::TriangleMesh { .. }
+        | Shape::Heightfield { .. } => {
             let b = bounds(shape, pose)?;
             Ok(b.segment_hit(origin, dir))
         }

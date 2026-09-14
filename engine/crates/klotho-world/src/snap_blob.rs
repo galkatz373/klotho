@@ -1,8 +1,8 @@
 //! Canonical LE encoding of a [`WorldSnapshot`] projection.
 
 use klotho_core::{
-    AabbMm, AffordanceId, BlobId, Epoch, Hash, IVec3, LocusKind, MAX_LOCI_PROCESS, Mm, PhysRequest,
-    PoseMm, ResourceId, Sigil, SimLod, Support, Tick, Vel3, VelFx, YawMd,
+    AabbMm, AffordanceId, BlobId, ConstraintState, Epoch, Hash, IVec3, LocusKind, MAX_LOCI_PROCESS,
+    Mm, PhysRequest, PoseMm, ResourceId, Sigil, SimLod, Support, Tick, Vel3, VelFx, YawMd,
 };
 use klotho_ir::{Channel, Rel};
 
@@ -12,8 +12,12 @@ use crate::world::WorldSnapshot;
 
 /// Snapshot blob magic.
 pub const SNAP_MAGIC: [u8; 4] = *b"KSNP";
-/// Snapshot blob version.
-pub const SNAP_VERSION: u8 = 1;
+/// Snapshot blob version. v1 has no constraint table; v2 appends one.
+pub const SNAP_VERSION: u8 = 2;
+/// Oldest readable snapshot version.
+pub const SNAP_VERSION_MIN: u8 = 1;
+/// Constraint-state rows in one snapshot.
+pub const MAX_SNAP_CONSTRAINTS: usize = 512;
 /// Encoded projection cap (same numeric gate as a save blob).
 pub const SNAP_BLOB_CAP: usize = 64 * 1024 * 1024;
 /// Packed-row cap for a snapshot blob.
@@ -115,6 +119,8 @@ pub fn check_snap_size(size: usize) -> Result<(), SnapError> {
 
 pub(crate) fn encode_snapshot(snap: &WorldSnapshot) -> Result<Vec<u8>, SnapError> {
     let rows = snap.projection().capture_snap_rows();
+    let constraints: Vec<(Sigil, ConstraintState)> =
+        snap.projection().constraint_states().collect();
     encode_parts(
         snap.epoch,
         snap.tick,
@@ -122,18 +128,20 @@ pub(crate) fn encode_snapshot(snap: &WorldSnapshot) -> Result<Vec<u8>, SnapError
         snap.trace_prefix_hash,
         snap.projection().opaque_id(),
         &rows,
+        &constraints,
     )
 }
 
 pub(crate) fn decode_snapshot(bytes: &[u8]) -> Result<WorldSnapshot, SnapError> {
     let parts = decode_parts(bytes)?;
-    WorldSnapshot::from_snap_rows(
+    WorldSnapshot::from_snap_parts(
         parts.epoch,
         parts.tick,
         parts.canon_hash,
         parts.prefix,
         parts.opaque,
         parts.rows,
+        parts.constraints,
     )
 }
 
@@ -145,6 +153,7 @@ struct SnapParts {
     prefix: Hash,
     opaque: Option<AffordanceId>,
     rows: Vec<SnapRow>,
+    constraints: Vec<(Sigil, ConstraintState)>,
 }
 
 pub(crate) fn encode_parts(
@@ -154,11 +163,18 @@ pub(crate) fn encode_parts(
     prefix: Hash,
     opaque: Option<AffordanceId>,
     rows: &[SnapRow],
+    constraints: &[(Sigil, ConstraintState)],
 ) -> Result<Vec<u8>, SnapError> {
     if rows.len() > MAX_SNAP_ROWS {
         return Err(SnapError::Oversize {
             size: rows.len(),
             cap: MAX_SNAP_ROWS,
+        });
+    }
+    if constraints.len() > MAX_SNAP_CONSTRAINTS {
+        return Err(SnapError::Oversize {
+            size: constraints.len(),
+            cap: MAX_SNAP_CONSTRAINTS,
         });
     }
     let mut buf = Vec::new();
@@ -184,6 +200,13 @@ pub(crate) fn encode_parts(
         encode_row(&mut buf, row)?;
         check_snap_size(buf.len())?;
     }
+    put_u32(&mut buf, u32_len(constraints.len())?);
+    for &(id, state) in constraints {
+        buf.extend_from_slice(&id.raw().to_le_bytes());
+        put_i32(&mut buf, state.impulse);
+        buf.push(u8::from(state.broken));
+        check_snap_size(buf.len())?;
+    }
     check_snap_size(buf.len())?;
     Ok(buf)
 }
@@ -201,7 +224,7 @@ fn decode_parts(bytes: &[u8]) -> Result<SnapParts, SnapError> {
         return Err(SnapError::Magic);
     }
     let version = take_u8(&mut rest)?;
-    if version != SNAP_VERSION {
+    if !(SNAP_VERSION_MIN..=SNAP_VERSION).contains(&version) {
         return Err(SnapError::Version(version));
     }
     let pad = take(&mut rest, 3)?;
@@ -225,6 +248,20 @@ fn decode_parts(bytes: &[u8]) -> Result<SnapParts, SnapError> {
     for _ in 0..n {
         rows.push(decode_row(&mut rest)?);
     }
+    let mut constraints = Vec::new();
+    if version >= 2 {
+        let cn = take_capped_count(&mut rest, MAX_SNAP_CONSTRAINTS)?;
+        for _ in 0..cn {
+            let id = Sigil::from_raw(take_u128(&mut rest)?);
+            let impulse = take_i32(&mut rest)?;
+            let broken = match take_u8(&mut rest)? {
+                0 => false,
+                1 => true,
+                _ => return Err(SnapError::Kind),
+            };
+            constraints.push((id, ConstraintState { impulse, broken }));
+        }
+    }
     if !rest.is_empty() {
         return Err(SnapError::Trailing);
     }
@@ -235,6 +272,7 @@ fn decode_parts(bytes: &[u8]) -> Result<SnapParts, SnapError> {
         prefix,
         opaque,
         rows,
+        constraints,
     })
 }
 
@@ -614,8 +652,16 @@ mod tests {
     #[test]
     fn encode_calls_check_snap_size() {
         let rows = vec![SnapRow::new(relic(1), LocusKind::Relic)];
-        let bytes =
-            encode_parts(Epoch::ZERO, Tick::ZERO, Hash::ZERO, Hash::ZERO, None, &rows).unwrap();
+        let bytes = encode_parts(
+            Epoch::ZERO,
+            Tick::ZERO,
+            Hash::ZERO,
+            Hash::ZERO,
+            None,
+            &rows,
+            &[],
+        )
+        .unwrap();
         assert_eq!(check_snap_size(bytes.len()), Ok(()));
         assert!(bytes.len() < SNAP_BLOB_CAP);
     }
@@ -644,6 +690,7 @@ mod tests {
     #[test]
     fn trailing_bytes_refused() {
         let mut b = header(Epoch::ZERO, Tick::ZERO, Hash::ZERO, Hash::ZERO, 0);
+        b.extend_from_slice(&0u32.to_le_bytes());
         b.push(0);
         assert_eq!(decode_parts(&b), Err(SnapError::Trailing));
     }

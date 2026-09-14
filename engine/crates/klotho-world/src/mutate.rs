@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use klotho_canon::{Canon, EpochMap};
 use klotho_core::{
-    AabbMm, AffordanceId, BlobId, Epoch, Hash, IVec3, LocusKind, PackedIx, PhysRequest, PoseMm,
-    ResourceId, Sigil, SimLod, Support, Tick, Vel3,
+    AabbMm, AffordanceId, BlobId, ConstraintState, Epoch, Hash, IVec3, LocusKind, PackedIx,
+    PhysRequest, PoseMm, ResourceId, Sigil, SimLod, Support, Tick, Vel3,
 };
 use klotho_ir::{PlayerIntent, Rel};
 use klotho_trace::TraceEvent;
@@ -125,6 +125,11 @@ impl WorldMut<'_> {
     /// Drop a consumed `PHYS_REQ` row.
     pub fn clear_phys_req(&mut self, s: Sigil) -> Result<(), WorldError> {
         self.world.projection_mut().clear_phys_req(s)
+    }
+
+    /// Write an admitted constraint row.
+    pub fn set_constraint_state(&mut self, id: Sigil, state: ConstraintState) {
+        self.world.projection_mut().set_constraint_state(id, state);
     }
 
     /// Insert a relation. Reindexes `space_ix` when Place membership or

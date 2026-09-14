@@ -28,13 +28,14 @@ pub use budget::Budget;
 pub use hash::{BlobId, Hash};
 pub use id::{
     AffordanceId, LOD_PERIOD, LawId, LocusKind, MAX_ISLAND_SIZE, MAX_ISLANDS, MAX_LOCI_HEARTH,
-    MAX_LOCI_PROCESS, NO_ISLAND, PackedIx, PlayerId, ResourceId, Sigil, SimLod,
+    MAX_LOCI_PROCESS, NO_ISLAND, PackedIx, PlayerId, ResourceId, SLEEP_AFTER_TICKS, Sigil, SimLod,
+    is_phys_awake,
 };
 pub use reject::{KernelFault, RejectReason};
 pub use rng::Rng;
 pub use space::{
-    AabbMm, BodyMode, BodyPhysics, HullWitness, IVec3, PhysRequest, PoseMm, QuantizedContact,
-    ShapeKind, Support, Vel3, frac_cmp,
+    AabbMm, BodyMode, BodyPhysics, ConstraintKind, ConstraintPhysics, ConstraintState, HullWitness,
+    IVec3, PhysRequest, PoseMm, QuantizedContact, ShapeKind, Support, Vel3, frac_cmp,
 };
 pub use tick::{Epoch, Tick};
 pub use units::{Mm, VelFx, YawMd};

@@ -2,8 +2,9 @@
 
 use klotho_canon::{Canon, PredStore, RiteId};
 use klotho_core::{
-    AabbMm, AffordanceId, BodyPhysics, Epoch, Hash, IVec3, LocusKind, PackedIx, PhysRequest,
-    PoseMm, ResourceId, Sigil, SimLod, Support, Tick, Vel3, frac_cmp,
+    AabbMm, AffordanceId, BodyPhysics, ConstraintPhysics, ConstraintState, Epoch, Hash, IVec3,
+    LocusKind, PackedIx, PhysRequest, PoseMm, ResourceId, Sigil, SimLod, Support, Tick, Vel3,
+    frac_cmp,
 };
 use klotho_ir::{Channel, Rel};
 
@@ -257,6 +258,26 @@ impl WorldView<'_> {
         self.canon
             .and_then(|canon| canon.body_physics(s))
             .unwrap_or_default()
+    }
+
+    /// Canon-bound constraint, if any.
+    #[must_use]
+    pub fn constraint(&self, id: Sigil) -> Option<ConstraintPhysics> {
+        self.canon.and_then(|canon| canon.constraint(id))
+    }
+
+    /// Every Canon constraint in identity order.
+    pub fn constraints(&self) -> impl Iterator<Item = (Sigil, ConstraintPhysics)> + '_ {
+        self.canon
+            .map(|canon| canon.constraints.iter().map(|(&id, &c)| (id, c)))
+            .into_iter()
+            .flatten()
+    }
+
+    /// Last admitted constraint row.
+    #[must_use]
+    pub fn constraint_state(&self, id: Sigil) -> Option<ConstraintState> {
+        self.proj.constraint_state(id)
     }
 
     /// Local (unposed) hull AABB.

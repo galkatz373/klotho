@@ -1,6 +1,6 @@
 //! Kernel-derived swept AABB (K24). Proposer-supplied swept is ignored.
 
-use klotho_core::{AabbMm, BlobId, HullWitness, PoseMm, RejectReason, ShapeKind, Sigil};
+use klotho_core::{AabbMm, BlobId, HullWitness, PoseMm, RejectReason, Sigil};
 use klotho_geom::{CONTACT_SLOP_MM, bounds, cooked_shape, swept_against};
 use klotho_world::{WorldView, world_aabb};
 
@@ -99,8 +99,8 @@ pub fn check_phys_body(
         let Some(opose) = view.pose(s) else {
             continue;
         };
-        let occ =
-            cooked_shape(ShapeKind::OrientedBox, ol).map_err(|_| RejectReason::WitnessMismatch)?;
+        let occ_kind = view.body_physics(s).shape;
+        let occ = cooked_shape(occ_kind, ol).map_err(|_| RejectReason::WitnessMismatch)?;
         let hit = swept_against(shape, prev, proposed, occ, opose)
             .map_err(|_| RejectReason::WitnessMismatch)?;
         if hit.crossing || hit.end_depth_mm > CONTACT_SLOP_MM {

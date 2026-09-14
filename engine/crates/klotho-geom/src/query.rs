@@ -3,6 +3,7 @@
 use klotho_core::{AabbMm, IVec3, Mm, PoseMm, QuantizedContact, YawMd, rotate, rotation_axes};
 
 use crate::shape::{GeomError, Shape};
+use crate::terrain::{heightfield_bounds, mesh_bounds, terrain_contact};
 
 const FX: i64 = 65_536;
 
@@ -82,6 +83,29 @@ pub fn bounds(shape: Shape, pose: PoseMm) -> Result<AabbMm, GeomError> {
                 Ok(out)
             }
         }
+        Shape::TriangleMesh { tris, len } => {
+            let b = mesh_bounds(&tris, len, pose);
+            if b.is_empty() {
+                Err(GeomError::Malformed)
+            } else {
+                Ok(b)
+            }
+        }
+        Shape::Heightfield {
+            origin,
+            cell_x_mm,
+            cell_z_mm,
+            nx,
+            nz,
+            samples,
+        } => {
+            let b = heightfield_bounds(origin, cell_x_mm, cell_z_mm, nx, nz, &samples, pose);
+            if b.is_empty() {
+                Err(GeomError::Malformed)
+            } else {
+                Ok(b)
+            }
+        }
     }
 }
 
@@ -136,6 +160,12 @@ pub fn contact(
         }
         (Shape::Capsule { .. }, Shape::Sphere { .. }) => {
             Ok(sphere_capsule(b, pose_b, a, pose_a, true))
+        }
+        (Shape::TriangleMesh { .. } | Shape::Heightfield { .. }, other) => {
+            terrain_contact(a, pose_a, other, pose_b, true)
+        }
+        (other, Shape::TriangleMesh { .. } | Shape::Heightfield { .. }) => {
+            terrain_contact(b, pose_b, other, pose_a, false)
         }
         _ => Err(GeomError::Unsupported),
     }

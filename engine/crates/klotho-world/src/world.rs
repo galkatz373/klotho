@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use klotho_canon::{Canon, OPAQUE};
-use klotho_core::{AffordanceId, Epoch, Hash, Tick};
+use klotho_core::{AffordanceId, ConstraintState, Epoch, Hash, Sigil, Tick};
 use klotho_trace::{TraceEvent, TraceLog, fold_prefix};
 
 use crate::error::SnapError;
@@ -227,7 +227,28 @@ impl WorldSnapshot {
         opaque: Option<AffordanceId>,
         rows: Vec<SnapRow>,
     ) -> Result<Self, SnapError> {
-        let blob = Projection::from_snap_rows(opaque, &rows)?;
+        Self::from_snap_parts(
+            epoch,
+            tick,
+            canon_hash,
+            trace_prefix_hash,
+            opaque,
+            rows,
+            Vec::new(),
+        )
+    }
+
+    pub(crate) fn from_snap_parts(
+        epoch: Epoch,
+        tick: Tick,
+        canon_hash: Hash,
+        trace_prefix_hash: Hash,
+        opaque: Option<AffordanceId>,
+        rows: Vec<SnapRow>,
+        constraints: Vec<(Sigil, ConstraintState)>,
+    ) -> Result<Self, SnapError> {
+        let mut blob = Projection::from_snap_rows(opaque, &rows)?;
+        blob.restore_constraint_states(&constraints);
         Ok(Self {
             epoch,
             tick,

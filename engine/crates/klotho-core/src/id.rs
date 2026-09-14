@@ -238,6 +238,18 @@ pub const NO_ISLAND: u16 = u16::MAX;
 /// (stacking would lie). Oversize → omit the whole island
 /// ([`crate::RejectReason::IslandTooLarge`]).
 pub const MAX_ISLAND_SIZE: u16 = 256;
+/// Quiet ticks before a supported body is asleep (`anvil.rotated_stack`).
+///
+/// `sleep_ticks == 0` is freshly woken. `1..SLEEP_AFTER_TICKS-1` is still a
+/// partition seed so the island can keep settling. `>= SLEEP_AFTER_TICKS`
+/// is asleep and is only reached by flood-fill or a later impulse.
+pub const SLEEP_AFTER_TICKS: u16 = 120;
+
+/// True when `sleep_ticks` still participates as a K58 seed.
+#[must_use]
+pub const fn is_phys_awake(sleep_ticks: u16) -> bool {
+    sleep_ticks < SLEEP_AFTER_TICKS
+}
 
 #[cfg(test)]
 mod tests {
@@ -280,6 +292,10 @@ mod tests {
         assert_eq!(MAX_ISLANDS, u16::MAX);
         assert_eq!(NO_ISLAND, u16::MAX);
         assert_eq!(MAX_ISLAND_SIZE, 256);
+        assert_eq!(SLEEP_AFTER_TICKS, 120);
+        assert!(is_phys_awake(0));
+        assert!(is_phys_awake(119));
+        assert!(!is_phys_awake(SLEEP_AFTER_TICKS));
         assert!(u32::from(MAX_ISLANDS) > u32::from(MAX_ISLAND_SIZE));
         assert_eq!(MAX_LOCI_HEARTH, 4_096);
         assert_eq!(MAX_LOCI_PROCESS, 200_000);

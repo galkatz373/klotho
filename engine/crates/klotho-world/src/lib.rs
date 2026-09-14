@@ -52,8 +52,8 @@ mod tests {
 
     use klotho_canon::cook_diffs;
     use klotho_core::{
-        AabbMm, AffordanceId, BlobId, Hash, IVec3, LocusKind, Mm, PackedIx, PhysRequest, PoseMm,
-        ResourceId, Sigil, SimLod, Tick, Vel3, VelFx, YawMd,
+        AabbMm, AffordanceId, BlobId, ConstraintState, Hash, IVec3, LocusKind, Mm, PackedIx,
+        PhysRequest, PoseMm, ResourceId, Sigil, SimLod, Tick, Vel3, VelFx, YawMd,
     };
     use klotho_ir::{CanonDiff, Rel, from_ron};
     use klotho_trace::{PoseReason, TraceBody, TraceEvent};
@@ -989,6 +989,19 @@ mod tests {
         let back = WorldSnapshot::decode(&snap.encode().unwrap()).unwrap();
         assert_eq!(back.view().pose(s), Some(pose));
         assert_eq!(snap.view().pose(s), Some(pose));
+    }
+
+    #[test]
+    fn snapshot_blob_round_trips_constraint_state() {
+        let mut w = opaque_world();
+        let id = relic(9);
+        let state = ConstraintState {
+            impulse: 42,
+            broken: true,
+        };
+        w.mutate().set_constraint_state(id, state);
+        let back = WorldSnapshot::decode(&w.snapshot().encode().unwrap()).unwrap();
+        assert_eq!(back.view().constraint_state(id), Some(state));
     }
 
     #[test]

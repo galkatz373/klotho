@@ -4,12 +4,13 @@ use std::collections::BTreeSet;
 
 use klotho_commit::{BodyDelta, Proposal};
 use klotho_core::{
-    AabbMm, BlobId, BodyMode, BodyPhysics, HullWitness, LocusKind, NO_ISLAND, PoseMm, ShapeKind,
-    Sigil, Support, Vel3, VelFx, YawMd, rotate,
+    AabbMm, BlobId, BodyMode, BodyPhysics, HullWitness, LocusKind, NO_ISLAND, PoseMm,
+    SLEEP_AFTER_TICKS, ShapeKind, Sigil, Support, Vel3, VelFx, YawMd, rotate,
 };
 use klotho_geom::{bounds, contact, cooked_shape, manifold};
 use klotho_world::WorldView;
 
+use crate::joints::{Joint, apply_joint, emit_refs};
 use crate::quant::{pose_and_residual, vel3};
 
 const SUBSTEPS: u32 = 8;
@@ -18,17 +19,17 @@ const GRAVITY_MM_PER_TICK2: f32 = 2.725;
 const MD_PER_RADIAN: f32 = 57_295.78;
 const ANGULAR_POSITION_SCALE: f32 = 0.02;
 
-struct Body {
+pub(crate) struct Body {
     sigil: Sigil,
     local: AabbMm,
     hull: BlobId,
     kind: ShapeKind,
-    x: [f32; 3],
+    pub(crate) x: [f32; 3],
     v: [f32; 3],
-    angle_md: [f32; 3],
+    pub(crate) angle_md: [f32; 3],
     omega_md: [f32; 3],
-    inv_mass: f32,
-    inv_inertia: [f32; 3],
+    pub(crate) inv_mass: f32,
+    pub(crate) inv_inertia: [f32; 3],
     center_of_mass: klotho_core::IVec3,
     friction: f32,
     restitution: f32,
@@ -86,6 +87,7 @@ pub fn solve_island(island: u16, view: &WorldView<'_>) -> SolveOut {
         };
     }
     let statics = collect_statics(view, &bodies);
+    let mut joints = collect_joints(view, &bodies);
     let dt = 1.0 / SUBSTEPS as f32;
     let mut last_support: Vec<Option<Support>> = vec![None; bodies.len()];
     for _ in 0..SUBSTEPS {
@@ -106,13 +108,16 @@ pub fn solve_island(island: u16, view: &WorldView<'_>) -> SolveOut {
             for c in &contacts {
                 apply_contact(&mut bodies, c);
             }
+            for joint in &mut joints {
+                apply_joint(&mut bodies, joint);
+            }
         }
         for c in &contacts {
             apply_velocity_contact(&mut bodies, c, &impact_v);
         }
         fill_support(&bodies, &contacts, &mut last_support);
     }
-    emit(island, members, view, &bodies, &last_support)
+    emit(island, members, view, &bodies, &last_support, &joints)
 }
 
 fn collect_members(island: u16, view: &WorldView<'_>) -> Vec<Sigil> {
@@ -371,7 +376,7 @@ fn apply_contact(bodies: &mut [Body], c: &Contact) {
     let Some((n, depth)) = contact_normal_depth(bodies, c) else {
         return;
     };
-    if depth <= 0.0 {
+    if depth <= 0.0 || depth > 4_000.0 || !n.into_iter().all(f32::is_finite) {
         return;
     }
     let ai = c.a;
@@ -402,10 +407,9 @@ fn apply_contact(bodies: &mut [Body], c: &Contact) {
     bodies[ai].x[0] += corr[0];
     bodies[ai].x[1] += corr[1];
     bodies[ai].x[2] += corr[2];
-    // Static occupancy has no authored contact patch in A04. Applying a
-    // centroid witness as torque would invent energy on a perfectly flat
-    // floor; dynamic pairs do have a stable two-body lever arm.
-    if c.b.is_some() {
+    // Flat static floors keep translation-only correction. Sloped occupancy
+    // needs the contact lever arm so boxes can rest flush.
+    if c.b.is_some() || n[1].abs() < 0.98 {
         apply_angular_position(&mut bodies[ai], ra, n, dlambda);
     }
     if let Some(j) = c.b {
@@ -472,6 +476,9 @@ fn apply_angular_position(body: &mut Body, r: [f32; 3], n: [f32; 3], lambda: f32
         torque[0] * body.inv_inertia[0] * lambda * MD_PER_RADIAN * ANGULAR_POSITION_SCALE;
     body.angle_md[2] +=
         torque[2] * body.inv_inertia[2] * lambda * MD_PER_RADIAN * ANGULAR_POSITION_SCALE;
+    for angle in &mut body.angle_md {
+        *angle = angle.clamp(-180_000.0, 180_000.0);
+    }
 }
 
 fn apply_velocity_contact(bodies: &mut [Body], c: &Contact, impact_v: &[[f32; 3]]) {
@@ -643,16 +650,82 @@ fn pack_support(n: [f32; 3], depth: f32) -> Option<Support> {
     ))
 }
 
+fn collect_joints(view: &WorldView<'_>, bodies: &[Body]) -> Vec<Joint> {
+    let mut index: std::collections::BTreeMap<Sigil, usize> = std::collections::BTreeMap::new();
+    for (i, b) in bodies.iter().enumerate() {
+        index.insert(b.sigil, i);
+    }
+    let mut out = Vec::new();
+    for (id, canon) in view.constraints() {
+        if view.constraint_state(id).is_some_and(|s| s.broken) {
+            continue;
+        }
+        let a = index.get(&canon.a).copied();
+        let b = index.get(&canon.b).copied();
+        let (ai, bi, static_x, static_angle) = match (a, b) {
+            (Some(i), Some(j)) => (i, Some(j), [0.0; 3], [0.0; 3]),
+            (Some(i), None) => {
+                let Some(pose) = view.pose(canon.b) else {
+                    continue;
+                };
+                (
+                    i,
+                    None,
+                    [pose.x.0 as f32, pose.y.0 as f32, pose.z.0 as f32],
+                    [pose.yaw.0 as f32, pose.pitch.0 as f32, pose.roll.0 as f32],
+                )
+            }
+            (None, Some(j)) => {
+                let Some(pose) = view.pose(canon.a) else {
+                    continue;
+                };
+                let mut flipped = canon;
+                flipped.a = canon.b;
+                flipped.b = canon.a;
+                flipped.anchor_a = canon.anchor_b;
+                flipped.anchor_b = canon.anchor_a;
+                out.push(Joint {
+                    id,
+                    canon: flipped,
+                    a: j,
+                    b: None,
+                    static_x: [pose.x.0 as f32, pose.y.0 as f32, pose.z.0 as f32],
+                    static_angle: [pose.yaw.0 as f32, pose.pitch.0 as f32, pose.roll.0 as f32],
+                    impulse: 0.0,
+                });
+                continue;
+            }
+            (None, None) => continue,
+        };
+        out.push(Joint {
+            id,
+            canon,
+            a: ai,
+            b: bi,
+            static_x,
+            static_angle,
+            impulse: 0.0,
+        });
+    }
+    out.sort_by_key(|j| j.id);
+    out
+}
+
 fn emit(
     island: u16,
     members: Vec<Sigil>,
     view: &WorldView<'_>,
     bodies: &[Body],
     support: &[Option<Support>],
+    joints: &[Joint],
 ) -> SolveOut {
     let mut deltas = Vec::with_capacity(bodies.len());
     let mut residuals_mm = Vec::with_capacity(bodies.len());
     let mut rejected_non_finite = Vec::new();
+    let island_active = bodies
+        .iter()
+        .enumerate()
+        .any(|(i, b)| view.phys_req(b.sigil).is_some() || !is_quiet(b, support[i]));
     for (i, b) in bodies.iter().enumerate() {
         let Some(attitude) = quantized_attitude(b) else {
             rejected_non_finite.push(b.sigil);
@@ -669,10 +742,28 @@ fn emit(
             rejected_non_finite.push(b.sigil);
             continue;
         };
-        let Some(vel) = vel3(b.v[0], b.v[1], b.v[2]) else {
-            rejected_non_finite.push(b.sigil);
-            continue;
+        let mut vel = match vel3(b.v[0], b.v[1], b.v[2]) {
+            Some(v) => v,
+            None => {
+                rejected_non_finite.push(b.sigil);
+                continue;
+            }
         };
+        let mut yaw_rate = b.omega_md[0].floor() as i32;
+        let mut pitch_rate = b.omega_md[1].floor() as i32;
+        let mut roll_rate = b.omega_md[2].floor() as i32;
+        let prev_sleep = view.island(b.sigil).map(|(_, s)| s).unwrap_or(0);
+        let sleep_ticks = if island_active {
+            0
+        } else {
+            prev_sleep.saturating_add(1).min(SLEEP_AFTER_TICKS)
+        };
+        if sleep_ticks >= SLEEP_AFTER_TICKS {
+            vel = Vel3::ZERO;
+            yaw_rate = 0;
+            pitch_rate = 0;
+            roll_rate = 0;
+        }
         let hint = hits_closed_oriented(view, b.sigil, b.local, b.prev, pose);
         let mut witness = HullWitness::new(b.sigil, pose, hint);
         witness.epoch = view.epoch();
@@ -681,16 +772,17 @@ fn emit(
             mover: b.sigil,
             pose,
             vel,
-            yaw_rate: b.omega_md[0].floor() as i32,
-            pitch_rate: b.omega_md[1].floor() as i32,
-            roll_rate: b.omega_md[2].floor() as i32,
-            sleep_ticks: 0,
+            yaw_rate,
+            pitch_rate,
+            roll_rate,
+            sleep_ticks,
             hull: b.hull,
             witness,
             support: support[i],
         });
         residuals_mm.push(residual);
     }
+    let (constraints, breaks) = emit_refs(joints);
     let proposals = if rejected_non_finite.is_empty() && !deltas.is_empty() {
         vec![Proposal::PhysIsland {
             epoch: view.epoch(),
@@ -699,8 +791,8 @@ fn emit(
             members,
             bodies: deltas,
             contacts: Vec::new(),
-            constraints: Vec::new(),
-            breaks: Vec::new(),
+            constraints,
+            breaks,
         }]
     } else {
         Vec::new()
@@ -710,6 +802,12 @@ fn emit(
         residuals_mm,
         rejected_non_finite,
     }
+}
+
+fn is_quiet(body: &Body, support: Option<Support>) -> bool {
+    support.is_some()
+        && body.v.iter().all(|v| v.abs() < 2.0)
+        && body.omega_md.iter().all(|w| w.abs() < 200.0)
 }
 
 fn hits_closed_oriented(

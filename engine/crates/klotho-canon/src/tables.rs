@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use klotho_core::{AffordanceId, BodyPhysics, LawId, Mm, ResourceId, Sigil};
+use klotho_core::{AffordanceId, BodyPhysics, ConstraintPhysics, LawId, Mm, ResourceId, Sigil};
 use klotho_ir::{Name, Rel};
 
 use crate::ast::{CookedSlot, PredId, PredProgram, RiteChunk, RiteId};
@@ -30,6 +30,8 @@ pub struct Canon {
     pub pin_sigils: Vec<Option<Sigil>>,
     /// Canon-bound per-locus physical configuration.
     pub physics: BTreeMap<Sigil, BodyPhysics>,
+    /// Canon-bound physical constraints, keyed by constraint identity.
+    pub constraints: BTreeMap<Sigil, ConstraintPhysics>,
     law_by_name: BTreeMap<Name, LawId>,
     affordance_by_name: BTreeMap<Name, AffordanceId>,
     rite_by_name: BTreeMap<Name, RiteId>,
@@ -64,6 +66,7 @@ impl Canon {
             pin_names,
             pin_sigils,
             physics: BTreeMap::new(),
+            constraints: BTreeMap::new(),
             law_by_name,
             affordance_by_name,
             rite_by_name,
@@ -83,6 +86,20 @@ impl Canon {
     #[must_use]
     pub fn body_physics(&self, locus: Sigil) -> Option<BodyPhysics> {
         self.physics.get(&locus).copied()
+    }
+
+    /// Bind a validated physical constraint. Identity need not be a locus.
+    pub fn bind_constraint(&mut self, id: Sigil, constraint: ConstraintPhysics) -> bool {
+        if !constraint.is_valid() {
+            return false;
+        }
+        self.constraints.insert(id, constraint).is_none()
+    }
+
+    /// Canon constraint, if bound.
+    #[must_use]
+    pub fn constraint(&self, id: Sigil) -> Option<ConstraintPhysics> {
+        self.constraints.get(&id).copied()
     }
 
     /// Look up a compiled pred.

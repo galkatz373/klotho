@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use klotho_canon::{Canon, EpochMap};
 use klotho_core::{
-    Budget, Epoch, Hash, IVec3, KernelFault, LocusKind, Mm, NO_ISLAND, PlayerId, PoseMm,
-    RejectReason, Sigil, Tick, Vel3, YawMd, look_offset, rotate_xz,
+    Budget, ConstraintState, Epoch, Hash, IVec3, KernelFault, LocusKind, Mm, NO_ISLAND, PlayerId,
+    PoseMm, RejectReason, Sigil, Tick, Vel3, YawMd, look_offset, rotate_xz,
 };
 use klotho_ir::{Channel, IntentTarget, PlayerIntent, Rel, SourceKind, Verb};
 use klotho_trace::{
@@ -443,7 +443,7 @@ impl CommitKernel {
             breaks,
             tick,
         )?;
-        let (cells, attachments) = phys_write_cells(bodies, &self.world.view())?;
+        let (cells, attachments) = phys_write_cells(bodies, constraints, &self.world.view())?;
         if cells.iter().any(|cell| written.contains_key(cell)) {
             return Err(RejectReason::Conflict);
         }
@@ -462,6 +462,7 @@ impl CommitKernel {
             spec.clear_phys_req(child)
                 .map_err(|_| RejectReason::Budget)?;
         }
+        apply_constraints(&mut spec, constraints, breaks)?;
         validate_contact_claims(&spec.view(), bodies, contacts)?;
         let law_bodies: Vec<(Sigil, bool)> = bodies
             .iter()
@@ -522,11 +523,7 @@ impl CommitKernel {
         if expected != members {
             return Err(RejectReason::WitnessMismatch);
         }
-        // Constraint Projection/Canon rows land in PHYS-A05. Never accept a
-        // claim that this kernel version cannot validate and apply.
-        if !constraints.is_empty() || !breaks.is_empty() {
-            return Err(RejectReason::WitnessMismatch);
-        }
+        validate_constraint_headers(&view, members, constraints, breaks)?;
 
         let mut swept_hits = Vec::with_capacity(bodies.len());
         for body in bodies {
@@ -814,8 +811,75 @@ type WriteCell = (u128, u8);
 type AttachmentWrite = (Sigil, Sigil, IVec3);
 type PhysWriteSet = (Vec<WriteCell>, Vec<AttachmentWrite>);
 
+fn validate_constraint_headers(
+    view: &WorldView<'_>,
+    members: &[Sigil],
+    constraints: &[crate::proposal::ConstraintRef],
+    breaks: &[crate::proposal::ConstraintBreakClaim],
+) -> Result<(), RejectReason> {
+    for claim in constraints {
+        let Some(canon) = view.constraint(claim.constraint) else {
+            return Err(RejectReason::WrongHull);
+        };
+        if canon.binding != claim.binding || claim.binding == klotho_core::BlobId::ZERO {
+            return Err(RejectReason::WrongHull);
+        }
+        if !canon.is_valid() {
+            return Err(RejectReason::WitnessMismatch);
+        }
+        if view
+            .constraint_state(claim.constraint)
+            .is_some_and(|s| s.broken)
+        {
+            return Err(RejectReason::WitnessMismatch);
+        }
+        let a_member = members.binary_search(&canon.a).is_ok();
+        let b_member = members.binary_search(&canon.b).is_ok();
+        if !a_member && !b_member {
+            return Err(RejectReason::WitnessMismatch);
+        }
+        if !view.contains(canon.a) || !view.contains(canon.b) {
+            return Err(RejectReason::WitnessMismatch);
+        }
+    }
+    for brk in breaks {
+        let Ok(idx) = constraints.binary_search_by_key(&brk.constraint, |c| c.constraint) else {
+            return Err(RejectReason::WitnessMismatch);
+        };
+        let Some(canon) = view.constraint(brk.constraint) else {
+            return Err(RejectReason::WrongHull);
+        };
+        if canon.break_impulse <= 0 || brk.impulse < canon.break_impulse {
+            return Err(RejectReason::WitnessMismatch);
+        }
+        if constraints[idx].impulse != brk.impulse {
+            return Err(RejectReason::WitnessMismatch);
+        }
+    }
+    Ok(())
+}
+
+fn apply_constraints(
+    spec: &mut SpecDelta,
+    constraints: &[crate::proposal::ConstraintRef],
+    breaks: &[crate::proposal::ConstraintBreakClaim],
+) -> Result<(), RejectReason> {
+    for claim in constraints {
+        let broken = breaks.iter().any(|b| b.constraint == claim.constraint);
+        spec.set_constraint_state(
+            claim.constraint,
+            ConstraintState {
+                impulse: claim.impulse,
+                broken,
+            },
+        );
+    }
+    Ok(())
+}
+
 fn phys_write_cells(
     bodies: &[BodyDelta],
+    constraints: &[crate::proposal::ConstraintRef],
     view: &WorldView<'_>,
 ) -> Result<PhysWriteSet, RejectReason> {
     let body_ids: Vec<Sigil> = bodies.iter().map(|body| body.mover).collect();
@@ -831,14 +895,17 @@ fn phys_write_cells(
             children.insert(child, (body.mover, local));
         }
     }
-    if children.len() > MAX_PHYS_ISLAND_CHILDREN
-        || bodies.len().saturating_add(children.len()) > MAX_PHYS_ISLAND_WRITE_LOCI
-    {
+    let written = bodies
+        .len()
+        .saturating_add(children.len())
+        .saturating_add(constraints.len());
+    if children.len() > MAX_PHYS_ISLAND_CHILDREN || written > MAX_PHYS_ISLAND_WRITE_LOCI {
         return Err(RejectReason::IslandTooLarge);
     }
-    let mut cells = Vec::with_capacity(bodies.len() + children.len());
+    let mut cells = Vec::with_capacity(written);
     cells.extend(bodies.iter().map(|body| (body.mover.raw(), 0)));
     cells.extend(children.keys().map(|child| (child.raw(), 0)));
+    cells.extend(constraints.iter().map(|c| (c.constraint.raw(), 1)));
     let attachments = children
         .into_iter()
         .map(|(child, (parent, local))| (child, parent, local))

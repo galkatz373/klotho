@@ -7,7 +7,9 @@
 
 use std::collections::BTreeMap;
 
-use klotho_core::{AabbMm, BodyMode, LocusKind, MAX_ISLAND_SIZE, MAX_ISLANDS, Sigil, SimLod, Vel3};
+use klotho_core::{
+    AabbMm, BodyMode, LocusKind, MAX_ISLAND_SIZE, MAX_ISLANDS, Sigil, SimLod, Vel3, is_phys_awake,
+};
 use klotho_ir::Rel;
 use klotho_world::WorldView;
 
@@ -24,11 +26,11 @@ pub struct Partition {
 
 /// Union-find on **phys-body** hulls this tick.
 ///
-/// Seed = [`SimLod::Full`] phys bodies that are awake (`sleep_ticks == 0`)
+/// Seed = [`SimLod::Full`] phys bodies that are awake (`sleep_ticks < 120`)
 /// **or** have non-zero vel **or** `phys_req` **or** are `PilotedBy`/`AttachedTo`
-/// an awake locus. Flood-fill through overlapping **phys-body** hulls
-/// including sleepers (crate piles), never through idle `OpaqueClosed`
-/// scenery or [`LocusKind::Place`] floors.
+/// an awake locus. Intact Canon joints also union their endpoints. Flood-fill
+/// through overlapping **phys-body** hulls including sleepers (crate piles),
+/// never through idle `OpaqueClosed` scenery or [`LocusKind::Place`] floors.
 ///
 /// Island id = dense rank of min-Sigil. Oversize / extra groups are omitted
 /// (fail closed), not split and not silently truncated into a live island.
@@ -130,6 +132,34 @@ pub(crate) fn partition_with_caps(
         }
     }
 
+    // Intact Canon joints couple bodies that need not overlap.
+    let mut progressed = true;
+    while progressed {
+        progressed = false;
+        for (id, joint) in view.constraints() {
+            if view.constraint_state(id).is_some_and(|s| s.broken) {
+                continue;
+            }
+            let Some(&ia) = ix_of.get(&joint.a) else {
+                continue;
+            };
+            let Some(&ib) = ix_of.get(&joint.b) else {
+                continue;
+            };
+            if reached[ia as usize] || reached[ib as usize] {
+                union(&mut parent, &mut rank, ia, ib);
+            }
+            if reached[ia as usize] && !reached[ib as usize] {
+                reached[ib as usize] = true;
+                progressed = true;
+            }
+            if reached[ib as usize] && !reached[ia as usize] {
+                reached[ia as usize] = true;
+                progressed = true;
+            }
+        }
+    }
+
     let mut groups: BTreeMap<u32, Vec<Sigil>> = BTreeMap::new();
     for i in 0..n {
         if !reached[i] {
@@ -224,7 +254,7 @@ fn is_seed(view: &WorldView<'_>, s: Sigil) -> bool {
         return false;
     }
     let sleep = view.island(s).map(|(_, t)| t).unwrap_or(0);
-    if sleep == 0 {
+    if is_phys_awake(sleep) {
         return true;
     }
     if let Some((vel, yaw_rate)) = view.vel(s) {
@@ -242,7 +272,7 @@ fn attached_to_awake(view: &WorldView<'_>, s: Sigil) -> bool {
     for rel in [Rel::PilotedBy, Rel::AttachedTo] {
         for other in view.related(s, rel) {
             let sleep = view.island(other).map(|(_, t)| t).unwrap_or(0);
-            if sleep == 0 {
+            if is_phys_awake(sleep) {
                 return true;
             }
         }
@@ -256,8 +286,8 @@ mod tests {
 
     use klotho_canon::cook_diffs;
     use klotho_core::{
-        AabbMm, BlobId, Hash, IVec3, LocusKind, Mm, PhysRequest, PoseMm, Sigil, SimLod, Vel3,
-        VelFx, YawMd,
+        AabbMm, BlobId, Hash, IVec3, LocusKind, Mm, PhysRequest, PoseMm, SLEEP_AFTER_TICKS, Sigil,
+        SimLod, Vel3, VelFx, YawMd,
     };
     use klotho_ir::{CanonDiff, Rel, from_ron};
     use klotho_world::World;
@@ -338,8 +368,8 @@ mod tests {
         let sleep_near = relic(2);
         let sleep_far = relic(3);
         plant(&mut w, awake, 0, 0);
-        plant(&mut w, sleep_near, 150, 12);
-        plant(&mut w, sleep_far, 50_000, 12);
+        plant(&mut w, sleep_near, 150, SLEEP_AFTER_TICKS);
+        plant(&mut w, sleep_far, 50_000, SLEEP_AFTER_TICKS);
         let part = partition_islands(&w.view());
         assert_eq!(part.islands.len(), 1, "{part:?}");
         assert_eq!(part.islands[0].1, vec![awake, sleep_near]);
@@ -367,7 +397,7 @@ mod tests {
     fn phys_req_sleeper_is_a_seed() {
         let mut w = world();
         let s = relic(1);
-        plant(&mut w, s, 0, 12);
+        plant(&mut w, s, 0, SLEEP_AFTER_TICKS);
         w.mutate()
             .set_phys_req(
                 s,
@@ -385,7 +415,7 @@ mod tests {
     fn nonzero_vel_sleeper_is_a_seed() {
         let mut w = world();
         let s = relic(1);
-        plant(&mut w, s, 0, 12);
+        plant(&mut w, s, 0, SLEEP_AFTER_TICKS);
         w.mutate()
             .set_vel(
                 s,
@@ -403,7 +433,7 @@ mod tests {
         let parent = relic(1);
         let child = relic(2);
         plant(&mut w, parent, 0, 0);
-        plant(&mut w, child, 50_000, 12);
+        plant(&mut w, child, 50_000, SLEEP_AFTER_TICKS);
         w.mutate().add_rel(child, Rel::AttachedTo, parent).unwrap();
         let part = partition_islands(&w.view());
         assert_eq!(part.islands.len(), 2, "{part:?}");
@@ -414,7 +444,7 @@ mod tests {
     fn isolated_sleeper_is_not_an_island() {
         let mut w = world();
         let s = relic(1);
-        plant(&mut w, s, 0, 12);
+        plant(&mut w, s, 0, SLEEP_AFTER_TICKS);
         let part = partition_islands(&w.view());
         assert!(part.islands.is_empty(), "{part:?}");
     }
@@ -435,7 +465,7 @@ mod tests {
         let awake = relic(1);
         let sleeper = relic(2);
         plant(&mut w, awake, 0, 0);
-        plant(&mut w, sleeper, 150, 12);
+        plant(&mut w, sleeper, 150, SLEEP_AFTER_TICKS);
         w.mutate().set_sim_lod(sleeper, SimLod::Dormant).unwrap();
         let part = partition_islands(&w.view());
         assert_eq!(part.islands, vec![(0, vec![awake, sleeper])]);
@@ -493,5 +523,28 @@ mod tests {
         assert_eq!(part.islands[0].1, vec![relic(1)]);
         assert_eq!(part.omitted_too_many, 2);
         assert_eq!(part.omitted_too_large, 0);
+    }
+
+    #[test]
+    fn intact_constraint_joins_non_overlapping_bodies() {
+        let a = relic(1);
+        let b = relic(2);
+        let id = relic(9);
+        let mut canon = cook_diffs(&from_ron::<Vec<CanonDiff>>("[]").unwrap()).unwrap();
+        assert!(canon.bind_constraint(
+            id,
+            klotho_core::ConstraintPhysics {
+                a,
+                b,
+                binding: BlobId::from_bytes([7; 32]),
+                ..klotho_core::ConstraintPhysics::default()
+            }
+        ));
+        let mut w = World::new(Arc::new(canon), Hash::ZERO);
+        plant(&mut w, a, 0, 0);
+        plant(&mut w, b, 50_000, 0);
+        let part = partition_islands(&w.view());
+        assert_eq!(part.islands.len(), 1, "{part:?}");
+        assert_eq!(part.islands[0].1, vec![a, b]);
     }
 }

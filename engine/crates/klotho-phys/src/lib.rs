@@ -8,6 +8,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod joints;
 mod quant;
 mod solver;
 
@@ -558,7 +559,9 @@ mod tests {
             x1.0
         );
         k.world_mut().set_vel(s, Vel3::ZERO, 0).unwrap();
-        k.world_mut().set_island(s, 99, 12).unwrap();
+        k.world_mut()
+            .set_island(s, 99, klotho_core::SLEEP_AFTER_TICKS)
+            .unwrap();
         let part = k.partition();
         assert!(
             !part.iter().any(|(_, m)| m.contains(&s)),
@@ -704,5 +707,225 @@ mod tests {
         assert!(k.world().view().phys_req(player).is_none());
         let z1 = k.world().view().pose(vehicle).unwrap().z;
         assert_ne!(z1, z0, "folded driver PHYS_REQ must translate the vehicle");
+    }
+
+    fn constraint_id(n: u128) -> Sigil {
+        relic(100 + n)
+    }
+
+    #[test]
+    fn quiet_stack_sleeps_and_wakes_as_one_island() {
+        let mut k = CommitKernel::new(empty_world());
+        let _floor = plant_floor(&mut k);
+        let s = relic(1);
+        plant_crate(&mut k, s, 0, 0);
+        let mut phys = Phys;
+        let mut slept = false;
+        for tick in 1..=200 {
+            k.partition();
+            k.step(Tick(tick), Budget::HEARTH, &mut [&mut phys])
+                .unwrap();
+            let sleep = k.world().view().island(s).unwrap().1;
+            if sleep >= klotho_core::SLEEP_AFTER_TICKS {
+                slept = true;
+                break;
+            }
+        }
+        assert!(slept, "crate should sleep after 120 quiet ticks");
+        assert_eq!(
+            k.partition().len(),
+            0,
+            "asleep crate is not a partition seed"
+        );
+        k.world_mut()
+            .set_vel(
+                s,
+                Vel3::new(VelFx::from_mm_per_tick(40), VelFx::ZERO, VelFx::ZERO),
+                0,
+            )
+            .unwrap();
+        let islands = k.partition();
+        assert!(
+            islands.iter().any(|(_, m)| m.contains(&s)),
+            "impulse wakes the sleeper: {islands:?}"
+        );
+    }
+
+    #[test]
+    fn boxes_settle_on_slope_according_to_friction() {
+        fn run(friction: u16) -> i32 {
+            let body = BodyPhysics {
+                friction_permille: friction,
+                shape: klotho_core::ShapeKind::OrientedBox,
+                ..BodyPhysics::default()
+            };
+            let floor_phys = BodyPhysics {
+                mode: klotho_core::BodyMode::Static,
+                shape: klotho_core::ShapeKind::Heightfield,
+                friction_permille: friction,
+                ..BodyPhysics::default()
+            };
+            let crate_s = relic(1);
+            let floor_s = place(9);
+            let mut k = CommitKernel::new(world_with_physics(&[
+                (crate_s, body),
+                (floor_s, floor_phys),
+            ]));
+            {
+                let mut w = k.world_mut();
+                w.insert_locus(floor_s, LocusKind::Place).unwrap();
+                w.set_hull(
+                    floor_s,
+                    AabbMm::new(
+                        IVec3 {
+                            x: -5_000,
+                            y: 0,
+                            z: 0,
+                        },
+                        IVec3 {
+                            x: 5_000,
+                            y: 577,
+                            z: 1_000,
+                        },
+                    ),
+                    hull_id(9),
+                )
+                .unwrap();
+                w.set_pose(floor_s, PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)))
+                    .unwrap();
+            }
+            plant_crate(&mut k, crate_s, 200, 0);
+            k.world_mut()
+                .set_pose(crate_s, PoseMm::new(Mm(0), Mm(500), Mm(700), YawMd(0)))
+                .unwrap();
+            let mut phys = Phys;
+            for tick in 1..=80 {
+                k.partition();
+                k.step(Tick(tick), Budget::HEARTH, &mut [&mut phys])
+                    .unwrap();
+            }
+            k.world().view().pose(crate_s).unwrap().z.0
+        }
+        let sticky = run(900);
+        let slick = run(50);
+        assert!(
+            sticky > slick + 20,
+            "low friction should slide further down the ramp: sticky={sticky} slick={slick}"
+        );
+    }
+
+    #[test]
+    fn hinge_stays_in_angular_envelope() {
+        let a = relic(1);
+        let b = relic(2);
+        let id = constraint_id(1);
+        let joint = klotho_core::ConstraintPhysics {
+            kind: klotho_core::ConstraintKind::Hinge,
+            a,
+            b,
+            binding: hull_id(7),
+            axis: IVec3 { x: 0, y: 1, z: 0 },
+            anchor_a: IVec3 {
+                x: 200,
+                y: 200,
+                z: 0,
+            },
+            anchor_b: IVec3 {
+                x: -200,
+                y: 200,
+                z: 0,
+            },
+            limit_md: 45_000,
+            ..klotho_core::ConstraintPhysics::default()
+        };
+        let mut canon = cook_diffs(&from_ron::<Vec<CanonDiff>>("[]").unwrap()).unwrap();
+        assert!(canon.bind_constraint(id, joint));
+        let mut k = CommitKernel::new(klotho_world::World::new(Arc::new(canon), Hash::ZERO));
+        let _floor = plant_floor(&mut k);
+        plant_crate(&mut k, a, 0, 0);
+        plant_crate(&mut k, b, 0, 0);
+        k.world_mut()
+            .set_pose(a, PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)))
+            .unwrap();
+        k.world_mut()
+            .set_pose(b, PoseMm::new(Mm(400), Mm(0), Mm(0), YawMd(0)))
+            .unwrap();
+        k.world_mut()
+            .set_vel(
+                b,
+                Vel3::new(VelFx::ZERO, VelFx::ZERO, VelFx::from_mm_per_tick(8)),
+                0,
+            )
+            .unwrap();
+        let mut phys = Phys;
+        for tick in 1..=24 {
+            k.partition();
+            let d = k
+                .step(Tick(tick), Budget::HEARTH, &mut [&mut phys])
+                .unwrap();
+            assert!(d.rejects.is_empty(), "{d:?}");
+        }
+        let pa = k.world().view().pose(a).unwrap();
+        let pb = k.world().view().pose(b).unwrap();
+        let dx = (pb.x.0 - pa.x.0) as i64;
+        let dz = (pb.z.0 - pa.z.0) as i64;
+        let span = ((dx * dx + dz * dz) as f64).sqrt();
+        assert!(
+            (250.0..700.0).contains(&span),
+            "hinge anchors drifted apart: {pa:?} {pb:?} span={span}"
+        );
+        let rel_yaw = (pb.yaw.0 - pa.yaw.0).abs();
+        assert!(
+            rel_yaw <= 90_000,
+            "hinge left its angular envelope: rel_yaw={rel_yaw} {pa:?} {pb:?}"
+        );
+    }
+
+    #[test]
+    fn breakable_fixed_constraint_emits_one_break() {
+        fn run(sep_mm: i32, threshold: i32) -> bool {
+            let a = relic(1);
+            let b = relic(2);
+            let id = constraint_id(1);
+            let joint = klotho_core::ConstraintPhysics {
+                kind: klotho_core::ConstraintKind::Fixed,
+                a,
+                b,
+                binding: hull_id(7),
+                break_impulse: threshold,
+                anchor_a: IVec3 {
+                    x: 200,
+                    y: 200,
+                    z: 0,
+                },
+                anchor_b: IVec3 {
+                    x: -200,
+                    y: 200,
+                    z: 0,
+                },
+                ..klotho_core::ConstraintPhysics::default()
+            };
+            let mut canon = cook_diffs(&from_ron::<Vec<CanonDiff>>("[]").unwrap()).unwrap();
+            assert!(canon.bind_constraint(id, joint));
+            let mut k = CommitKernel::new(klotho_world::World::new(Arc::new(canon), Hash::ZERO));
+            let _floor = plant_floor(&mut k);
+            plant_crate(&mut k, a, 400, 0);
+            plant_crate(&mut k, b, 400, 0);
+            k.world_mut()
+                .set_pose(a, PoseMm::new(Mm(0), Mm(400), Mm(0), YawMd(0)))
+                .unwrap();
+            k.world_mut()
+                .set_pose(b, PoseMm::new(Mm(sep_mm), Mm(400), Mm(0), YawMd(0)))
+                .unwrap();
+            k.partition();
+            let island = k.world().view().island(a).unwrap().0;
+            let solved = solve_island(island, &k.world().view());
+            match &solved.proposals[0] {
+                Proposal::PhysIsland { breaks, .. } => !breaks.is_empty(),
+                _ => panic!("expected island"),
+            }
+        }
+        assert!(!run(400, 1_000_000), "below-threshold separation must hold");
+        assert!(run(8_000, 1), "above-threshold separation must break");
     }
 }

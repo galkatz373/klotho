@@ -92,9 +92,11 @@ pub struct ConstraintRef {
     pub constraint: Sigil,
     /// Canon binding observed by the proposer.
     pub binding: BlobId,
+    /// Quantized impulse magnitude applied this tick.
+    pub impulse: i32,
 }
 
-/// Proposed semantic break. Constraint admission lands in PHYS-A05.
+/// Proposed semantic break.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct ConstraintBreakClaim {
     /// Stable constraint identity.
@@ -126,9 +128,9 @@ pub enum Proposal {
         bodies: Vec<BodyDelta>,
         /// Sorted gameplay-visible contact claims.
         contacts: Vec<ContactClaim>,
-        /// Sorted participating constraints. Non-empty is fail-closed until PHYS-A05.
+        /// Sorted participating constraints.
         constraints: Vec<ConstraintRef>,
-        /// Sorted break claims. Non-empty is fail-closed until PHYS-A05.
+        /// Sorted break claims. Empty unless a threshold is crossed this tick.
         breaks: Vec<ConstraintBreakClaim>,
     },
     /// Space-admitted motion of one mover.

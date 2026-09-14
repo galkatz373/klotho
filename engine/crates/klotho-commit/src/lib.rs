@@ -1266,6 +1266,80 @@ mod tests {
     }
 
     #[test]
+    fn phys_island_admits_valid_constraint_and_break() {
+        let a = relic(1);
+        let b = relic(2);
+        let cid = relic(9);
+        let binding = hull_id(7);
+        let mut canon = cook("[]");
+        assert!(canon.bind_constraint(
+            cid,
+            klotho_core::ConstraintPhysics {
+                a,
+                b,
+                binding,
+                break_impulse: 10,
+                ..klotho_core::ConstraintPhysics::default()
+            }
+        ));
+        let mut k = CommitKernel::new(klotho_world::World::new(Arc::new(canon), Hash::ZERO));
+        let start_a = PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd::ZERO);
+        let start_b = PoseMm::new(Mm(400), Mm(0), Mm(0), YawMd::ZERO);
+        plant_mover(&mut k, a, start_a, 0, 0);
+        plant_mover(&mut k, b, start_b, 0, 0);
+        k.ingest(Proposal::PhysIsland {
+            epoch: Epoch::ZERO,
+            tick: Tick(1),
+            island: 0,
+            members: vec![a, b],
+            bodies: vec![body_delta(a, start_a), body_delta(b, start_b)],
+            contacts: Vec::new(),
+            constraints: vec![crate::ConstraintRef {
+                constraint: cid,
+                binding,
+                impulse: 12,
+            }],
+            breaks: vec![crate::ConstraintBreakClaim {
+                constraint: cid,
+                impulse: 12,
+            }],
+        });
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(d.rejects.is_empty(), "{d:?}");
+        let state = k.world().view().constraint_state(cid).unwrap();
+        assert!(state.broken);
+        assert_eq!(state.impulse, 12);
+    }
+
+    #[test]
+    fn phys_island_rejects_unknown_constraint_binding() {
+        let a = relic(1);
+        let start = PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd::ZERO);
+        let mut k = empty_kernel();
+        plant_mover(&mut k, a, start, 0, 0);
+        k.ingest(Proposal::PhysIsland {
+            epoch: Epoch::ZERO,
+            tick: Tick(1),
+            island: 0,
+            members: vec![a],
+            bodies: vec![body_delta(a, start)],
+            contacts: Vec::new(),
+            constraints: vec![crate::ConstraintRef {
+                constraint: relic(9),
+                binding: hull_id(7),
+                impulse: 1,
+            }],
+            breaks: Vec::new(),
+        });
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert_eq!(
+            d.rejects,
+            vec![(ProposalKind::Phys, RejectReason::WrongHull)]
+        );
+        assert_eq!(k.world().view().pose(a), Some(start));
+    }
+
+    #[test]
     fn partition_writes_live_island_ids() {
         let mut k = empty_kernel();
         let a = relic(1);
@@ -1301,12 +1375,15 @@ mod tests {
             sleeper,
             PoseMm::new(Mm(50_000), Mm(0), Mm(0), YawMd(0)),
             9,
-            12,
+            klotho_core::SLEEP_AFTER_TICKS,
         );
         let islands = k.partition();
         assert_eq!(islands, vec![(0, vec![awake])]);
         assert_eq!(k.world().view().island(awake), Some((0, 0)));
-        assert_eq!(k.world().view().island(sleeper), Some((NO_ISLAND, 12)));
+        assert_eq!(
+            k.world().view().island(sleeper),
+            Some((NO_ISLAND, klotho_core::SLEEP_AFTER_TICKS))
+        );
     }
 
     fn place(id: u128) -> Sigil {

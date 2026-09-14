@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Epoch, Mm, Sigil, VelFx, YawMd};
+use crate::{BlobId, Epoch, Mm, Sigil, VelFx, YawMd};
 
 /// Integer 3-vector in millimetres. Y is height.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Serialize, Deserialize)]
@@ -309,8 +309,7 @@ impl PoseMm {
 }
 
 /// Cooked collision primitive. Identifiers live here (K61); queries live in
-/// `klotho-geom`. Convex, compound, and terrain kinds fail closed until later
-/// PHYS-A PRs land their validators.
+/// `klotho-geom`. Terrain kinds are static occupancy only.
 #[repr(u8)]
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Serialize, Deserialize)]
 pub enum ShapeKind {
@@ -401,6 +400,94 @@ impl ShapeKind {
             Self::OrientedBox | Self::Sphere | Self::Capsule | Self::Convex | Self::Compound
         )
     }
+
+    /// True for static occupancy that must never join a dynamic island.
+    #[must_use]
+    pub const fn is_static_occupancy(self) -> bool {
+        matches!(self, Self::TriangleMesh | Self::Heightfield)
+    }
+}
+
+/// Canonical joint kind. Endpoints, rest, and break threshold are Canon.
+#[repr(u8)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Serialize, Deserialize)]
+pub enum ConstraintKind {
+    /// Coincident anchors. No relative translation or rotation.
+    #[default]
+    Fixed = 0,
+    /// Coincident anchors; rotation only about `axis`.
+    Hinge = 1,
+    /// Translation only along `axis`.
+    Slider = 2,
+    /// Hooke spring along the separation of the anchors.
+    Spring = 3,
+}
+
+/// Canon-bound physical constraint. Identity is a [`Sigil`] that need not be a locus.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
+pub struct ConstraintPhysics {
+    /// Joint kind.
+    pub kind: ConstraintKind,
+    /// First body.
+    pub a: Sigil,
+    /// Second body, or a static occupancy locus.
+    pub b: Sigil,
+    /// Local anchor on `a`, millimetres.
+    pub anchor_a: IVec3,
+    /// Local anchor on `b`, millimetres.
+    pub anchor_b: IVec3,
+    /// Hinge/slider axis in `a`'s local frame. Ignored by fixed/spring.
+    pub axis: IVec3,
+    /// Spring rest length, millimetres. Hinge angular rest is unused.
+    pub rest_mm: i32,
+    /// Spring stiffness, permille of a unit XPBD compliance.
+    pub stiffness_permille: u16,
+    /// Hinge angular envelope, millidegrees. Zero is unlimited.
+    pub limit_md: i32,
+    /// Impulse that produces a break. Zero is unbreakable.
+    pub break_impulse: i32,
+    /// Canonical binding observed by the proposer and kernel.
+    pub binding: BlobId,
+}
+
+impl Default for ConstraintPhysics {
+    fn default() -> Self {
+        Self {
+            kind: ConstraintKind::Fixed,
+            a: Sigil::from_raw(0),
+            b: Sigil::from_raw(0),
+            anchor_a: IVec3::ZERO,
+            anchor_b: IVec3::ZERO,
+            axis: IVec3 { x: 0, y: 1, z: 0 },
+            rest_mm: 0,
+            stiffness_permille: 1_000,
+            limit_md: 0,
+            break_impulse: 0,
+            binding: BlobId::ZERO,
+        }
+    }
+}
+
+impl ConstraintPhysics {
+    /// Values the kernel will admit. Invalid Canon fails closed.
+    #[must_use]
+    pub const fn is_valid(self) -> bool {
+        self.a.raw() != 0
+            && self.b.raw() != 0
+            && self.a.raw() != self.b.raw()
+            && self.stiffness_permille <= 2_000
+            && self.limit_md >= 0
+            && self.break_impulse >= 0
+    }
+}
+
+/// Admitted constraint row. Solver caches are illegal; this is Projection.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Serialize, Deserialize)]
+pub struct ConstraintState {
+    /// Last admitted impulse magnitude, millimetre-weighted.
+    pub impulse: i32,
+    /// True after an admitted break. Intact constraints keep this false.
+    pub broken: bool,
 }
 
 /// Bounded quantized contact evidence. Not a solver manifold.
@@ -557,6 +644,26 @@ mod tests {
             }
             .is_valid()
         );
+    }
+
+    #[test]
+    fn constraint_physics_rejects_degenerate_endpoints() {
+        let a = Sigil::pack(LocusKind::Relic, 0, 1).unwrap();
+        let b = Sigil::pack(LocusKind::Relic, 0, 2).unwrap();
+        let mut ok = ConstraintPhysics {
+            a,
+            b,
+            binding: BlobId::from_bytes([1; 32]),
+            ..ConstraintPhysics::default()
+        };
+        assert!(ok.is_valid());
+        ok.a = b;
+        assert!(!ok.is_valid());
+        ok.a = a;
+        ok.stiffness_permille = 2_001;
+        assert!(!ok.is_valid());
+        assert!(ShapeKind::Heightfield.is_static_occupancy());
+        assert!(!ShapeKind::Convex.is_static_occupancy());
     }
 
     fn unit_box() -> AabbMm {

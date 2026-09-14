@@ -1,8 +1,8 @@
 //! Pure canonical shape queries shared by phys and commit (K61).
 //!
 //! Depends only on `klotho-core`. No `f32`, no World, no solver manifold.
-//! Convex and compound queries land in PHYS-A04. Static terrain kinds remain
-//! fail-closed until PHYS-A05.
+//! Convex, compound, and static terrain queries are in-crate. Dynamic bodies
+//! still use the first five kinds; triangle mesh/heightfield is occupancy.
 //!
 //! `#![forbid(unsafe_code)]`.
 
@@ -12,13 +12,14 @@
 mod cast;
 mod query;
 mod shape;
+mod terrain;
 mod witness;
 
 pub use cast::{SweptHit, raycast, swept_against};
 pub use query::{ContactManifold, bounds, contact, manifold, penetration_mm};
 pub use shape::{
-    CompoundPart, GeomError, MAX_COMPOUND_PARTS, MAX_CONVEX_VERTICES, PrimitiveShape, Shape,
-    cooked_shape,
+    CompoundPart, GeomError, MAX_COMPOUND_PARTS, MAX_CONVEX_VERTICES, MAX_HEIGHTFIELD_AXIS,
+    MAX_HEIGHTFIELD_SAMPLES, MAX_MESH_TRIANGLES, PrimitiveShape, Shape, cooked_shape,
 };
 pub use witness::{CONTACT_SLOP_MM, evidence_matches, verify_contact, verify_cooked};
 
@@ -134,10 +135,12 @@ mod tests {
     }
 
     #[test]
-    fn convex_and_compound_cook_while_mesh_fails_closed() {
+    fn convex_compound_and_terrain_cook() {
         let local = box_xz(10, 10, 10);
         let convex = cooked_shape(ShapeKind::Convex, local).expect("convex");
         let compound = cooked_shape(ShapeKind::Compound, local).expect("compound");
+        let mesh = cooked_shape(ShapeKind::TriangleMesh, local).expect("mesh");
+        let field = cooked_shape(ShapeKind::Heightfield, local).expect("field");
         assert_eq!(bounds(convex, PoseMm::default()).unwrap(), local);
         assert_eq!(bounds(compound, PoseMm::default()).unwrap(), local);
         assert!(
@@ -145,13 +148,92 @@ mod tests {
                 .unwrap()
                 .is_some()
         );
+        assert!(bounds(mesh, PoseMm::default()).unwrap().intersects(local));
+        let fb = bounds(field, PoseMm::default()).unwrap();
+        assert!(fb.max.y >= local.min.y);
+        assert!(
+            contact(convex, PoseMm::default(), mesh, PoseMm::default())
+                .unwrap()
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn capsule_traverses_static_mesh_boundary() {
+        let wall = cooked_shape(
+            ShapeKind::TriangleMesh,
+            AabbMm::new(
+                IVec3 {
+                    x: -400,
+                    y: 0,
+                    z: -50,
+                },
+                IVec3 {
+                    x: 400,
+                    y: 2_000,
+                    z: 50,
+                },
+            ),
+        )
+        .unwrap();
+        let wall_pose = pose_at(0, 0, 1_000, 0);
+        let cap = Shape::capsule(IVec3 { x: 0, y: 900, z: 0 }, 200, 700).unwrap();
+        assert!(
+            contact(cap, pose_at(0, 0, 0, 0), wall, wall_pose)
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            contact(cap, pose_at(0, 0, 1_000, 0), wall, wall_pose)
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            contact(cap, pose_at(0, 0, 2_000, 0), wall, wall_pose)
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn heightfield_ramp_contact_is_not_vertical() {
+        let ramp = cooked_shape(
+            ShapeKind::Heightfield,
+            AabbMm::new(
+                IVec3 {
+                    x: -1_000,
+                    y: 0,
+                    z: 0,
+                },
+                IVec3 {
+                    x: 1_000,
+                    y: 577,
+                    z: 1_000,
+                },
+            ),
+        )
+        .unwrap();
+        let boxy = Shape::oriented_box(box_xz(100, 100, 100)).unwrap();
+        let hit = contact(boxy, pose_at(0, 50, 500, 0), ramp, PoseMm::default())
+            .unwrap()
+            .expect("ramp contact");
+        assert!(hit.depth_mm >= 0, "{hit:?}");
+        assert!(
+            hit.normal.2.abs() > 1_000,
+            "slope normal must have a Z component: {hit:?}"
+        );
+    }
+
+    #[test]
+    fn malformed_terrain_payloads_fail_closed() {
+        assert_eq!(Shape::triangle_mesh(&[]), Err(GeomError::Malformed));
         assert_eq!(
-            cooked_shape(ShapeKind::TriangleMesh, local),
-            Err(GeomError::Unsupported)
+            Shape::heightfield(IVec3::ZERO, 0, 10, 2, 2, &[0, 0, 0, 0]),
+            Err(GeomError::Malformed)
         );
         assert_eq!(
-            cooked_shape(ShapeKind::Heightfield, local),
-            Err(GeomError::Unsupported)
+            Shape::heightfield(IVec3::ZERO, 10, 10, 1, 2, &[0, 0]),
+            Err(GeomError::Malformed)
         );
     }
 

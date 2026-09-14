@@ -6,6 +6,12 @@ use klotho_core::{AabbMm, IVec3, ShapeKind};
 pub const MAX_CONVEX_VERTICES: usize = 16;
 /// Consensus cap for children in one cooked compound hull.
 pub const MAX_COMPOUND_PARTS: usize = 8;
+/// Consensus cap for triangles in one static mesh.
+pub const MAX_MESH_TRIANGLES: usize = 16;
+/// Consensus cap for samples along one heightfield axis (n×n grid).
+pub const MAX_HEIGHTFIELD_AXIS: usize = 8;
+/// Consensus cap for heightfield samples.
+pub const MAX_HEIGHTFIELD_SAMPLES: usize = MAX_HEIGHTFIELD_AXIS * MAX_HEIGHTFIELD_AXIS;
 
 /// Why a query refused to run.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
@@ -57,6 +63,28 @@ pub enum Shape {
         parts: [CompoundPart; MAX_COMPOUND_PARTS],
         /// Number of live children.
         len: u8,
+    },
+    /// Static triangle mesh occupancy. Never a dynamic body.
+    TriangleMesh {
+        /// Triangle vertices in canonical order; only the first `len` participate.
+        tris: [[IVec3; 3]; MAX_MESH_TRIANGLES],
+        /// Number of live triangles.
+        len: u8,
+    },
+    /// Static heightfield occupancy. Samples are local Y over a regular XZ grid.
+    Heightfield {
+        /// Local origin of sample (0, 0).
+        origin: IVec3,
+        /// Cell size along local X, millimetres.
+        cell_x_mm: i32,
+        /// Cell size along local Z, millimetres.
+        cell_z_mm: i32,
+        /// Sample count along local X, 2..=MAX_HEIGHTFIELD_AXIS.
+        nx: u8,
+        /// Sample count along local Z, 2..=MAX_HEIGHTFIELD_AXIS.
+        nz: u8,
+        /// Row-major heights; live count is `nx * nz`.
+        samples: [i32; MAX_HEIGHTFIELD_SAMPLES],
     },
 }
 
@@ -200,6 +228,50 @@ impl Shape {
             len: parts.len() as u8,
         })
     }
+
+    /// Bounded static triangle mesh.
+    pub fn triangle_mesh(tris: &[[IVec3; 3]]) -> Result<Self, GeomError> {
+        if tris.is_empty() || tris.len() > MAX_MESH_TRIANGLES {
+            return Err(GeomError::Malformed);
+        }
+        let mut fixed = [[IVec3::ZERO; 3]; MAX_MESH_TRIANGLES];
+        fixed[..tris.len()].copy_from_slice(tris);
+        Ok(Self::TriangleMesh {
+            tris: fixed,
+            len: tris.len() as u8,
+        })
+    }
+
+    /// Bounded static heightfield. `samples` is row-major `nz` rows of `nx`.
+    pub fn heightfield(
+        origin: IVec3,
+        cell_x_mm: i32,
+        cell_z_mm: i32,
+        nx: u8,
+        nz: u8,
+        samples: &[i32],
+    ) -> Result<Self, GeomError> {
+        let nx_n = usize::from(nx);
+        let nz_n = usize::from(nz);
+        if cell_x_mm <= 0
+            || cell_z_mm <= 0
+            || !(2..=MAX_HEIGHTFIELD_AXIS).contains(&nx_n)
+            || !(2..=MAX_HEIGHTFIELD_AXIS).contains(&nz_n)
+            || samples.len() != nx_n.saturating_mul(nz_n)
+        {
+            return Err(GeomError::Malformed);
+        }
+        let mut fixed = [0i32; MAX_HEIGHTFIELD_SAMPLES];
+        fixed[..samples.len()].copy_from_slice(samples);
+        Ok(Self::Heightfield {
+            origin,
+            cell_x_mm,
+            cell_z_mm,
+            nx,
+            nz,
+            samples: fixed,
+        })
+    }
 }
 
 /// Interpret a cooked hull AABB as a PHYS-A03 primitive. Later kinds fail closed.
@@ -231,8 +303,50 @@ pub fn cooked_shape(kind: ShapeKind, local: AabbMm) -> Result<Shape, GeomError> 
             shape: PrimitiveShape::OrientedBox { local },
             local_pose: klotho_core::PoseMm::default(),
         }]),
-        ShapeKind::TriangleMesh | ShapeKind::Heightfield => Err(GeomError::Unsupported),
+        ShapeKind::TriangleMesh => Shape::triangle_mesh(&box_triangles(local)),
+        ShapeKind::Heightfield => ramp_heightfield(local),
     }
+}
+
+fn box_triangles(local: AabbMm) -> [[IVec3; 3]; 12] {
+    let v = box_vertices(local);
+    // 0: min,min,min  1: min,min,max  2: min,max,min  3: min,max,max
+    // 4: max,min,min  5: max,min,max  6: max,max,min  7: max,max,max
+    [
+        [v[0], v[2], v[6]],
+        [v[0], v[6], v[4]],
+        [v[1], v[5], v[7]],
+        [v[1], v[7], v[3]],
+        [v[0], v[1], v[3]],
+        [v[0], v[3], v[2]],
+        [v[4], v[6], v[7]],
+        [v[4], v[7], v[5]],
+        [v[0], v[4], v[5]],
+        [v[0], v[5], v[1]],
+        [v[2], v[3], v[7]],
+        [v[2], v[7], v[6]],
+    ]
+}
+
+fn ramp_heightfield(local: AabbMm) -> Result<Shape, GeomError> {
+    let cell_x = (i64::from(local.max.x) - i64::from(local.min.x))
+        .unsigned_abs()
+        .max(1) as i32;
+    let cell_z = (i64::from(local.max.z) - i64::from(local.min.z))
+        .unsigned_abs()
+        .max(1) as i32;
+    Shape::heightfield(
+        IVec3 {
+            x: local.min.x,
+            y: 0,
+            z: local.min.z,
+        },
+        cell_x,
+        cell_z,
+        2,
+        2,
+        &[local.min.y, local.min.y, local.max.y, local.max.y],
+    )
 }
 
 fn box_vertices(local: AabbMm) -> [IVec3; 8] {

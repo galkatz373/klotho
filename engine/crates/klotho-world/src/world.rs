@@ -76,7 +76,7 @@ impl World {
     /// Live read view. Same query API as [`WorldSnapshot::view`].
     #[must_use]
     pub fn view(&self) -> WorldView<'_> {
-        WorldView::at(&self.view, self.tick)
+        WorldView::at_epoch(&self.view, self.epoch, self.tick)
     }
 
     /// Frozen Canon.
@@ -173,7 +173,7 @@ impl WorldSnapshot {
     /// Same query API as [`World::view`].
     #[must_use]
     pub fn view(&self) -> WorldView<'_> {
-        WorldView::at(&self.blob, self.tick)
+        WorldView::at_epoch(&self.blob, self.epoch, self.tick)
     }
 
     /// Apply the state changes represented by a committed Trace suffix.

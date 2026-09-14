@@ -24,7 +24,12 @@ pub use kernel::{CommitKernel, EpochApplyError};
 pub use klotho_core::{KernelFault, RejectReason};
 pub use klotho_trace::TraceDelta;
 pub use partition::{Partition, partition_islands};
-pub use proposal::{Proposal, ResidencyOp};
+pub use proposal::{
+    BodyDelta, ConstraintBreakClaim, ConstraintRef, ContactClaim, MAX_PHYS_ISLAND_BODIES,
+    MAX_PHYS_ISLAND_BREAKS, MAX_PHYS_ISLAND_CHILDREN, MAX_PHYS_ISLAND_CONSTRAINTS,
+    MAX_PHYS_ISLAND_CONTACTS, MAX_PHYS_ISLAND_MEMBERS, MAX_PHYS_ISLAND_WRITE_LOCI, Proposal,
+    ResidencyOp,
+};
 
 /// PlaceSnap rows applied on a residency load (`TraceBody::PlaceLoaded.n`).
 pub const METRIC_RESIDENCY_ROWS_APPLIED: &str = "klotho.residency.rows_applied";
@@ -327,19 +332,31 @@ mod tests {
         }
     }
 
-    fn phys_delta(mover: Sigil, pose: PoseMm) -> Proposal {
-        Proposal::PhysDelta {
+    fn body_delta(mover: Sigil, pose: PoseMm) -> BodyDelta {
+        BodyDelta {
             mover,
             pose,
             vel: Vel3::ZERO,
             yaw_rate: 0,
             pitch_rate: 0,
             roll_rate: 0,
-            island: 0,
             sleep_ticks: 0,
             hull: hull_id(1),
             witness: HullWitness::new(mover, pose, false),
             support: None,
+        }
+    }
+
+    fn phys_island(mover: Sigil, pose: PoseMm, members: Vec<Sigil>) -> Proposal {
+        Proposal::PhysIsland {
+            epoch: klotho_core::Epoch::ZERO,
+            tick: Tick(1),
+            island: 0,
+            members,
+            bodies: vec![body_delta(mover, pose)],
+            contacts: Vec::new(),
+            constraints: Vec::new(),
+            breaks: Vec::new(),
         }
     }
 
@@ -537,7 +554,7 @@ mod tests {
     fn admit_key_is_total_and_reserves_phys_residency() {
         let s0 = relic(1);
         let s1 = relic(2);
-        let phys = phys_delta(s0, PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)));
+        let phys = phys_island(s0, PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)), vec![s0]);
         let space = space_delta(s1, PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)));
         let motion = motion_delta(s0, PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd(0)));
         assert_eq!(Proposal::Player(player_use()).order_key(), 0);
@@ -623,7 +640,7 @@ mod tests {
         let mut next = PoseMm::new(Mm(10), Mm(50), Mm(0), YawMd(YawMd::QUARTER_TURN));
         next.pitch = YawMd(1_000);
         next.roll = YawMd(2_000);
-        k.ingest(phys_delta(parent, next));
+        k.ingest(phys_island(parent, next, vec![parent, child]));
         k.ingest(motion_delta(
             child,
             PoseMm::new(Mm(50_020), Mm(0), Mm(0), YawMd(0)),
@@ -652,6 +669,151 @@ mod tests {
         assert_eq!(got.yaw, next.yaw);
         assert_eq!(got.pitch, next.pitch);
         assert_eq!(got.roll, next.roll);
+    }
+
+    #[test]
+    fn phys_island_law_reject_rolls_back_every_body_byte_for_byte() {
+        let canon = cook(
+            r#"[AddLaw(Law(id: "phys.permit", when: SourceIs(Phys), body: Pred(
+                must: Qty(Self, "permit", Ge, 1), ought: None)))]"#,
+        );
+        let permit = canon.resource_id("permit").expect("permit resource");
+        let mut k = CommitKernel::new(klotho_world::World::new(Arc::new(canon), Hash::ZERO));
+        let a = relic(1);
+        let b = relic(2);
+        let start_a = PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd::ZERO);
+        let start_b = PoseMm::new(Mm(1_000), Mm(0), Mm(0), YawMd::ZERO);
+        plant_mover(&mut k, a, start_a, 0, 0);
+        plant_mover(&mut k, b, start_b, 0, 0);
+        k.world_mut().set_qty(a, permit, 1).unwrap();
+        let mut before = k.snapshot().encode().unwrap();
+        let proposal = Proposal::PhysIsland {
+            epoch: klotho_core::Epoch::ZERO,
+            tick: Tick(1),
+            island: 0,
+            members: vec![a, b],
+            bodies: vec![
+                body_delta(a, PoseMm::new(Mm(100), Mm(0), Mm(0), YawMd::ZERO)),
+                body_delta(b, PoseMm::new(Mm(1_100), Mm(0), Mm(0), YawMd::ZERO)),
+            ],
+            contacts: Vec::new(),
+            constraints: Vec::new(),
+            breaks: Vec::new(),
+        };
+        k.ingest(proposal);
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(
+            d.rejects
+                .iter()
+                .any(|(kind, reason)| *kind == ProposalKind::Phys
+                    && matches!(reason, RejectReason::Law(_))),
+            "{d:?}"
+        );
+        assert_eq!(k.world().view().pose(a), Some(start_a));
+        assert_eq!(k.world().view().pose(b), Some(start_b));
+        assert!(d.events.is_empty());
+        let mut after = k.snapshot().encode().unwrap();
+        // Snapshot header tick is the causal clock, not Projection. Normalize
+        // only that field and compare the canonical Projection bytes exactly.
+        before[16..24].fill(0);
+        after[16..24].fill(0);
+        assert_eq!(before, after, "rejected island changed Projection bytes");
+    }
+
+    #[test]
+    fn phys_island_rejects_reordered_duplicate_and_mismatched_membership() {
+        let a = relic(1);
+        let b = relic(2);
+        let start_a = PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd::ZERO);
+        let start_b = PoseMm::new(Mm(1_000), Mm(0), Mm(0), YawMd::ZERO);
+        for malformed in 0..4 {
+            let mut k = empty_kernel();
+            plant_mover(&mut k, a, start_a, 0, 0);
+            plant_mover(&mut k, b, start_b, 0, 0);
+            let mut members = vec![a, b];
+            let mut bodies = vec![
+                body_delta(a, PoseMm::new(Mm(10), Mm(0), Mm(0), YawMd::ZERO)),
+                body_delta(b, PoseMm::new(Mm(1_010), Mm(0), Mm(0), YawMd::ZERO)),
+            ];
+            match malformed {
+                0 => bodies.swap(0, 1),
+                1 => members[1] = a,
+                2 => {
+                    members.pop();
+                }
+                3 => {
+                    bodies.push(bodies[0].clone());
+                }
+                _ => unreachable!(),
+            }
+            k.ingest(Proposal::PhysIsland {
+                epoch: klotho_core::Epoch::ZERO,
+                tick: Tick(1),
+                island: 0,
+                members,
+                bodies,
+                contacts: Vec::new(),
+                constraints: Vec::new(),
+                breaks: Vec::new(),
+            });
+            let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+            assert_eq!(
+                d.rejects,
+                vec![(ProposalKind::Phys, RejectReason::WitnessMismatch)],
+                "case {malformed}: {d:?}"
+            );
+            assert_eq!(k.world().view().pose(a), Some(start_a));
+            assert_eq!(k.world().view().pose(b), Some(start_b));
+        }
+    }
+
+    #[test]
+    fn phys_island_caps_and_tick_are_fail_closed() {
+        let a = relic(1);
+        let b = relic(2);
+        let start = PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd::ZERO);
+        let other = PoseMm::new(Mm(50), Mm(0), Mm(0), YawMd::ZERO);
+        for stale_tick in [true, false] {
+            let mut k = empty_kernel();
+            plant_mover(&mut k, a, start, 0, 0);
+            plant_mover(&mut k, b, other, 1, 0);
+            let body = body_delta(a, PoseMm::new(Mm(10), Mm(0), Mm(0), YawMd::ZERO));
+            let claim = ContactClaim {
+                a,
+                b,
+                shape_a: hull_id(1),
+                shape_b: hull_id(1),
+                feature: 0,
+                witness: body.witness,
+            };
+            k.ingest(Proposal::PhysIsland {
+                epoch: klotho_core::Epoch::ZERO,
+                tick: if stale_tick { Tick::ZERO } else { Tick(1) },
+                island: 0,
+                members: vec![a],
+                bodies: vec![body],
+                contacts: if stale_tick {
+                    Vec::new()
+                } else {
+                    vec![claim; MAX_PHYS_ISLAND_CONTACTS + 1]
+                },
+                constraints: Vec::new(),
+                breaks: Vec::new(),
+            });
+            let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+            assert_eq!(
+                d.rejects,
+                vec![(
+                    ProposalKind::Phys,
+                    if stale_tick {
+                        RejectReason::EpochMismatch
+                    } else {
+                        RejectReason::IslandTooLarge
+                    }
+                )]
+            );
+            assert_eq!(k.world().view().pose(a), Some(start));
+        }
     }
 
     #[test]

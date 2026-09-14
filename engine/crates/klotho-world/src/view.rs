@@ -2,8 +2,8 @@
 
 use klotho_canon::{PredStore, RiteId};
 use klotho_core::{
-    AabbMm, AffordanceId, Hash, IVec3, LocusKind, PackedIx, PhysRequest, PoseMm, ResourceId, Sigil,
-    SimLod, Support, Tick, Vel3, frac_cmp,
+    AabbMm, AffordanceId, Epoch, Hash, IVec3, LocusKind, PackedIx, PhysRequest, PoseMm, ResourceId,
+    Sigil, SimLod, Support, Tick, Vel3, frac_cmp,
 };
 use klotho_ir::{Channel, Rel};
 
@@ -16,6 +16,7 @@ pub const HITSCAN_RANGE_MM: i32 = 50_000;
 #[derive(Copy, Clone, Debug)]
 pub struct WorldView<'a> {
     pub(crate) proj: &'a Projection,
+    pub(crate) epoch: Epoch,
     pub(crate) tick: Tick,
 }
 
@@ -29,7 +30,19 @@ impl WorldView<'_> {
     /// Wrap a projection at `tick`. Motion derives clip time from this (K22).
     #[must_use]
     pub fn at(proj: &Projection, tick: Tick) -> WorldView<'_> {
-        WorldView { proj, tick }
+        Self::at_epoch(proj, Epoch::ZERO, tick)
+    }
+
+    /// Wrap a projection at its Canon epoch and tick.
+    #[must_use]
+    pub fn at_epoch(proj: &Projection, epoch: Epoch, tick: Tick) -> WorldView<'_> {
+        WorldView { proj, epoch, tick }
+    }
+
+    /// Canon epoch this view was taken at.
+    #[must_use]
+    pub fn epoch(self) -> Epoch {
+        self.epoch
     }
 
     /// World tick this view was taken at.
@@ -118,7 +131,7 @@ impl WorldView<'_> {
         self.proj.rates(s)
     }
 
-    /// Last admitted PhysDelta support, if any.
+    /// Last admitted physical-island support, if any.
     #[must_use]
     pub fn support(&self, s: Sigil) -> Option<Support> {
         self.proj.support(s)

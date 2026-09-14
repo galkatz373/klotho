@@ -92,7 +92,7 @@ impl WorldMut<'_> {
             .set_rates(s, yaw_rate, pitch_rate, roll_rate)
     }
 
-    /// Set last-admitted support. Only PhysDelta should write this at runtime.
+    /// Set last-admitted support. Only a physical island should write this at runtime.
     pub fn set_support(&mut self, s: Sigil, support: Option<Support>) -> Result<(), WorldError> {
         self.world.projection_mut().set_support(s, support)
     }
@@ -192,7 +192,11 @@ impl WorldMut<'_> {
     /// Fork projection for a proposal-local transaction (K21).
     #[must_use]
     pub fn begin_spec(&self) -> SpecDelta {
-        SpecDelta::from_parts(self.world.projection().clone(), self.world.tick())
+        SpecDelta::from_parts(
+            self.world.projection().clone(),
+            self.world.epoch(),
+            self.world.tick(),
+        )
     }
 
     /// Atomic install of a successful spec: replace projection, append Trace

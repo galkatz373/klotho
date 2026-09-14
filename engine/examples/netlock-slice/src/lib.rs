@@ -9,7 +9,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use klotho_canon::cook;
-use klotho_commit::{CommitKernel, Proposal};
+use klotho_commit::{BodyDelta, CommitKernel, Proposal};
 use klotho_core::{
     AabbMm, BlobId, Budget, Epoch, Hash, HullWitness, IVec3, KernelFault, LocusKind, Mm, PlayerId,
     PoseMm, Sigil, Tick, Vel3, YawMd,
@@ -225,18 +225,34 @@ impl Netlock {
     /// Enqueue an authoritative physics proposal for a mover. This is used to
     /// strafe the target; it does not expose a second world write path.
     pub fn propose_pose(&mut self, mover: Sigil, pose: PoseMm) {
-        self.kernel.ingest(Proposal::PhysDelta {
-            mover,
-            pose,
-            vel: Vel3::ZERO,
-            yaw_rate: 0,
-            pitch_rate: 0,
-            roll_rate: 0,
-            island: 0,
-            sleep_ticks: 0,
-            hull: BlobId::ZERO,
-            witness: HullWitness::new(mover, pose, false),
-            support: None,
+        self.kernel.partition();
+        let view = self.kernel.world().view();
+        let island = view.island(mover).map_or(0, |(id, _)| id);
+        let mut members: Vec<Sigil> = view
+            .loci()
+            .filter(|&s| view.island(s).map(|(id, _)| id) == Some(island))
+            .collect();
+        members.sort_unstable();
+        self.kernel.ingest(Proposal::PhysIsland {
+            epoch: view.epoch(),
+            tick: Tick(view.tick().0.saturating_add(1)),
+            island,
+            members,
+            bodies: vec![BodyDelta {
+                mover,
+                pose,
+                vel: Vel3::ZERO,
+                yaw_rate: 0,
+                pitch_rate: 0,
+                roll_rate: 0,
+                sleep_ticks: 0,
+                hull: BlobId::ZERO,
+                witness: HullWitness::new(mover, pose, false),
+                support: None,
+            }],
+            contacts: Vec::new(),
+            constraints: Vec::new(),
+            breaks: Vec::new(),
         });
     }
 

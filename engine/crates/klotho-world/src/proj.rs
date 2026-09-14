@@ -1263,7 +1263,7 @@ impl Projection {
         ))
     }
 
-    /// Last admitted PhysDelta support, if any.
+    /// Last admitted physical-island support, if any.
     #[must_use]
     pub fn support(&self, s: Sigil) -> Option<Support> {
         let i = self.packed(s)?;

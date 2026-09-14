@@ -2,8 +2,8 @@
 
 use klotho_canon::RiteId;
 use klotho_core::{
-    AabbMm, AffordanceId, BlobId, IVec3, PhysRequest, PoseMm, ResourceId, Sigil, Support, Tick,
-    Vel3,
+    AabbMm, AffordanceId, BlobId, Epoch, IVec3, PhysRequest, PoseMm, ResourceId, Sigil, Support,
+    Tick, Vel3,
 };
 use klotho_ir::Rel;
 use klotho_trace::{RiteEnd, TraceBody, TraceEvent};
@@ -19,6 +19,7 @@ use crate::view::WorldView;
 pub struct SpecDelta {
     proj: Projection,
     events: Vec<TraceEvent>,
+    epoch: Epoch,
     tick: Tick,
 }
 
@@ -27,7 +28,7 @@ impl SpecDelta {
     /// Read the would-be post-state.
     #[must_use]
     pub fn view(&self) -> WorldView<'_> {
-        WorldView::at(&self.proj, self.tick)
+        WorldView::at_epoch(&self.proj, self.epoch, self.tick)
     }
 
     /// Tick these events are stamped with.
@@ -164,10 +165,11 @@ impl SpecDelta {
         Ok(())
     }
 
-    pub(crate) fn from_parts(proj: Projection, tick: Tick) -> Self {
+    pub(crate) fn from_parts(proj: Projection, epoch: Epoch, tick: Tick) -> Self {
         Self {
             proj,
             events: Vec::new(),
+            epoch,
             tick,
         }
     }

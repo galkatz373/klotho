@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use klotho_commit::Proposal;
+use klotho_commit::{BodyDelta, Proposal};
 use klotho_core::{
     AabbMm, BlobId, HullWitness, IVec3, LocusKind, NO_ISLAND, PoseMm, Sigil, Support, Vel3, VelFx,
     YawMd,
@@ -74,7 +74,6 @@ struct Body {
     yaw_rate: i32,
     pitch_rate: i32,
     roll_rate: i32,
-    island: u16,
     prev: PoseMm,
 }
 
@@ -86,14 +85,14 @@ struct Contact {
 
 /// One island solve. Residuals are per emitted pose (max-axis mm).
 pub struct SolveOut {
-    /// Quantized `PhysDelta`s, Sigil order.
+    /// Zero or one atomic `PhysIsland` proposal.
     pub proposals: Vec<Proposal>,
     /// [`crate::METRIC_QUANT_RESIDUAL_MM`] samples.
     pub residuals_mm: Vec<f32>,
     /// Bodies whose f32 output was non-finite and was therefore discarded.
     ///
     /// A non-finite value must never be converted into an apparently valid
-    /// integer `PhysDelta` (in particular, never into an origin pose).
+    /// integer body delta (in particular, never into an origin pose).
     pub rejected_non_finite: Vec<Sigil>,
 }
 
@@ -107,6 +106,7 @@ pub fn solve_island(island: u16, view: &WorldView<'_>) -> SolveOut {
             rejected_non_finite: Vec::new(),
         };
     }
+    let members = collect_members(island, view);
     let mut bodies = collect_bodies(island, view);
     if bodies.is_empty() {
         return SolveOut {
@@ -141,7 +141,16 @@ pub fn solve_island(island: u16, view: &WorldView<'_>) -> SolveOut {
         }
         fill_support(&bodies, &contacts, &mut last_support);
     }
-    emit(view, &bodies, &last_support)
+    emit(island, members, view, &bodies, &last_support)
+}
+
+fn collect_members(island: u16, view: &WorldView<'_>) -> Vec<Sigil> {
+    let mut members: Vec<Sigil> = view
+        .loci()
+        .filter(|&s| view.island(s).map(|(id, _)| id) == Some(island))
+        .collect();
+    members.sort_unstable();
+    members
 }
 
 fn collect_bodies(island: u16, view: &WorldView<'_>) -> Vec<Body> {
@@ -199,7 +208,6 @@ fn collect_bodies(island: u16, view: &WorldView<'_>) -> Vec<Body> {
             yaw_rate,
             pitch_rate,
             roll_rate,
-            island,
             prev: pose,
         });
     }
@@ -382,8 +390,14 @@ fn pack_support(n: [f32; 3], depth: f32) -> Option<Support> {
     ))
 }
 
-fn emit(view: &WorldView<'_>, bodies: &[Body], support: &[Option<Support>]) -> SolveOut {
-    let mut proposals = Vec::with_capacity(bodies.len());
+fn emit(
+    island: u16,
+    members: Vec<Sigil>,
+    view: &WorldView<'_>,
+    bodies: &[Body],
+    support: &[Option<Support>],
+) -> SolveOut {
+    let mut deltas = Vec::with_capacity(bodies.len());
     let mut residuals_mm = Vec::with_capacity(bodies.len());
     let mut rejected_non_finite = Vec::new();
     for (i, b) in bodies.iter().enumerate() {
@@ -400,14 +414,13 @@ fn emit(view: &WorldView<'_>, bodies: &[Body], support: &[Option<Support>]) -> S
         let from = world_aabb(b.local, b.prev.translation());
         let to = world_aabb(b.local, pose.translation());
         let hint = hits_closed(view, b.sigil, from.swept_union(to));
-        proposals.push(Proposal::PhysDelta {
+        deltas.push(BodyDelta {
             mover: b.sigil,
             pose,
             vel,
             yaw_rate: b.yaw_rate,
             pitch_rate: b.pitch_rate,
             roll_rate: b.roll_rate,
-            island: b.island,
             sleep_ticks: 0,
             hull: b.hull,
             witness: HullWitness::new(b.sigil, pose, hint),
@@ -415,6 +428,20 @@ fn emit(view: &WorldView<'_>, bodies: &[Body], support: &[Option<Support>]) -> S
         });
         residuals_mm.push(residual);
     }
+    let proposals = if rejected_non_finite.is_empty() && !deltas.is_empty() {
+        vec![Proposal::PhysIsland {
+            epoch: view.epoch(),
+            tick: view.tick(),
+            island,
+            members,
+            bodies: deltas,
+            contacts: Vec::new(),
+            constraints: Vec::new(),
+            breaks: Vec::new(),
+        }]
+    } else {
+        Vec::new()
+    };
     SolveOut {
         proposals,
         residuals_mm,

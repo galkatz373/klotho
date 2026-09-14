@@ -50,13 +50,13 @@ impl IVec3 {
     }
 }
 
-/// Contact support from an admitted `PhysDelta`: `(nx, ny, nz, depth_mm)`.
+/// Contact support from an admitted physical island: `(nx, ny, nz, depth_mm)`.
 pub type Support = (i16, i16, i16, i32);
 
 /// Linear/angular request written by `PHYS_REQ`. Not a quantity row.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Serialize, Deserialize)]
 pub struct PhysRequest {
-    /// One-shot linear Δv, millimetres per tick. Cleared when a PhysDelta admits.
+    /// One-shot linear Δv, millimetres per tick. Cleared when a physical island admits.
     pub lin: IVec3,
     /// Angular request, millidegrees.
     pub ang: IVec3,

@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Accepted — PHYS-A01 landed; PHYS-A02 next |
+| Status | Active — PHYS-A01–A02 landed; PHYS-A03 next |
 | Date | 2026-09-14 |
 | Scope | Production 3D physics, character resolution, vehicles, destruction, and animation-driven contact |
 | Preserves | Canon + Intent + Trace + Projection; K21 atomic commit; crate firewalls |
@@ -48,13 +48,14 @@ These are engine goldens, not title content.
 
 ## Phase 1 — Atomic physics admission
 
-The current solver emits an independent `PhysDelta` for each body. If one body is rejected after its neighbors admit, the committed state can violate the island-wide solution that produced those deltas.
+Before PHYS-A02, the solver emitted an independent `PhysDelta` for each body. That could admit only part of the coupled solution when a neighbor rejected.
 
 Replace the transaction grain with the bounded island proposal accepted by K59–K60, shaped like:
 
 ```rust
 Proposal::PhysIsland {
     island,
+    members: Vec<Sigil>,
     bodies: Vec<BodyDelta>,
     contacts: Vec<ContactClaim>,
     constraints: Vec<ConstraintRef>,
@@ -77,7 +78,7 @@ Admission must:
 
 `write_cells` must cover every body, support row, velocity row, constraint row, and attached child affected by the batch. One invalid member rejects the whole proposal without a partial write.
 
-Keep legacy `PhysDelta` only long enough to migrate existing goldens. Remove it once all registered runtime physics paths emit the island transaction.
+PHYS-A02 removed legacy `PhysDelta`; all registered runtime physics paths now emit the island transaction.
 
 The current `SweptHitsOpaqueClosed` behavior must also be refined:
 
@@ -362,7 +363,7 @@ Each PR leaves the tree green and preserves existing non-Phys goldens.
 1. **PHYS-A01 — Authority and transaction RFC — landed**
    Amend the HLD; freeze acceptance scenes, caps, shape vocabulary, island rejection policy, character ownership, and contact authority.
 
-2. **PHYS-A02 — Atomic `PhysIsland` admission**
+2. **PHYS-A02 — Atomic `PhysIsland` admission — landed**
    Add bounded batch proposal, complete write sets, full speculative apply, deterministic Law order, rejection tests, and legacy migration.
 
 3. **PHYS-A03 — Shared geometry and oriented primitives**

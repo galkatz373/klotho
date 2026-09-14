@@ -6,7 +6,8 @@ use std::time::Instant;
 use drift_slice::{boot, pin, replay};
 use klotho_canon::{cook, cook_diffs};
 use klotho_commit::{
-    CommitKernel, METRIC_RESIDENCY_ROWS_APPLIED, METRIC_STREAM_HITCH_US, Proposal, ResidencyOp,
+    BodyDelta, CommitKernel, METRIC_RESIDENCY_ROWS_APPLIED, METRIC_STREAM_HITCH_US, Proposal,
+    ResidencyOp,
 };
 use klotho_core::{
     AabbMm, BlobId, Budget, Hash, HullWitness, IVec3, LocusKind, Mm, NO_ISLAND, PoseMm,
@@ -123,19 +124,41 @@ fn load_place_b(k: &mut CommitKernel, with_door: bool) -> klotho_trace::TraceDel
         .expect("load")
 }
 
-fn phys_delta(mover: Sigil, pose: PoseMm, hull: BlobId, hint: bool) -> Proposal {
-    Proposal::PhysDelta {
-        mover,
-        pose,
-        vel: Vel3::ZERO,
-        yaw_rate: 0,
-        pitch_rate: 0,
-        roll_rate: 0,
-        island: 0,
-        sleep_ticks: 0,
-        hull,
-        witness: HullWitness::new(mover, pose, hint),
-        support: None,
+fn phys_island(
+    k: &mut CommitKernel,
+    mover: Sigil,
+    pose: PoseMm,
+    hull: BlobId,
+    hint: bool,
+) -> Proposal {
+    k.partition();
+    let view = k.world().view();
+    let island = view.island(mover).map_or(0, |(id, _)| id);
+    let mut members: Vec<Sigil> = view
+        .loci()
+        .filter(|&s| view.island(s).map(|(id, _)| id) == Some(island))
+        .collect();
+    members.sort_unstable();
+    Proposal::PhysIsland {
+        epoch: view.epoch(),
+        tick: Tick(view.tick().0.saturating_add(1)),
+        island,
+        members,
+        bodies: vec![BodyDelta {
+            mover,
+            pose,
+            vel: Vel3::ZERO,
+            yaw_rate: 0,
+            pitch_rate: 0,
+            roll_rate: 0,
+            sleep_ticks: 0,
+            hull,
+            witness: HullWitness::new(mover, pose, hint),
+            support: None,
+        }],
+        contacts: Vec::new(),
+        constraints: Vec::new(),
+        breaks: Vec::new(),
     }
 }
 
@@ -260,7 +283,8 @@ fn golden_03_possess_at_t_nacks_motion_root() {
         .expect("possess");
     possess_pi.at = k.world().tick();
     k.ingest(Proposal::Player(possess_pi));
-    k.ingest(phys_delta(vehicle, vehicle_next, BlobId::ZERO, false));
+    let proposal = phys_island(&mut k, vehicle, vehicle_next, BlobId::ZERO, false);
+    k.ingest(proposal);
     let mut motion = Motion::with_clips(ClipSet::walk_mm(20));
     let d = k
         .step(Tick(1), Budget::AAA_ADVENTURE, &mut [&mut motion])
@@ -289,7 +313,8 @@ fn golden_04_yaw_only_seat_compose() {
     let mut next = PoseMm::new(Mm(10), Mm(50), Mm(0), YawMd(YawMd::QUARTER_TURN));
     next.pitch = YawMd(1_000);
     next.roll = YawMd(2_000);
-    k.ingest(phys_delta(vehicle, next, BlobId::ZERO, false));
+    let proposal = phys_island(&mut k, vehicle, next, BlobId::ZERO, false);
+    k.ingest(proposal);
     let d = k.step(Tick(1), Budget::AAA_ADVENTURE, &mut []).unwrap();
     assert!(d.rejects.is_empty(), "{d:?}");
     let got = k.world().view().pose(player).unwrap();
@@ -341,7 +366,8 @@ fn golden_06_locked_door_in_b_blocks_when_loaded() {
         .set_pose(vehicle, PoseMm::new(Mm(0), Mm(0), Mm(1400), YawMd::ZERO))
         .unwrap();
     let blocked_at = PoseMm::new(Mm(0), Mm(0), Mm(1900), YawMd::ZERO);
-    k.ingest(phys_delta(vehicle, blocked_at, BlobId::ZERO, true));
+    let proposal = phys_island(&mut k, vehicle, blocked_at, BlobId::ZERO, true);
+    k.ingest(proposal);
     let blocked = k.step(Tick(1), Budget::AAA_ADVENTURE, &mut []).unwrap();
     assert!(
         blocked
@@ -361,7 +387,8 @@ fn golden_06_locked_door_in_b_blocks_when_loaded() {
     let evicted = k.step(Tick(1), Budget::AAA_ADVENTURE, &mut []).unwrap();
     assert!(evicted.rejects.is_empty(), "{evicted:?}");
     assert!(!k.world().view().contains(door()));
-    k.ingest(phys_delta(vehicle, blocked_at, BlobId::ZERO, false));
+    let proposal = phys_island(&mut k, vehicle, blocked_at, BlobId::ZERO, false);
+    k.ingest(proposal);
     let open = k.step(Tick(1), Budget::AAA_ADVENTURE, &mut []).unwrap();
     assert!(open.rejects.is_empty(), "{open:?}");
     assert_eq!(k.world().view().pose(vehicle).unwrap().z, Mm(1900));

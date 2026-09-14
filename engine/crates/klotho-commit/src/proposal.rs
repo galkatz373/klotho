@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use klotho_core::{BlobId, Hash, HullWitness, IVec3, PoseMm, Sigil, Support, Vel3};
+use klotho_core::{BlobId, Epoch, Hash, HullWitness, IVec3, PoseMm, Sigil, Support, Tick, Vel3};
 use klotho_ir::{InferIntent, MindIntent, PlayerIntent};
 use klotho_trace::ProposalKind;
 use klotho_world::PlaceSnap;
@@ -16,6 +16,87 @@ pub enum ResidencyOp {
     Evict,
 }
 
+/// Maximum body deltas in one atomic physical island (K60).
+pub const MAX_PHYS_ISLAND_BODIES: usize = 256;
+/// Maximum partition members named by one physical island (K58/K60).
+pub const MAX_PHYS_ISLAND_MEMBERS: usize = 256;
+/// Maximum gameplay contact claims in one physical island (K60).
+pub const MAX_PHYS_ISLAND_CONTACTS: usize = 1_024;
+/// Maximum participating constraints in one physical island (K60).
+pub const MAX_PHYS_ISLAND_CONSTRAINTS: usize = 512;
+/// Maximum constraint-break claims in one physical island (K60).
+pub const MAX_PHYS_ISLAND_BREAKS: usize = 256;
+/// Maximum attached children included in one island write set (K60).
+pub const MAX_PHYS_ISLAND_CHILDREN: usize = 256;
+/// Maximum distinct loci written by one physical island (K60).
+pub const MAX_PHYS_ISLAND_WRITE_LOCI: usize = 512;
+
+/// One quantized body result inside an atomic physical island.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub struct BodyDelta {
+    /// Body identity.
+    pub mover: Sigil,
+    /// Proposed pose.
+    pub pose: PoseMm,
+    /// Proposed linear velocity.
+    pub vel: Vel3,
+    /// Yaw rate, millidegrees per tick.
+    pub yaw_rate: i32,
+    /// Pitch rate, millidegrees per tick.
+    pub pitch_rate: i32,
+    /// Roll rate, millidegrees per tick.
+    pub roll_rate: i32,
+    /// Sleep ticks. Zero when an island mate received an impulse.
+    pub sleep_ticks: u16,
+    /// Canonical hull binding observed by the proposer.
+    pub hull: BlobId,
+    /// K24 hint; the kernel derives swept geometry.
+    pub witness: HullWitness,
+    /// Quantized contact support.
+    pub support: Option<Support>,
+}
+
+/// Bounded gameplay-visible contact claim. PHYS-A03 strengthens its geometry.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub struct ContactClaim {
+    /// Canonical lower endpoint. Must be less than `b`.
+    pub a: Sigil,
+    /// Canonical upper endpoint.
+    pub b: Sigil,
+    /// Shape binding for `a`.
+    pub shape_a: BlobId,
+    /// Shape binding for `b`.
+    pub shape_b: BlobId,
+    /// Deterministic solver feature id.
+    pub feature: u16,
+    /// Quantized A-side witness. PHYS-A03 replaces broad AABB evidence.
+    pub witness: HullWitness,
+}
+
+impl ContactClaim {
+    pub(crate) fn key(&self) -> (Sigil, Sigil, BlobId, BlobId, u16) {
+        (self.a, self.b, self.shape_a, self.shape_b, self.feature)
+    }
+}
+
+/// Canon constraint participating in an island solve.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub struct ConstraintRef {
+    /// Stable constraint identity.
+    pub constraint: Sigil,
+    /// Canon binding observed by the proposer.
+    pub binding: BlobId,
+}
+
+/// Proposed semantic break. Constraint admission lands in PHYS-A05.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub struct ConstraintBreakClaim {
+    /// Stable constraint identity.
+    pub constraint: Sigil,
+    /// Quantized solver impulse witness.
+    pub impulse: i32,
+}
+
 /// One transaction grain (K21).
 #[derive(Clone, Debug, PartialEq)]
 pub enum Proposal {
@@ -25,30 +106,24 @@ pub enum Proposal {
     Mind(MindIntent),
     /// Model fill. No Agency.
     Infer(InferIntent),
-    /// Quantized rigid-body delta. Kernel does not re-solve.
-    PhysDelta {
-        /// Mover (duplicated on the witness).
-        mover: Sigil,
-        /// Proposed pose.
-        pose: PoseMm,
-        /// Linear velocity.
-        vel: Vel3,
-        /// Yaw rate, millideg / tick.
-        yaw_rate: i32,
-        /// Pitch rate, millideg / tick.
-        pitch_rate: i32,
-        /// Roll rate, millideg / tick.
-        roll_rate: i32,
-        /// Island id.
+    /// Coupled physical solution admitted as one K21 transaction (K59).
+    PhysIsland {
+        /// Canon epoch observed by the proposer.
+        epoch: Epoch,
+        /// Authoritative tick this solution targets.
+        tick: Tick,
+        /// This-tick K58 partition id.
         island: u16,
-        /// Sleep ticks. Zero when this island mate received an impulse.
-        sleep_ticks: u16,
-        /// Canonical hull the proposer believes it is moving. Mismatch → `WrongHull`.
-        hull: BlobId,
-        /// K24 hint. Kernel derives swept; ignores proposer swept.
-        witness: HullWitness,
-        /// Contact support `(nx, ny, nz, depth_mm)`.
-        support: Option<Support>,
+        /// Exact sorted K58 membership. Actors may be members while Motion owns them.
+        members: Vec<Sigil>,
+        /// Sorted subset whose physical rows are updated by this solver.
+        bodies: Vec<BodyDelta>,
+        /// Sorted gameplay-visible contact claims.
+        contacts: Vec<ContactClaim>,
+        /// Sorted participating constraints. Non-empty is fail-closed until PHYS-A05.
+        constraints: Vec<ConstraintRef>,
+        /// Sorted break claims. Non-empty is fail-closed until PHYS-A05.
+        breaks: Vec<ConstraintBreakClaim>,
     },
     /// Space-admitted motion of one mover.
     SpaceDelta {
@@ -116,7 +191,7 @@ impl Proposal {
         match self {
             Self::Player(_) => 0,
             Self::Residency { .. } => 1,
-            Self::PhysDelta { .. } => 2,
+            Self::PhysIsland { .. } => 2,
             Self::SpaceDelta { .. } => 3,
             Self::MotionDelta { .. } => 4,
             Self::Mind(_) => 5,
@@ -131,9 +206,8 @@ impl Proposal {
             Self::Player(p) => u128::from(p.player.0),
             Self::Mind(m) => m.locus.raw(),
             Self::Infer(i) => i.locus.map(klotho_core::Sigil::raw).unwrap_or(0),
-            Self::PhysDelta { mover, .. }
-            | Self::SpaceDelta { mover, .. }
-            | Self::MotionDelta { mover, .. } => mover.raw(),
+            Self::PhysIsland { members, .. } => members.first().map_or(0, |s| s.raw()),
+            Self::SpaceDelta { mover, .. } | Self::MotionDelta { mover, .. } => mover.raw(),
             Self::Residency { place, .. } => place.raw(),
         }
     }
@@ -142,7 +216,7 @@ impl Proposal {
     #[must_use]
     pub fn island(&self) -> u16 {
         match self {
-            Self::PhysDelta { island, .. }
+            Self::PhysIsland { island, .. }
             | Self::SpaceDelta { island, .. }
             | Self::MotionDelta { island, .. } => *island,
             Self::Player(_) | Self::Mind(_) | Self::Infer(_) | Self::Residency { .. } => 0,
@@ -169,7 +243,7 @@ impl Proposal {
             Self::Player(_) => ProposalKind::Player,
             Self::Mind(_) => ProposalKind::Mind,
             Self::Infer(_) => ProposalKind::Infer,
-            Self::PhysDelta { .. } => ProposalKind::Phys,
+            Self::PhysIsland { .. } => ProposalKind::Phys,
             Self::SpaceDelta { .. } => ProposalKind::Space,
             Self::MotionDelta { .. } => ProposalKind::Motion,
             Self::Residency { .. } => ProposalKind::Residency,

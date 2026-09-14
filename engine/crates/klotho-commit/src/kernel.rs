@@ -5,19 +5,25 @@ use std::sync::Arc;
 
 use klotho_canon::{Canon, EpochMap};
 use klotho_core::{
-    Budget, Epoch, Hash, IVec3, KernelFault, Mm, NO_ISLAND, PlayerId, PoseMm, RejectReason, Sigil,
-    Tick, Vel3, YawMd, look_offset, rotate_xz,
+    Budget, Epoch, Hash, IVec3, KernelFault, LocusKind, Mm, NO_ISLAND, PlayerId, PoseMm,
+    RejectReason, Sigil, Tick, Vel3, YawMd, look_offset, rotate_xz,
 };
 use klotho_ir::{Channel, IntentTarget, PlayerIntent, Rel, SourceKind, Verb};
 use klotho_trace::{
     ISLAND_SNAP_PERIOD_TICKS, IslandSnap, ProposalKind, RiteEnd, TraceBody, TraceDelta, TraceEvent,
 };
-use klotho_world::{HITSCAN_RANGE_MM, RewindRing, World, WorldMut, WorldSnapshot, WorldView};
+use klotho_world::{
+    HITSCAN_RANGE_MM, RewindRing, SpecDelta, World, WorldMut, WorldSnapshot, WorldView,
+};
 
 use crate::admit::{AdmitBuf, SyncProposer};
-use crate::laws::admit_laws;
+use crate::laws::{admit_laws, admit_phys_laws};
 use crate::partition::partition_islands;
-use crate::proposal::{Proposal, ResidencyOp};
+use crate::proposal::{
+    BodyDelta, ContactClaim, MAX_PHYS_ISLAND_BODIES, MAX_PHYS_ISLAND_BREAKS,
+    MAX_PHYS_ISLAND_CHILDREN, MAX_PHYS_ISLAND_CONSTRAINTS, MAX_PHYS_ISLAND_CONTACTS,
+    MAX_PHYS_ISLAND_MEMBERS, MAX_PHYS_ISLAND_WRITE_LOCI, Proposal, ResidencyOp,
+};
 use crate::rite::drive_rite;
 use crate::swept::check_space;
 
@@ -310,6 +316,9 @@ impl CommitKernel {
         rite_steps: &mut u32,
         written: &mut BTreeMap<(u128, u8), ()>,
     ) -> Result<Vec<TraceEvent>, RejectReason> {
+        if matches!(p, Proposal::PhysIsland { .. }) {
+            return self.admit_phys_island(p, tick, pred_ops, written);
+        }
         let (actor, mut target, verb, source, claimed, swept_hits) =
             self.preflight(&p, tick, budget)?;
         if let Proposal::Player(pi) = &p {
@@ -343,48 +352,7 @@ impl CommitKernel {
                     tick,
                 )?;
             }
-            Proposal::PhysDelta {
-                mover,
-                pose,
-                vel,
-                yaw_rate,
-                pitch_rate,
-                roll_rate,
-                island,
-                sleep_ticks,
-                support,
-                ..
-            } => {
-                let children = attached_children(&spec.view(), *mover);
-                let locals: Vec<(Sigil, IVec3)> = children
-                    .iter()
-                    .map(|&child| {
-                        let local = spec
-                            .view()
-                            .attach_local(child)
-                            .unwrap_or_else(|| default_attach_local(&spec.view(), child, *mover));
-                        (child, local)
-                    })
-                    .collect();
-                spec.set_pose(*mover, *pose)
-                    .map_err(|_| RejectReason::Budget)?;
-                spec.set_vel(*mover, *vel, *yaw_rate)
-                    .map_err(|_| RejectReason::Budget)?;
-                spec.set_rates(*mover, *yaw_rate, *pitch_rate, *roll_rate)
-                    .map_err(|_| RejectReason::Budget)?;
-                spec.set_island(*mover, *island, *sleep_ticks)
-                    .map_err(|_| RejectReason::Budget)?;
-                spec.set_support(*mover, *support)
-                    .map_err(|_| RejectReason::Budget)?;
-                spec.clear_phys_req(*mover)
-                    .map_err(|_| RejectReason::Budget)?;
-                for (child, local) in locals {
-                    spec.set_pose(child, compose_yaw_only(*pose, local))
-                        .map_err(|_| RejectReason::Budget)?;
-                    spec.clear_phys_req(child)
-                        .map_err(|_| RejectReason::Budget)?;
-                }
-            }
+            Proposal::PhysIsland { .. } => unreachable!("physical islands admit as a batch"),
             Proposal::SpaceDelta {
                 mover,
                 pose,
@@ -442,6 +410,155 @@ impl CommitKernel {
             written.insert(c, ());
         }
         Ok(events)
+    }
+
+    fn admit_phys_island(
+        &mut self,
+        p: Proposal,
+        tick: Tick,
+        pred_ops: &mut u32,
+        written: &mut BTreeMap<(u128, u8), ()>,
+    ) -> Result<Vec<TraceEvent>, RejectReason> {
+        let Proposal::PhysIsland {
+            epoch,
+            tick: proposed_tick,
+            island,
+            members,
+            bodies,
+            contacts,
+            constraints,
+            breaks,
+        } = &p
+        else {
+            unreachable!("caller selected PhysIsland")
+        };
+        let swept_hits = self.validate_phys_island(
+            *epoch,
+            *proposed_tick,
+            *island,
+            members,
+            bodies,
+            contacts,
+            constraints,
+            breaks,
+            tick,
+        )?;
+        let (cells, attachments) = phys_write_cells(bodies, &self.world.view())?;
+        if cells.iter().any(|cell| written.contains_key(cell)) {
+            return Err(RejectReason::Conflict);
+        }
+
+        let mut spec = self.world.mutate().begin_spec();
+        for body in bodies {
+            apply_body(&mut spec, *island, body)?;
+        }
+        for (child, parent, local) in attachments {
+            let parent_pose = spec
+                .view()
+                .pose(parent)
+                .ok_or(RejectReason::WitnessMismatch)?;
+            spec.set_pose(child, compose_yaw_only(parent_pose, local))
+                .map_err(|_| RejectReason::Budget)?;
+            spec.clear_phys_req(child)
+                .map_err(|_| RejectReason::Budget)?;
+        }
+        validate_contact_claims(&spec.view(), bodies, contacts)?;
+        let law_bodies: Vec<(Sigil, bool)> = bodies
+            .iter()
+            .zip(swept_hits)
+            .map(|(body, hits)| (body.mover, hits))
+            .collect();
+        admit_phys_laws(self.world.canon(), &spec.view(), &law_bodies, pred_ops)?;
+
+        let events = spec.events().to_vec();
+        self.world.mutate().commit_spec(spec);
+        for cell in cells {
+            written.insert(cell, ());
+        }
+        Ok(events)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn validate_phys_island(
+        &self,
+        epoch: Epoch,
+        proposed_tick: Tick,
+        island: u16,
+        members: &[Sigil],
+        bodies: &[BodyDelta],
+        contacts: &[ContactClaim],
+        constraints: &[crate::proposal::ConstraintRef],
+        breaks: &[crate::proposal::ConstraintBreakClaim],
+        tick: Tick,
+    ) -> Result<Vec<bool>, RejectReason> {
+        if epoch != self.world.epoch() || proposed_tick != tick {
+            return Err(RejectReason::EpochMismatch);
+        }
+        if members.len() > MAX_PHYS_ISLAND_MEMBERS
+            || bodies.len() > MAX_PHYS_ISLAND_BODIES
+            || contacts.len() > MAX_PHYS_ISLAND_CONTACTS
+            || constraints.len() > MAX_PHYS_ISLAND_CONSTRAINTS
+            || breaks.len() > MAX_PHYS_ISLAND_BREAKS
+        {
+            return Err(RejectReason::IslandTooLarge);
+        }
+        if island == NO_ISLAND || members.is_empty() || bodies.is_empty() {
+            return Err(RejectReason::WitnessMismatch);
+        }
+        if !strictly_increasing(members)
+            || !strictly_increasing_by(bodies, |b| b.mover)
+            || !strictly_increasing_by(contacts, ContactClaim::key)
+            || !strictly_increasing_by(constraints, |c| c.constraint)
+            || !strictly_increasing_by(breaks, |b| b.constraint)
+        {
+            return Err(RejectReason::WitnessMismatch);
+        }
+        let view = self.world.view();
+        let mut expected: Vec<Sigil> = view
+            .loci()
+            .filter(|&s| view.island(s).map(|(id, _)| id) == Some(island))
+            .collect();
+        expected.sort_unstable();
+        if expected != members {
+            return Err(RejectReason::WitnessMismatch);
+        }
+        // Constraint Projection/Canon rows land in PHYS-A05. Never accept a
+        // claim that this kernel version cannot validate and apply.
+        if !constraints.is_empty() || !breaks.is_empty() {
+            return Err(RejectReason::WitnessMismatch);
+        }
+
+        let mut swept_hits = Vec::with_capacity(bodies.len());
+        for body in bodies {
+            if members.binary_search(&body.mover).is_err()
+                || body.witness.mover != body.mover
+                || body.witness.proposed != body.pose
+            {
+                return Err(RejectReason::WitnessMismatch);
+            }
+            swept_hits.push(check_space(
+                &view,
+                body.mover,
+                body.pose,
+                body.hull,
+                body.witness.overlaps_closed_opaque,
+            )?);
+        }
+        // PHYS-A06 adds driven Actors. Until then every unattached Relic is a
+        // solved body, Actors remain Motion-owned, and attached rows derive
+        // from their parent. A producer may not omit one coupled rigid body.
+        for member in members {
+            if view.kind(*member) == Some(LocusKind::Relic)
+                && view.attach_parent(*member).is_none()
+                && bodies
+                    .binary_search_by_key(member, |body| body.mover)
+                    .is_err()
+            {
+                return Err(RejectReason::WitnessMismatch);
+            }
+        }
+        validate_contact_headers(&view, members, bodies, contacts)?;
+        Ok(swept_hits)
     }
 
     #[allow(clippy::type_complexity)]
@@ -505,25 +622,7 @@ impl CommitKernel {
                     false,
                 ))
             }
-            Proposal::PhysDelta {
-                mover,
-                pose,
-                hull,
-                witness,
-                ..
-            } => {
-                if witness.mover != *mover {
-                    return Err(RejectReason::WrongHull);
-                }
-                let hits = check_space(
-                    &self.world.view(),
-                    *mover,
-                    *pose,
-                    *hull,
-                    witness.overlaps_closed_opaque,
-                )?;
-                Ok((*mover, None, Verb::Move, SourceKind::Phys, Vec::new(), hits))
-            }
+            Proposal::PhysIsland { .. } => unreachable!("physical islands preflight as a batch"),
             Proposal::SpaceDelta {
                 mover,
                 pose,
@@ -665,9 +764,19 @@ fn write_cells(p: &Proposal, actor: Sigil, view: &WorldView<'_>) -> Vec<(u128, u
         Proposal::Player(_) | Proposal::Mind(_) | Proposal::Infer(_) => {
             vec![(actor.raw(), 1)]
         }
-        Proposal::PhysDelta { mover, .. }
-        | Proposal::SpaceDelta { mover, .. }
-        | Proposal::MotionDelta { mover, .. } => {
+        Proposal::PhysIsland { bodies, .. } => {
+            let mut cells = Vec::new();
+            for body in bodies {
+                cells.push((body.mover.raw(), 0));
+                for child in attached_children(view, body.mover) {
+                    cells.push((child.raw(), 0));
+                }
+            }
+            cells.sort_unstable();
+            cells.dedup();
+            cells
+        }
+        Proposal::SpaceDelta { mover, .. } | Proposal::MotionDelta { mover, .. } => {
             let mut cells = vec![(mover.raw(), 0)];
             for child in attached_children(view, *mover) {
                 cells.push((child.raw(), 0));
@@ -691,6 +800,113 @@ fn write_cells(p: &Proposal, actor: Sigil, view: &WorldView<'_>) -> Vec<(u128, u
             cells
         }
     }
+}
+
+fn strictly_increasing<T: Ord>(items: &[T]) -> bool {
+    items.windows(2).all(|pair| pair[0] < pair[1])
+}
+
+fn strictly_increasing_by<T, K: Ord>(items: &[T], key: impl Fn(&T) -> K) -> bool {
+    items.windows(2).all(|pair| key(&pair[0]) < key(&pair[1]))
+}
+
+type WriteCell = (u128, u8);
+type AttachmentWrite = (Sigil, Sigil, IVec3);
+type PhysWriteSet = (Vec<WriteCell>, Vec<AttachmentWrite>);
+
+fn phys_write_cells(
+    bodies: &[BodyDelta],
+    view: &WorldView<'_>,
+) -> Result<PhysWriteSet, RejectReason> {
+    let body_ids: Vec<Sigil> = bodies.iter().map(|body| body.mover).collect();
+    let mut children: BTreeMap<Sigil, (Sigil, IVec3)> = BTreeMap::new();
+    for body in bodies {
+        for child in attached_children(view, body.mover) {
+            if body_ids.binary_search(&child).is_ok() || children.contains_key(&child) {
+                return Err(RejectReason::WitnessMismatch);
+            }
+            let local = view
+                .attach_local(child)
+                .unwrap_or_else(|| default_attach_local(view, child, body.mover));
+            children.insert(child, (body.mover, local));
+        }
+    }
+    if children.len() > MAX_PHYS_ISLAND_CHILDREN
+        || bodies.len().saturating_add(children.len()) > MAX_PHYS_ISLAND_WRITE_LOCI
+    {
+        return Err(RejectReason::IslandTooLarge);
+    }
+    let mut cells = Vec::with_capacity(bodies.len() + children.len());
+    cells.extend(bodies.iter().map(|body| (body.mover.raw(), 0)));
+    cells.extend(children.keys().map(|child| (child.raw(), 0)));
+    let attachments = children
+        .into_iter()
+        .map(|(child, (parent, local))| (child, parent, local))
+        .collect();
+    Ok((cells, attachments))
+}
+
+fn apply_body(spec: &mut SpecDelta, island: u16, body: &BodyDelta) -> Result<(), RejectReason> {
+    spec.set_pose(body.mover, body.pose)
+        .map_err(|_| RejectReason::Budget)?;
+    spec.set_vel(body.mover, body.vel, body.yaw_rate)
+        .map_err(|_| RejectReason::Budget)?;
+    spec.set_rates(body.mover, body.yaw_rate, body.pitch_rate, body.roll_rate)
+        .map_err(|_| RejectReason::Budget)?;
+    spec.set_island(body.mover, island, body.sleep_ticks)
+        .map_err(|_| RejectReason::Budget)?;
+    spec.set_support(body.mover, body.support)
+        .map_err(|_| RejectReason::Budget)?;
+    spec.clear_phys_req(body.mover)
+        .map_err(|_| RejectReason::Budget)
+}
+
+fn validate_contact_headers(
+    view: &WorldView<'_>,
+    members: &[Sigil],
+    bodies: &[BodyDelta],
+    contacts: &[ContactClaim],
+) -> Result<(), RejectReason> {
+    for claim in contacts {
+        if claim.a >= claim.b
+            || claim.witness.mover != claim.a
+            || !view.contains(claim.a)
+            || !view.contains(claim.b)
+            || (members.binary_search(&claim.a).is_err()
+                && members.binary_search(&claim.b).is_err())
+        {
+            return Err(RejectReason::WitnessMismatch);
+        }
+        if view.hull_id(claim.a) != Some(claim.shape_a)
+            || view.hull_id(claim.b) != Some(claim.shape_b)
+        {
+            return Err(RejectReason::WrongHull);
+        }
+        let proposed = bodies
+            .binary_search_by_key(&claim.a, |body| body.mover)
+            .ok()
+            .map(|i| bodies[i].pose)
+            .or_else(|| view.pose(claim.a));
+        if proposed != Some(claim.witness.proposed) {
+            return Err(RejectReason::WitnessMismatch);
+        }
+    }
+    Ok(())
+}
+
+fn validate_contact_claims(
+    view: &WorldView<'_>,
+    _bodies: &[BodyDelta],
+    contacts: &[ContactClaim],
+) -> Result<(), RejectReason> {
+    for claim in contacts {
+        let a = view.posed_hull(claim.a).ok_or(RejectReason::WrongHull)?;
+        let b = view.posed_hull(claim.b).ok_or(RejectReason::WrongHull)?;
+        if !a.intersects(b) {
+            return Err(RejectReason::WitnessMismatch);
+        }
+    }
+    Ok(())
 }
 
 fn compose_yaw_only(parent: PoseMm, local: IVec3) -> PoseMm {

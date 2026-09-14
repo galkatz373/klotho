@@ -1,4 +1,4 @@
-//! Scalar AABB island proposer. f32 internals, quantized [`Proposal::PhysDelta`] out.
+//! Scalar AABB island proposer. f32 internals, one quantized [`Proposal::PhysIsland`] per island.
 //!
 //! Sequential positional correction; contact set rebuilt per substep. No hashed
 //! warm-start. Floor / `OpaqueClosed` scenery is occupancy, not a body.
@@ -86,7 +86,7 @@ mod tests {
     use std::sync::Arc;
 
     use klotho_canon::cook_diffs;
-    use klotho_commit::{CommitKernel, Proposal};
+    use klotho_commit::{BodyDelta, CommitKernel, Proposal};
     use klotho_core::{
         AabbMm, BlobId, Budget, Hash, HullWitness, IVec3, LocusKind, Mm, NO_ISLAND, PhysRequest,
         PlayerId, PoseMm, RejectReason, Sigil, Tick, Vel3, VelFx, YawMd,
@@ -339,7 +339,7 @@ mod tests {
     }
 
     #[test]
-    fn never_clip_closed_rejects_phys_delta() {
+    fn never_clip_closed_rejects_phys_island() {
         let src = r#"[
             AddAffordance(Affordance(id: "Opaque", requires: [], grants: [], conflicts: [])),
             AddLaw(Law(
@@ -371,18 +371,26 @@ mod tests {
             w.set_island(door, 1, 12).unwrap();
         }
         let next = PoseMm::new(Mm(0), Mm(0), Mm(1900), YawMd(0));
-        k.ingest(Proposal::PhysDelta {
-            mover: player,
-            pose: next,
-            vel: Vel3::ZERO,
-            yaw_rate: 0,
-            pitch_rate: 0,
-            roll_rate: 0,
+        k.ingest(Proposal::PhysIsland {
+            epoch: k.world().epoch(),
+            tick: Tick(1),
             island: 0,
-            sleep_ticks: 0,
-            hull: hull_id(1),
-            witness: HullWitness::new(player, next, true),
-            support: None,
+            members: vec![player],
+            bodies: vec![BodyDelta {
+                mover: player,
+                pose: next,
+                vel: Vel3::ZERO,
+                yaw_rate: 0,
+                pitch_rate: 0,
+                roll_rate: 0,
+                sleep_ticks: 0,
+                hull: hull_id(1),
+                witness: HullWitness::new(player, next, true),
+                support: None,
+            }],
+            contacts: Vec::new(),
+            constraints: Vec::new(),
+            breaks: Vec::new(),
         });
         let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
         assert!(
@@ -392,6 +400,38 @@ mod tests {
             "{d:?}"
         );
         assert_eq!(k.world().view().pose(player).unwrap().z, Mm(1400));
+    }
+
+    #[test]
+    fn one_solver_result_is_one_sorted_island_proposal() {
+        let (mut k, _floor, bottom, mid, top) = stacked_kernel();
+        k.partition();
+        let island = k.world().view().island(bottom).unwrap().0;
+        let solved = solve_island(island, &k.world().view());
+        assert_eq!(solved.proposals.len(), 1);
+        let Proposal::PhysIsland {
+            epoch,
+            tick,
+            members,
+            bodies,
+            contacts,
+            constraints,
+            breaks,
+            ..
+        } = &solved.proposals[0]
+        else {
+            panic!("solver emitted a non-island physics grain")
+        };
+        assert_eq!(*epoch, k.world().epoch());
+        assert_eq!(*tick, k.world().tick());
+        assert_eq!(members, &vec![bottom, mid, top]);
+        assert_eq!(
+            bodies.iter().map(|body| body.mover).collect::<Vec<_>>(),
+            vec![bottom, mid, top]
+        );
+        assert!(contacts.is_empty());
+        assert!(constraints.is_empty());
+        assert!(breaks.is_empty());
     }
 
     #[test]
@@ -474,8 +514,12 @@ mod tests {
             .unwrap_or(0);
         phys.propose_island(island, &k.world().view(), &mut buf);
         assert!(
-            buf.drain().iter().all(|p| p.mover_raw() != child.raw()),
-            "attached child must not get its own PhysDelta"
+            buf.drain().iter().all(|p| match p {
+                Proposal::PhysIsland { bodies, .. } =>
+                    bodies.iter().all(|body| body.mover != child),
+                _ => true,
+            }),
+            "attached child must not get its own BodyDelta"
         );
         let mut motion = Motion::hearth();
         let mut mbuf = klotho_commit::AdmitBuf::new();

@@ -463,7 +463,7 @@ fn vehicle_query_overflow_emits_no_island() {
             sigil: id(LocusKind::Relic, 100 + i as u128),
             local: box_hull(10, 10, 10),
             kind: ShapeKind::OrientedBox,
-            pose: pose(i as i32 * 20, 0, 0),
+            pose: pose(i * 20, 0, 0),
             friction: 0.9,
             restitution: 0.0,
         });

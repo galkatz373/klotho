@@ -21,7 +21,7 @@ pub use semantic::{
     verify_semantic_sweep,
 };
 
-pub use cast::{SweptHit, raycast, swept_against};
+pub use cast::{MAX_VEHICLE_OBSTACLES, SweptHit, WheelHit, cast_wheel, raycast, swept_against};
 pub use character::{
     CharacterObstacle, CharacterResolution, MAX_CHARACTER_OBSTACLES, resolve_character,
 };
@@ -84,6 +84,95 @@ mod tests {
         let other_pose = pose_at(600, 0, 0, 0);
         assert!(contact(shape, a0, other, other_pose).unwrap().is_some());
         assert!(contact(shape, a90, other, other_pose).unwrap().is_none());
+    }
+
+    #[test]
+    fn oriented_box_ray_uses_local_slab_not_world_aabb() {
+        let local = box_xz(1_000, 100, 50);
+        let shape = Shape::oriented_box(local).unwrap();
+        let pose = pose_at(0, 0, 0, YawMd::QUARTER_TURN);
+        // World AABB of the rotated thin box is wide in Z; a Z-axis ray at x=600
+        // hits that AABB but misses the actual OBB (local X extent after yaw).
+        let miss = raycast(
+            shape,
+            pose,
+            IVec3 {
+                x: 600,
+                y: 50,
+                z: -200,
+            },
+            IVec3 { x: 0, y: 0, z: 400 },
+        )
+        .unwrap();
+        assert!(miss.is_none(), "{miss:?}");
+        let hit = raycast(
+            shape,
+            pose,
+            IVec3 {
+                x: 0,
+                y: 50,
+                z: -200,
+            },
+            IVec3 { x: 0, y: 0, z: 400 },
+        )
+        .unwrap();
+        assert!(hit.is_some(), "{hit:?}");
+    }
+
+    #[test]
+    fn heightfield_wheel_ray_hits_the_ramp_surface() {
+        let ramp = cooked_shape(
+            ShapeKind::Heightfield,
+            AabbMm::new(
+                IVec3 {
+                    x: -2_000,
+                    y: 0,
+                    z: 0,
+                },
+                IVec3 {
+                    x: 2_000,
+                    y: 804,
+                    z: 3_000,
+                },
+            ),
+        )
+        .unwrap();
+        let pose = pose_at(0, 0, 0, 0);
+        let hit = raycast(
+            ramp,
+            pose,
+            IVec3 {
+                x: 0,
+                y: 1_000,
+                z: 1_500,
+            },
+            IVec3 {
+                x: 0,
+                y: -1_000,
+                z: 0,
+            },
+        )
+        .unwrap()
+        .expect("ramp");
+        // Surface at z=1500 is ~402 mm, so t ≈ 0.6, not the AABB top at 804 mm.
+        assert_eq!(frac_cmp(hit.0, hit.1, 1, 2), core::cmp::Ordering::Greater);
+        assert_eq!(frac_cmp(hit.0, hit.1, 4, 5), core::cmp::Ordering::Less);
+        let wheel = cast_wheel(
+            IVec3 {
+                x: 0,
+                y: 1_000,
+                z: 1_500,
+            },
+            IVec3 {
+                x: 0,
+                y: -1_000,
+                z: 0,
+            },
+            &[(ramp, pose)],
+        )
+        .unwrap()
+        .expect("wheel");
+        assert!((350..=700).contains(&wheel.dist_mm), "{wheel:?}");
     }
 
     #[test]

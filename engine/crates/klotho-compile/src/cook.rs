@@ -665,6 +665,43 @@ mod tests {
     }
 
     #[test]
+    fn vehicle_physics_is_cooked_hashed_and_packed() {
+        use klotho_core::{BodyPhysics, VehiclePhysics};
+        let mut doc = empty_doc(&[]);
+        doc.seed[0] = SeedFact::Locus {
+            name: Name::from("cart"),
+            kind: LocusKind::Relic,
+        };
+        let body = BodyPhysics {
+            vehicle: Some(VehiclePhysics::default()),
+            ..BodyPhysics::default()
+        };
+        doc.seed.push(SeedFact::Physics {
+            of: Name::from("cart"),
+            body,
+        });
+        let cooked = cook_doc(&doc).unwrap();
+        let restored = crate::unpack_warp(&crate::pack_warp(&cooked).unwrap()).unwrap();
+        assert_eq!(
+            restored
+                .canon
+                .body_physics(restored.canon.pin("cart").unwrap()),
+            Some(body)
+        );
+        let before = cooked.canon_hash;
+        let SeedFact::Physics { body, .. } = &mut doc.seed[1] else {
+            panic!()
+        };
+        body.vehicle.as_mut().unwrap().rest_mm = 260;
+        assert_ne!(before, cook_doc(&doc).unwrap().canon_hash);
+        let SeedFact::Physics { body, .. } = &mut doc.seed[1] else {
+            panic!()
+        };
+        body.vehicle.as_mut().unwrap().wheel_count = 1;
+        assert!(cook_doc(&doc).is_err());
+    }
+
+    #[test]
     fn missing_tag_is_cook_error() {
         let doc = empty_doc(&["no.such.tag"]);
         let e = cook_doc(&doc).unwrap_err();

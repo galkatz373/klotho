@@ -211,6 +211,11 @@ fn cook_inner(
                     "character physics requires an Actor: {of}"
                 )));
             }
+            if body.vehicle.is_some() && locus.kind() != Some(LocusKind::Relic) {
+                return Err(CookError::InvalidDoc(format!(
+                    "vehicle physics requires a Relic: {of}"
+                )));
+            }
             if !canon.bind_physics(locus, *body) {
                 return Err(CookError::DuplicateId(of.0.clone()));
             }

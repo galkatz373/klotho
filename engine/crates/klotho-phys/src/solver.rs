@@ -20,14 +20,14 @@ const MD_PER_RADIAN: f32 = 57_295.78;
 const ANGULAR_POSITION_SCALE: f32 = 0.02;
 
 pub(crate) struct Body {
-    sigil: Sigil,
+    pub(crate) sigil: Sigil,
     local: AabbMm,
     hull: BlobId,
     kind: ShapeKind,
     pub(crate) x: [f32; 3],
-    v: [f32; 3],
+    pub(crate) v: [f32; 3],
     pub(crate) angle_md: [f32; 3],
-    omega_md: [f32; 3],
+    pub(crate) omega_md: [f32; 3],
     pub(crate) inv_mass: f32,
     pub(crate) inv_inertia: [f32; 3],
     center_of_mass: klotho_core::IVec3,
@@ -35,8 +35,10 @@ pub(crate) struct Body {
     restitution: f32,
     prev: PoseMm,
     character: Option<klotho_core::CharacterPhysics>,
+    pub(crate) vehicle: Option<klotho_core::VehiclePhysics>,
+    pub(crate) drive: Option<klotho_core::VehicleDrive>,
     kinematic: bool,
-    grounded: bool,
+    pub(crate) grounded: bool,
 }
 
 struct Contact {
@@ -49,13 +51,13 @@ struct Contact {
     static_restitution: Option<f32>,
 }
 
-struct Occupancy {
-    sigil: Sigil,
-    local: AabbMm,
-    kind: ShapeKind,
-    pose: PoseMm,
-    friction: f32,
-    restitution: f32,
+pub(crate) struct Occupancy {
+    pub(crate) sigil: Sigil,
+    pub(crate) local: AabbMm,
+    pub(crate) kind: ShapeKind,
+    pub(crate) pose: PoseMm,
+    pub(crate) friction: f32,
+    pub(crate) restitution: f32,
 }
 
 /// One island solve. Residuals are per emitted pose (max-axis mm).
@@ -71,6 +73,8 @@ pub struct SolveOut {
     pub rejected_non_finite: Vec<Sigil>,
     /// Driven actors whose bounded geometry query failed; no island is emitted.
     pub rejected_character_geometry: Vec<Sigil>,
+    /// Bound vehicles whose wheel query overflowed; no island is emitted.
+    pub rejected_vehicle_geometry: Vec<Sigil>,
 }
 
 /// Solve Relics and Canon-driven Actors in `island`; skip attached children.
@@ -82,6 +86,7 @@ pub fn solve_island(island: u16, view: &WorldView<'_>) -> SolveOut {
             residuals_mm: Vec::new(),
             rejected_non_finite: Vec::new(),
             rejected_character_geometry: Vec::new(),
+            rejected_vehicle_geometry: Vec::new(),
         };
     }
     let members = collect_members(island, view);
@@ -92,6 +97,7 @@ pub fn solve_island(island: u16, view: &WorldView<'_>) -> SolveOut {
             residuals_mm: Vec::new(),
             rejected_non_finite: Vec::new(),
             rejected_character_geometry: Vec::new(),
+            rejected_vehicle_geometry: Vec::new(),
         };
     }
     let statics = collect_statics(view, &bodies);
@@ -105,6 +111,20 @@ pub fn solve_island(island: u16, view: &WorldView<'_>) -> SolveOut {
                 .filter(|b| b.character.is_some())
                 .map(|b| b.sigil)
                 .collect(),
+            rejected_vehicle_geometry: Vec::new(),
+        };
+    }
+    if crate::vehicle::prepare_vehicles(&statics).is_err() {
+        return SolveOut {
+            proposals: Vec::new(),
+            residuals_mm: Vec::new(),
+            rejected_non_finite: Vec::new(),
+            rejected_character_geometry: Vec::new(),
+            rejected_vehicle_geometry: bodies
+                .iter()
+                .filter(|b| b.vehicle.is_some())
+                .map(|b| b.sigil)
+                .collect(),
         };
     }
     let mut joints = collect_joints(view, &bodies);
@@ -115,6 +135,19 @@ pub fn solve_island(island: u16, view: &WorldView<'_>) -> SolveOut {
             if !b.kinematic && !(b.character.is_some() && b.grounded) {
                 b.v[1] -= GRAVITY_MM_PER_TICK2 * dt;
             }
+        }
+        if crate::vehicle::apply_vehicles(&mut bodies, &statics, dt, &mut last_support).is_err() {
+            return SolveOut {
+                proposals: Vec::new(),
+                residuals_mm: Vec::new(),
+                rejected_non_finite: Vec::new(),
+                rejected_character_geometry: Vec::new(),
+                rejected_vehicle_geometry: bodies
+                    .iter()
+                    .filter(|b| b.vehicle.is_some())
+                    .map(|b| b.sigil)
+                    .collect(),
+            };
         }
         let impact_v: Vec<[f32; 3]> = bodies.iter().map(|b| b.v).collect();
         for b in &mut bodies {
@@ -262,27 +295,33 @@ fn collect_bodies(island: u16, view: &WorldView<'_>) -> Vec<Body> {
             vel.y.0 as f32 / scale,
             vel.z.0 as f32 / scale,
         ];
-        if let Some(req) = view.phys_req(s) {
-            // One-shot Δv (mm/tick). Kernel clears the column on admit.
-            v[0] += req.lin.x as f32;
-            v[1] += req.lin.y as f32;
-            v[2] += req.lin.z as f32;
-        }
-        let mut omega_md = [yaw_rate as f32, pitch_rate as f32, roll_rate as f32];
-        if let Some(req) = view.phys_req(s) {
-            omega_md[0] += req.ang.y as f32;
-            omega_md[1] += req.ang.x as f32;
-            omega_md[2] += req.ang.z as f32;
-        }
-        // Steer writes PHYS_REQ on the driver; only the Relic parent is a body.
-        for child in view.loci() {
-            if view.attach_parent(child) != Some(s) {
-                continue;
-            }
-            if let Some(req) = view.phys_req(child) {
+        let vehicle = view.vehicle_physics(s);
+        let drive = view.vehicle_drive(s);
+        if vehicle.is_none() {
+            if let Some(req) = view.phys_req(s) {
+                // One-shot Δv (mm/tick). Kernel clears the column on admit.
                 v[0] += req.lin.x as f32;
                 v[1] += req.lin.y as f32;
                 v[2] += req.lin.z as f32;
+            }
+        }
+        let mut omega_md = [yaw_rate as f32, pitch_rate as f32, roll_rate as f32];
+        if vehicle.is_none() {
+            if let Some(req) = view.phys_req(s) {
+                omega_md[0] += req.ang.y as f32;
+                omega_md[1] += req.ang.x as f32;
+                omega_md[2] += req.ang.z as f32;
+            }
+            // Steer writes PHYS_REQ on the driver; only the Relic parent is a body.
+            for child in view.loci() {
+                if view.attach_parent(child) != Some(s) {
+                    continue;
+                }
+                if let Some(req) = view.phys_req(child) {
+                    v[0] += req.lin.x as f32;
+                    v[1] += req.lin.y as f32;
+                    v[2] += req.lin.z as f32;
+                }
             }
         }
         out.push(Body {
@@ -309,6 +348,8 @@ fn collect_bodies(island: u16, view: &WorldView<'_>) -> Vec<Body> {
             restitution: f32::from(physics.restitution_permille) / 1_000.0,
             prev: pose,
             character: view.character_physics(s),
+            vehicle,
+            drive,
             kinematic: physics.mode == BodyMode::Kinematic,
             grounded: false,
         });
@@ -366,8 +407,11 @@ fn collect_statics(view: &WorldView<'_>, bodies: &[Body]) -> Vec<Occupancy> {
             });
         }
     }
-    // Character steps and grounding need occupancy beyond the linear root AABB.
-    for b in bodies.iter().filter(|b| b.character.is_some()) {
+    // Character steps and vehicle wheel rays need occupancy beyond the linear AABB.
+    for b in bodies
+        .iter()
+        .filter(|b| b.character.is_some() || b.vehicle.is_some())
+    {
         let Ok(shape) = cooked_shape(b.kind, b.local) else {
             continue;
         };
@@ -399,7 +443,10 @@ fn collect_statics(view: &WorldView<'_>, bodies: &[Body]) -> Vec<Occupancy> {
             }
         }
     }
-    if bodies.iter().any(|b| b.character.is_some()) {
+    if bodies
+        .iter()
+        .any(|b| b.character.is_some() || b.vehicle.is_some())
+    {
         out.sort_by_key(|o| o.sigil);
     }
     out
@@ -877,6 +924,8 @@ fn emit(
         b.character.is_some()
             || b.kinematic
             || view.phys_req(b.sigil).is_some()
+            || b.drive
+                .is_some_and(|d| d.throttle != 0 || d.brake != 0 || d.steer_md != 0)
             || !is_quiet(b, support[i])
     });
     for (i, b) in bodies.iter().enumerate() {
@@ -955,6 +1004,7 @@ fn emit(
                     .filter(|b| view.contact_window(b.mover).is_some())
                     .map(|b| b.mover)
                     .collect(),
+                rejected_vehicle_geometry: Vec::new(),
             };
         }
     };
@@ -978,6 +1028,7 @@ fn emit(
         residuals_mm,
         rejected_non_finite,
         rejected_character_geometry: Vec::new(),
+        rejected_vehicle_geometry: Vec::new(),
     }
 }
 
@@ -1075,6 +1126,8 @@ mod tests {
             restitution: 0.0,
             prev: PoseMm::default(),
             character: None,
+            vehicle: None,
+            drive: None,
             kinematic: false,
             grounded: false,
         }

@@ -5,13 +5,13 @@
 | Document | High-Level Design — Klotho at AAA production scale |
 | Author | Gal Katz |
 | Date | 2026-09-15 |
-| Status | Current (rev 11 — PHYS-A01–A08 landed) |
-| Last verified | 2026-09-15 through PHYS-A08 |
+| Status | Current (rev 11 — PHYS-A01–A09 landed) |
+| Last verified | 2026-09-15 through PHYS-A09 |
 | Supersedes | `docs/hld-v1.md` rev 5 (2026-08-22) — v1 semantic kernel, Hearth/Ash slice |
 | Audience | Senior engine, tools, gameplay systems, and production engineers |
 | Language | Rust (edition 2024; 2021-compatible crates OK) |
 
-This is the current architecture for a studio that wants Klotho's programming model **and** a contemporary first-party quality bar. The preserved rev 5 baseline remains useful history, but this document is the law where the two differ. **Landed on `main` (verified 2026-09-15 through PHYS-A08):** AAA-01, AAA-02, AAA-03, AAA-04, AAA-05, AAA-08.1, AAA-06, AAA-08, AAA-07, AAA-09, AAA-10, AAA-11, AAA-11b, AAA-12, AAA-13, AAA-14, AAA-15, AAA-16, AAA-17, AAA-18, AAA-19, AAA-20, AAA-21, AAA-21b, AAA-22, AAA-23, AAA-24, AAA-25, AAA-26, AAA-27, PHYS-A01, PHYS-A02, PHYS-A03, PHYS-A04, PHYS-A05, PHYS-A06, PHYS-A07, and PHYS-A08 (plus rev-4 K58 caps). **The planned AAA sequence is complete; the PHYS-A continuation is active.**
+This is the current architecture for a studio that wants Klotho's programming model **and** a contemporary first-party quality bar. The preserved rev 5 baseline remains useful history, but this document is the law where the two differ. **Landed on `main` (verified 2026-09-15 through PHYS-A09):** AAA-01, AAA-02, AAA-03, AAA-04, AAA-05, AAA-08.1, AAA-06, AAA-08, AAA-07, AAA-09, AAA-10, AAA-11, AAA-11b, AAA-12, AAA-13, AAA-14, AAA-15, AAA-16, AAA-17, AAA-18, AAA-19, AAA-20, AAA-21, AAA-21b, AAA-22, AAA-23, AAA-24, AAA-25, AAA-26, AAA-27, PHYS-A01, PHYS-A02, PHYS-A03, PHYS-A04, PHYS-A05, PHYS-A06, PHYS-A07, PHYS-A08, and PHYS-A09 (plus rev-4 K58 caps). **The planned AAA sequence is complete; the PHYS-A continuation is active.**
 
 > **Freshness rule (keeps this doc from going stale):** every AAA or PHYS-A PR that lands must bump the `Last verified` row, the landed list in this paragraph, the `Landed on main` line in §PR Plan, and the `— landed` suffix on its PR header in the same commit. `git log` is the source of truth; this list is a cached view of it.
 
@@ -655,7 +655,7 @@ sequenceDiagram
 
 **Character grounding:** the landed fallback has Motion read `support` from Projection and use `pose.y <= 0` when absent. PHYS-A06 retires that fallback for physically driven characters: a single island proposer consumes the semantic root drive and owns capsule sweep, grounding, depenetration, step-up, slope limiting, platform following, and dynamic-body interaction. The accepted defaults for the Anvil golden are a 300 mm capsule radius, 900 mm half-height, 250 mm maximum step, 45° maximum walkable slope, and 2 mm contact slop. These are frozen test-profile Canon values, not universal gameplay constants.
 
-**Vehicles (K56):** `Affordance Driveable`. Phys 6DOF + traction rays against canonical hulls (floor AABB in Drift v1). `Verb::Steer` (AAA-08.1). Driver: `Rel::PilotedBy`. Era 1 attach compose (**not** SO(3) Euler multiply):
+**Vehicles (K56):** `Affordance Driveable`. PHYS-A09 binds an optional four-wheel ray-cast rig on `BodyPhysics::vehicle` (hubs, rest, spring/damper, radius, steer, tire scales). Phys consumes throttle/brake/steer from chassis or attached-driver `PhysRequest` and admits the chassis pose only. Unbound Driveable relics keep the legacy one-shot PHYS_REQ Δv fold so Drift goldens stay put. Traction rays hit canonical occupancy, including heightfield ramps. `Verb::Steer` (AAA-08.1). Driver: `Rel::PilotedBy`. Era 1 attach compose (**not** SO(3) Euler multiply):
 
 ```text
 child.x, child.z = parent.x, parent.z + rotate_xz(attach_local.x, attach_local.z, parent.yaw)
@@ -1287,7 +1287,7 @@ flowchart LR
 
 This plan **supersedes rev 5 PRs after the already-landed 01–21 work**. Do not relitigate `klotho-core` existence. **Do not claim 27 independent merges.** Claim: each PR leaves `main` green; Hearth/Ash goldens pass (AAA-01 was the first allowed hash rewrite; later ABI flag-days already landed with 02/03/08.1). Flags keep Hearth playable if phys/stream/jobs are off.
 
-**Landed on `main` (do not re-implement; verified 2026-09-15 through PHYS-A08):** AAA-01 Trace tape, AAA-02 6DOF+budgets, AAA-03 `PackedIx`+CoW, AAA-04 jobs+Partition+`us_sim` telemetry, AAA-05 interest+SimLod, AAA-08.1 ISA/Verb/Rel, AAA-06 Residency, AAA-08 scalar phys, AAA-07 stream+shards, AAA-09 Ember, AAA-10 Drift, AAA-11 Manifest extract, AAA-11b VFX decals, AAA-12 PBR, AAA-13 ClipSet/MotionDb, AAA-14 glTF cook, AAA-15 editor viewport, AAA-16 spatial audio, AAA-17 Chorus, AAA-18 PoseDelta+overlay, AAA-19 rewind ring, AAA-20 save epochs, AAA-21 Cinematics, AAA-21b HUD skin, AAA-22 infer sidecar, AAA-23 Netlock, AAA-24 cook farm, AAA-25 Canon epoch packs, AAA-26 Console HAL spike, AAA-27 first-title freeze, PHYS-A01 authority/transaction RFC, PHYS-A02 atomic island admission, PHYS-A03 shared geometry, PHYS-A04 production contact dynamics, PHYS-A05 static terrain and constraints, PHYS-A06 character drive constraints, and PHYS-A07 semantic contact-track cook, and PHYS-A08 motion-contact admission. Rev 11 records the first five dynamic shape kinds, Canon-bound body properties, static terrain occupancy, joint/sleep gates, Canon-driven capsule traversal, approved semantic contact artifacts, and coupled WAIT-gated motion contact admission. **The planned AAA sequence is complete; PHYS-A09 is next.**
+**Landed on `main` (do not re-implement; verified 2026-09-15 through PHYS-A09):** AAA-01 Trace tape, AAA-02 6DOF+budgets, AAA-03 `PackedIx`+CoW, AAA-04 jobs+Partition+`us_sim` telemetry, AAA-05 interest+SimLod, AAA-08.1 ISA/Verb/Rel, AAA-06 Residency, AAA-08 scalar phys, AAA-07 stream+shards, AAA-09 Ember, AAA-10 Drift, AAA-11 Manifest extract, AAA-11b VFX decals, AAA-12 PBR, AAA-13 ClipSet/MotionDb, AAA-14 glTF cook, AAA-15 editor viewport, AAA-16 spatial audio, AAA-17 Chorus, AAA-18 PoseDelta+overlay, AAA-19 rewind ring, AAA-20 save epochs, AAA-21 Cinematics, AAA-21b HUD skin, AAA-22 infer sidecar, AAA-23 Netlock, AAA-24 cook farm, AAA-25 Canon epoch packs, AAA-26 Console HAL spike, AAA-27 first-title freeze, PHYS-A01 authority/transaction RFC, PHYS-A02 atomic island admission, PHYS-A03 shared geometry, PHYS-A04 production contact dynamics, PHYS-A05 static terrain and constraints, PHYS-A06 character drive constraints, PHYS-A07 semantic contact-track cook, PHYS-A08 motion-contact admission, and PHYS-A09 vehicle rigs. Rev 11 records the first five dynamic shape kinds, Canon-bound body properties, static terrain occupancy, joint/sleep gates, Canon-driven capsule traversal, approved semantic contact artifacts, coupled WAIT-gated motion contact admission, and Canon-bound four-wheel vehicle rigs. **The planned AAA sequence is complete; PHYS-A10 is next.**
 
 ```mermaid
 flowchart TB
@@ -1606,9 +1606,15 @@ This series is specified in [`physics-animation-plan.md`](physics-animation-plan
 - **Depends on:** PHYS-A07
 - **Changes:** Coupled physical islands now carry bounded, Canon-exact semantic contact claims. The kernel reproduces an integer narrow-phase sample against the resolved root and target hull, checks active WAIT timing, original player Agency, compatibility identity, target affordance and per-action ledger, and admits contact consequences in the same speculative transaction. Projection snapshot v3 preserves the action instance, absolute WAIT clock, authorization channel and one-target ledger. Trace records semantic actor/target/instrument evidence without presenter poses. Runtime jobs stamp the next authoritative tick; stream rows refuse live action metadata. Pure geometry, save/replay, blocked-root, Law rollback and one/eight-worker goldens are landed. The initial policy is one target/contact per action with bounded query work; vehicles, destruction, Anvil capture and release acceptance remain PHYS-A09–A12.
 
-#### PHYS-A09–A12 — continuation — **planned**
+#### PHYS-A09 — Vehicle rigs — **landed**
 
-- **Next:** vehicle rigs, then breakable structures, Anvil diagnostics and release acceptance follow the frozen sequence.
+- **Files:** `klotho-core`, `klotho-ir`, `klotho-canon`, `klotho-world`, `klotho-geom`, `klotho-phys`, `klotho-compile`; seed consumers
+- **Depends on:** PHYS-A08
+- **Changes:** Authored `Physics` seed facts bind a two-to-four-wheel ray-cast rig (hubs, rest, spring/damper, radius, steer envelope, tire scales) on the chassis Relic. Cook hashes and warp round-trips include the binding. Phys consumes throttle, brake and steer from chassis or attached-driver `PhysRequest` and proposes only the chassis island pose. Wheel rays use shared integer geometry against occupancy, including oriented boxes and heightfield ramps; surface friction comes from the occupancy material. Tire caches stay disposable. Unbound Driveable relics keep the legacy PHYS_REQ Δv fold, so original Drift goldens are unchanged. Bounded tests cover accelerate/coast/brake/reverse, steer, excessive-speed sideslip, high/low traction ordering, slope settle, driver attach/detach, save continuation, query overflow, presented wheel rate, and one/eight-worker Trace equality. Breakable structures, Anvil capture and release acceptance remain PHYS-A10–A12.
+
+#### PHYS-A10–A12 — continuation — **planned**
+
+- **Next:** breakable structures, then Anvil diagnostics and release acceptance follow the frozen sequence.
 
 ---
 

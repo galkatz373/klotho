@@ -277,6 +277,45 @@ impl<'a> WorldView<'a> {
         body.is_valid().then_some(body.character).flatten()
     }
 
+    /// Canon-bound, unattached four-wheel rig. Unbound Driveable relics stay on PHYS_REQ Δv.
+    #[must_use]
+    pub fn vehicle_physics(&self, s: Sigil) -> Option<klotho_core::VehiclePhysics> {
+        if self.attach_parent(s).is_some() {
+            return None;
+        }
+        let body = self.body_physics(s);
+        body.is_valid().then_some(body.vehicle).flatten()
+    }
+
+    /// Throttle, brake and steer reconstructed from chassis or attached-driver `PhysRequest`.
+    #[must_use]
+    pub fn vehicle_drive(&self, s: Sigil) -> Option<klotho_core::VehicleDrive> {
+        let policy = self.vehicle_physics(s)?;
+        let req = self.phys_req(s).or_else(|| {
+            self.loci().find_map(|child| {
+                (self.attach_parent(child) == Some(s))
+                    .then(|| self.phys_req(child))
+                    .flatten()
+            })
+        });
+        let req = req.unwrap_or_default();
+        Some(klotho_core::VehicleDrive {
+            chassis: s,
+            throttle: req.lin.z.clamp(-policy.drive_mm, policy.drive_mm),
+            brake: req.lin.y.max(0).min(policy.brake_mm),
+            steer_md: req.ang.y.clamp(-policy.steer_md, policy.steer_md),
+        })
+    }
+
+    /// Presentation-only wheel rate from admitted chassis velocity.
+    #[must_use]
+    pub fn presented_wheel_rate_md(&self, s: Sigil) -> Option<i32> {
+        let policy = self.vehicle_physics(s)?;
+        let pose = self.pose(s)?;
+        let (vel, _) = self.vel(s).unwrap_or((klotho_core::Vel3::ZERO, 0));
+        Some(policy.presented_wheel_rate_md(vel, pose.yaw))
+    }
+
     /// Pure semantic drive reconstructed from Canon, Projection and tick.
     #[must_use]
     pub fn character_drive(&self, s: Sigil) -> Option<klotho_core::CharacterDrive> {

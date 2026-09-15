@@ -817,6 +817,11 @@ fn to_local(world: IVec3, pose: PoseMm) -> (i32, i32, i32) {
     (dot_axis(d, ax), dot_axis(d, ay), dot_axis(d, az))
 }
 
+pub(crate) fn world_to_local_point(world: IVec3, pose: PoseMm) -> IVec3 {
+    let (x, y, z) = to_local(world, pose);
+    IVec3 { x, y, z }
+}
+
 fn dot_axis(v: IVec3, a: IVec3) -> i32 {
     ((i64::from(v.x) * i64::from(a.x)
         + i64::from(v.y) * i64::from(a.y)

@@ -206,6 +206,76 @@ fn heightfield_contact(
     Ok(best)
 }
 
+pub(crate) fn heightfield_normal_at(
+    shape: Shape,
+    pose: PoseMm,
+    world: IVec3,
+) -> Option<(i16, i16, i16)> {
+    let Shape::Heightfield {
+        origin,
+        cell_x_mm,
+        cell_z_mm,
+        nx,
+        nz,
+        samples,
+    } = shape
+    else {
+        return None;
+    };
+    let local = to_local(world, pose);
+    let (_, n_local) = sample_field(origin, cell_x_mm, cell_z_mm, nx, nz, &samples, local)?;
+    let n_world = rotate(n_local, pose.yaw, pose.pitch, pose.roll);
+    Some(pack_normal(n_world, 1))
+}
+
+pub(crate) fn heightfield_ray(
+    origin: IVec3,
+    dir: IVec3,
+    shape: Shape,
+    pose: PoseMm,
+) -> Option<(i64, i64)> {
+    let Shape::Heightfield {
+        origin: field_origin,
+        cell_x_mm,
+        cell_z_mm,
+        nx,
+        nz,
+        samples,
+    } = shape
+    else {
+        return None;
+    };
+    const STEPS: i64 = 32;
+    let start = to_local(origin, pose);
+    let end = to_local(origin.wrapping_add(dir), pose);
+    let delta = end.wrapping_sub(start);
+    if let Some((h, _)) = sample_field(field_origin, cell_x_mm, cell_z_mm, nx, nz, &samples, start)
+    {
+        if start.y <= h {
+            return Some((0, 1));
+        }
+    }
+    let mut prev_above = true;
+    for i in 1..=STEPS {
+        let p = IVec3 {
+            x: (i64::from(start.x) + i64::from(delta.x) * i / STEPS) as i32,
+            y: (i64::from(start.y) + i64::from(delta.y) * i / STEPS) as i32,
+            z: (i64::from(start.z) + i64::from(delta.z) * i / STEPS) as i32,
+        };
+        let Some((h, _)) = sample_field(field_origin, cell_x_mm, cell_z_mm, nx, nz, &samples, p)
+        else {
+            prev_above = true;
+            continue;
+        };
+        let below = p.y <= h;
+        if below && prev_above {
+            return Some((i, STEPS));
+        }
+        prev_above = !below;
+    }
+    None
+}
+
 fn sample_field(
     origin: IVec3,
     cell_x_mm: i32,

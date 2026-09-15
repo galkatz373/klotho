@@ -418,6 +418,148 @@ pub struct CharacterDrive {
     pub root: IVec3,
 }
 
+/// Bounded Canon four-wheel ray-cast rig (PHYS-A09). Wheels are configuration
+/// on the chassis, not a component hierarchy or independent spatial owners.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
+pub struct VehiclePhysics {
+    /// Local hub positions in millimetres. Unused entries must be zero.
+    pub wheels: [IVec3; 4],
+    /// Number of live wheels, 2..=4.
+    pub wheel_count: u8,
+    /// Unloaded ray length to the contact plane, millimetres.
+    pub rest_mm: i32,
+    /// Spring stiffness, permille of the mass-derived rest load.
+    pub stiffness_permille: u16,
+    /// Damper coefficient, permille of critical damping.
+    pub damper_permille: u16,
+    /// Wheel radius, millimetres. Presentation spin derives from this.
+    pub radius_mm: i32,
+    /// Maximum front-wheel steer, millidegrees.
+    pub steer_md: i32,
+    /// Throttle magnitude at full `PhysRequest.lin.z`, millimetres per tick.
+    pub drive_mm: i32,
+    /// Brake magnitude at full `PhysRequest.lin.y`, millimetres per tick.
+    pub brake_mm: i32,
+    /// Longitudinal tire friction scale, permille.
+    pub long_friction_permille: u16,
+    /// Lateral tire friction scale, permille.
+    pub lat_friction_permille: u16,
+}
+
+impl Default for VehiclePhysics {
+    fn default() -> Self {
+        Self {
+            wheels: [
+                IVec3 {
+                    x: -300,
+                    y: 0,
+                    z: 500,
+                },
+                IVec3 {
+                    x: 300,
+                    y: 0,
+                    z: 500,
+                },
+                IVec3 {
+                    x: -300,
+                    y: 0,
+                    z: -500,
+                },
+                IVec3 {
+                    x: 300,
+                    y: 0,
+                    z: -500,
+                },
+            ],
+            wheel_count: 4,
+            rest_mm: 250,
+            stiffness_permille: 1_000,
+            damper_permille: 800,
+            radius_mm: 200,
+            steer_md: 25_000,
+            drive_mm: 40,
+            brake_mm: 40,
+            long_friction_permille: 1_000,
+            lat_friction_permille: 1_000,
+        }
+    }
+}
+
+impl VehiclePhysics {
+    /// Bounded rig accepted by the scalar vehicle solve.
+    #[must_use]
+    pub fn is_valid(self) -> bool {
+        (2..=4).contains(&self.wheel_count)
+            && (50..=2_000).contains(&self.rest_mm)
+            && (20..=1_000).contains(&self.radius_mm)
+            && (1..=2_000).contains(&self.stiffness_permille)
+            && self.damper_permille <= 2_000
+            && (0..=45_000).contains(&self.steer_md)
+            && (1..=500).contains(&self.drive_mm)
+            && (0..=500).contains(&self.brake_mm)
+            && self.long_friction_permille <= 2_000
+            && self.lat_friction_permille <= 2_000
+            && self
+                .wheels
+                .iter()
+                .take(usize::from(self.wheel_count))
+                .all(|w| {
+                    w.x.unsigned_abs() <= 5_000
+                        && w.y.unsigned_abs() <= 2_000
+                        && w.z.unsigned_abs() <= 5_000
+                })
+            && self
+                .wheels
+                .iter()
+                .skip(usize::from(self.wheel_count))
+                .all(|w| *w == IVec3::ZERO)
+    }
+
+    /// Instantaneous wheel spin rate from admitted chassis velocity, millidegrees per tick.
+    /// Presentation integrates this; it is not Projection.
+    #[must_use]
+    pub fn presented_wheel_rate_md(self, vel: Vel3, yaw: YawMd) -> i32 {
+        if !self.is_valid() {
+            return 0;
+        }
+        let forward = crate::rotate_xz(
+            IVec3 {
+                x: vel.x.to_mm_trunc().0,
+                y: 0,
+                z: vel.z.to_mm_trunc().0,
+            },
+            YawMd(yaw.0.wrapping_neg()),
+        );
+        let radius = i64::from(self.radius_mm.max(1));
+        ((i64::from(forward.z) * 57_296) / radius).clamp(-180_000, 180_000) as i32
+    }
+}
+
+/// Pure chassis controls reconstructed from Canon, Projection, and `PhysRequest`.
+/// Never an independently admitted proposal.
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct VehicleDrive {
+    /// Chassis identity.
+    pub chassis: Sigil,
+    /// Forward command, millimetres per tick, signed.
+    pub throttle: i32,
+    /// Brake command, millimetres per tick, not negative.
+    pub brake: i32,
+    /// Front-wheel steer, millidegrees, signed.
+    pub steer_md: i32,
+}
+
+impl Default for VehicleDrive {
+    fn default() -> Self {
+        Self {
+            chassis: Sigil::from_raw(0),
+            throttle: 0,
+            brake: 0,
+            steer_md: 0,
+        }
+    }
+}
+
 /// Canon-bound material and mass properties. Integers keep this configuration
 /// portable; `klotho-phys` alone converts them to its pinned scalar lane.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
@@ -429,6 +571,9 @@ pub struct BodyPhysics {
     /// Explicit driven-character binding. Legacy actors remain Motion-owned.
     #[serde(default)]
     pub character: Option<CharacterPhysics>,
+    /// Explicit four-wheel rig. Unbound Driveable relics keep PHYS_REQ Δv.
+    #[serde(default)]
+    pub vehicle: Option<VehiclePhysics>,
     /// Mass in grams. Zero requests deterministic volume-derived mass.
     pub mass_grams: u32,
     /// Local centre of mass, millimetres.
@@ -447,6 +592,7 @@ impl Default for BodyPhysics {
             mode: BodyMode::Dynamic,
             shape: ShapeKind::OrientedBox,
             character: None,
+            vehicle: None,
             mass_grams: 0,
             center_of_mass: IVec3::ZERO,
             inertia_diag: [0; 3],
@@ -462,8 +608,12 @@ impl BodyPhysics {
     pub fn is_valid(self) -> bool {
         self.friction_permille <= 2_000
             && self.restitution_permille <= 1_000
+            && !(self.character.is_some() && self.vehicle.is_some())
             && self.character.is_none_or(|c| {
                 c.is_valid() && self.shape == ShapeKind::Capsule && self.mode == BodyMode::Dynamic
+            })
+            && self.vehicle.is_none_or(|v| {
+                v.is_valid() && self.shape.is_dynamic() && self.mode == BodyMode::Dynamic
             })
     }
 }
@@ -723,6 +873,34 @@ mod tests {
         assert!(
             !BodyPhysics {
                 restitution_permille: 1_001,
+                ..BodyPhysics::default()
+            }
+            .is_valid()
+        );
+    }
+
+    #[test]
+    fn vehicle_physics_bounds_fail_closed() {
+        assert!(VehiclePhysics::default().is_valid());
+        assert!(
+            BodyPhysics {
+                vehicle: Some(VehiclePhysics::default()),
+                ..BodyPhysics::default()
+            }
+            .is_valid()
+        );
+        assert!(
+            !VehiclePhysics {
+                wheel_count: 1,
+                ..VehiclePhysics::default()
+            }
+            .is_valid()
+        );
+        assert!(
+            !BodyPhysics {
+                character: Some(CharacterPhysics::default()),
+                vehicle: Some(VehiclePhysics::default()),
+                shape: ShapeKind::Capsule,
                 ..BodyPhysics::default()
             }
             .is_valid()

@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Active — PHYS-A01–A08 landed; PHYS-A09 next |
+| Status | Active — PHYS-A01–A09 landed; PHYS-A10 next |
 | Date | 2026-09-15 |
 | Scope | Production 3D physics, character resolution, vehicles, destruction, and animation-driven contact |
 | Preserves | Canon + Intent + Trace + Projection; K21 atomic commit; crate firewalls |
@@ -13,7 +13,7 @@ Klotho needs more than a stronger solver. It needs physical interaction to be au
 
 > Canon defines physical meaning and authored constraints. Physics and Motion derive bounded proposals. `CommitKernel` atomically admits them. Trace records gameplay consequences. Manifest presents the result.
 
-The landed `klotho-phys` establishes the correct authority boundary and proves basic gravity, AABB contact resolution, stacking, and flat-strip vehicle movement. It does not yet prove production collision shapes, rotational contact, friction, joints, slopes, a character controller, wheel-ground dynamics, fracture, or bone-aligned melee.
+The landed `klotho-phys` establishes the correct authority boundary and proves gravity, oriented contact, stacking, character drive, animation-contact admission, and Canon-bound four-wheel vehicle rigs. It does not yet prove breakable structures or the combined Anvil slice.
 
 Because the existing AAA sequence is marked complete, this work starts with an HLD amendment and a new PR series. It must not silently expand the claims of AAA-08 through AAA-10.
 
@@ -327,6 +327,17 @@ Implement:
 
 Keep Drift bounded. If full vehicle regressions would turn it into title content, add a separate vehicle-physics slice and retain the original Drift goldens unchanged.
 
+PHYS-A09 binds `BodyPhysics::vehicle` through the authored `Physics` seed fact.
+The first rig is two-to-four wheels with quantized hub positions, rest length,
+spring/damper permille, radius, steer envelope, and longitudinal/lateral tire
+scales. Phys consumes throttle, brake and steer from chassis or attached-driver
+`PhysRequest`; it does not mint a second spatial owner. Wheel rays use shared
+integer geometry against occupancy, including oriented boxes and heightfield
+ramps. Surface friction comes from the occupancy material. Tire caches stay
+disposable. Unbound Driveable relics keep the legacy one-shot Δv fold, so
+original Drift goldens are unchanged. Presented wheel rate derives from the
+admitted chassis velocity and Canon radius. Breakable structures remain PHYS-A10.
+
 ### Phase 7 gates
 
 - Accelerate, coast, brake, reverse, and steer.
@@ -446,8 +457,8 @@ Each PR leaves the tree green and preserves existing non-Phys goldens.
 8. **PHYS-A08 — Motion-contact admission — landed**
    Bind active Rite windows to validated instrument sweeps; prove spatially aligned melee without AnimNotify authority.
 
-9. **PHYS-A09 — Vehicle rigs**
-   Add chassis, suspension, tires, surface friction, `PhysRequest` controls, and expanded bounded Drift regressions.
+9. **PHYS-A09 — Vehicle rigs — landed**
+   Add chassis, suspension, tires, surface friction, `PhysRequest` controls, and expanded bounded Drift regressions. Unbound Driveable relics keep the legacy PHYS_REQ Δv fold so original Drift goldens stay put.
 
 10. **PHYS-A10 — Breakable structures**
     Admit constraint breaks, authoritative fragment caps, and Manifest-only debris.

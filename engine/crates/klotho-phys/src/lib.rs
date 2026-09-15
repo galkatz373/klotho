@@ -11,6 +11,7 @@
 mod joints;
 mod quant;
 mod solver;
+mod vehicle;
 
 use std::collections::BTreeSet;
 
@@ -936,3 +937,6 @@ mod character_tests;
 
 #[cfg(test)]
 mod contact_tests;
+
+#[cfg(test)]
+mod vehicle_tests;

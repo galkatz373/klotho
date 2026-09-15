@@ -2,9 +2,13 @@
 
 use klotho_core::{AabbMm, IVec3, PoseMm, frac_cmp};
 
-use crate::query::{bounds, contact, posed_point};
+use crate::query::{bounds, contact, posed_point, world_to_local_point};
 use crate::shape::{GeomError, Shape};
+use crate::terrain::heightfield_ray;
 use crate::witness::CONTACT_SLOP_MM;
+
+/// Hard cap on occupancy queried by one wheel ray.
+pub const MAX_VEHICLE_OBSTACLES: usize = 512;
 
 /// Result of a start→end shape cast against one obstacle.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
@@ -43,14 +47,91 @@ pub fn raycast(
             let b = bounds(shape, pose)?;
             Ok(b.segment_hit(origin, dir))
         }
-        Shape::Convex { .. }
-        | Shape::Compound { .. }
-        | Shape::TriangleMesh { .. }
-        | Shape::Heightfield { .. } => {
+        Shape::Convex { .. } | Shape::Compound { .. } | Shape::TriangleMesh { .. } => {
             let b = bounds(shape, pose)?;
             Ok(b.segment_hit(origin, dir))
         }
+        Shape::Heightfield { .. } => Ok(heightfield_ray(origin, dir, shape, pose)),
     }
+}
+
+/// First wheel-ray hit against occupancy in canonical order.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub struct WheelHit {
+    /// Distance along `dir` in millimetres.
+    pub dist_mm: i32,
+    /// World-space contact point.
+    pub point: IVec3,
+    /// Obstacle index in the supplied occupancy slice.
+    pub obstacle: usize,
+    /// Unit-ish contact normal, 32767 scale, pointing toward the chassis.
+    pub normal: (i16, i16, i16),
+}
+
+/// Cast `origin → origin+dir` at every occupancy shape. Overflow fails closed.
+pub fn cast_wheel(
+    origin: IVec3,
+    dir: IVec3,
+    obstacles: &[(Shape, PoseMm)],
+) -> Result<Option<WheelHit>, GeomError> {
+    if obstacles.len() > MAX_VEHICLE_OBSTACLES || dir == IVec3::ZERO {
+        return Err(GeomError::Malformed);
+    }
+    let mut best: Option<WheelHit> = None;
+    for (i, &(shape, pose)) in obstacles.iter().enumerate() {
+        let Some((n, d)) = raycast(shape, pose, origin, dir)? else {
+            continue;
+        };
+        if d <= 0 {
+            continue;
+        }
+        let dist = ((i128::from(n) * i128::from(dir_len(dir)) / i128::from(d)) as i32).max(0);
+        let point = IVec3 {
+            x: origin.x.saturating_add(((i64::from(dir.x) * n) / d) as i32),
+            y: origin.y.saturating_add(((i64::from(dir.y) * n) / d) as i32),
+            z: origin.z.saturating_add(((i64::from(dir.z) * n) / d) as i32),
+        };
+        if best.is_none_or(|old| dist < old.dist_mm || (dist == old.dist_mm && i < old.obstacle)) {
+            best = Some(WheelHit {
+                dist_mm: dist,
+                point,
+                obstacle: i,
+                normal: wheel_normal(shape, pose, point, dir),
+            });
+        }
+    }
+    Ok(best)
+}
+
+fn wheel_normal(shape: Shape, pose: PoseMm, point: IVec3, dir: IVec3) -> (i16, i16, i16) {
+    if let Some(n) = crate::terrain::heightfield_normal_at(shape, pose, point) {
+        return n;
+    }
+    if dir.y < 0 {
+        (0, 32_767, 0)
+    } else {
+        (0, -32_767, 0)
+    }
+}
+
+fn dir_len(dir: IVec3) -> i32 {
+    let s = i64::from(dir.x) * i64::from(dir.x)
+        + i64::from(dir.y) * i64::from(dir.y)
+        + i64::from(dir.z) * i64::from(dir.z);
+    isqrt(s).clamp(0, i64::from(i32::MAX)) as i32
+}
+
+fn isqrt(n: i64) -> i64 {
+    if n <= 0 {
+        return 0;
+    }
+    let mut x = n;
+    let mut y = (x + 1) / 2;
+    while y < x {
+        x = y;
+        y = (x + n / x) / 2;
+    }
+    x
 }
 
 /// Conservative translation cast of `mover` from `start` to `end` against one obstacle.
@@ -120,13 +201,9 @@ fn ray_obb(local: AabbMm, pose: PoseMm, origin: IVec3, dir: IVec3) -> Option<(i6
         );
         return world.segment_hit(origin, dir);
     }
-    bounds_hit(local, pose, origin, dir)
-}
-
-fn bounds_hit(local: AabbMm, pose: PoseMm, origin: IVec3, dir: IVec3) -> Option<(i64, i64)> {
-    crate::query::bounds(Shape::OrientedBox { local }, pose)
-        .ok()
-        .and_then(|b| b.segment_hit(origin, dir))
+    let start = world_to_local_point(origin, pose);
+    let end = world_to_local_point(origin.wrapping_add(dir), pose);
+    local.segment_hit(start, end.wrapping_sub(start))
 }
 
 fn ray_sphere(center: IVec3, radius: i32, origin: IVec3, dir: IVec3) -> Option<(i64, i64)> {

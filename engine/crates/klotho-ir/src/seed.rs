@@ -40,7 +40,7 @@ pub enum SeedFact {
     Physics {
         /// Bound locus name.
         of: Name,
-        /// Canonical shape, material and optional character drive.
+        /// Canonical shape, material and optional character or vehicle rig.
         body: klotho_core::BodyPhysics,
     },
     /// Canon semantic motion binding; never appends Trace.

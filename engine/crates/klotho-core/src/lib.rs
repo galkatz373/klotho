@@ -41,7 +41,7 @@ pub use rng::Rng;
 pub use space::{
     AabbMm, BodyMode, BodyPhysics, CharacterDrive, CharacterPhysics, ConstraintKind,
     ConstraintPhysics, ConstraintState, HullWitness, IVec3, PhysRequest, PoseMm, QuantizedContact,
-    ShapeKind, Support, Vel3, frac_cmp,
+    ShapeKind, Support, VehicleDrive, VehiclePhysics, Vel3, frac_cmp,
 };
 pub use tick::{Epoch, Tick};
 pub use units::{Mm, VelFx, YawMd};

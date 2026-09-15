@@ -26,6 +26,8 @@ pub(crate) fn kernel_from_cooked(cooked: &Cooked) -> Result<CommitKernel, Editor
 fn apply_seed(k: &mut CommitKernel, seed: &[SeedFact]) -> Result<(), EditorError> {
     for fact in seed {
         match fact {
+            SeedFact::Physics { .. } => {} // Configuration was bound by Canon cook.
+
             SeedFact::Locus { name, kind } => {
                 let s = k
                     .canon()

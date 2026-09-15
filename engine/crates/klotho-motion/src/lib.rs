@@ -8,7 +8,9 @@
 //! Clip time is derived from `WorldView::tick` (no hidden integrator state).
 //! Empty clip joints are identity so Hearth hashes stay root-only.
 //!
-//! Actor locomotion is Motion's job. `klotho-space` skips `LocusKind::Actor`
+//! Legacy actor locomotion is Motion's job. Canon-driven actors instead sample
+//! [`Motion::drive`] inside the physics island; Motion emits no competing pose.
+//! `klotho-space` skips `LocusKind::Actor`
 //! so root motion and island integration cannot dual-truth the same body.
 //!
 //! `#![forbid(unsafe_code)]`.
@@ -46,6 +48,12 @@ impl Motion {
     #[must_use]
     pub fn with_clips(clips: ClipSet) -> Self {
         Self { clips }
+    }
+
+    /// Pure Canon root desire for an explicitly driven actor (K63).
+    #[must_use]
+    pub fn drive(view: &WorldView, actor: Sigil) -> Option<klotho_core::CharacterDrive> {
+        view.character_drive(actor)
     }
 
     /// Cooked table in use.
@@ -96,7 +104,7 @@ fn propose_one(clips: &ClipSet, view: &WorldView, s: Sigil) -> Option<Proposal> 
     if s.kind() != Some(LocusKind::Actor) {
         return None;
     }
-    if view.attach_parent(s).is_some() {
+    if view.attach_parent(s).is_some() || view.character_physics(s).is_some() {
         return None;
     }
     let sleep = view.island(s).map(|(_, t)| t).unwrap_or(0);

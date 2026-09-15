@@ -14,12 +14,14 @@ klotho-commit.workspace = true
 klotho-core.workspace = true
 klotho-geom.workspace = true
 klotho-world.workspace = true
+klotho-motion.workspace = true
 
 [dev-dependencies]
 drift-slice = { path = "../../examples/drift-slice" }
 klotho-canon.workspace = true
+klotho-save.workspace = true
+klotho-jobs.workspace = true
 klotho-ir.workspace = true
-klotho-motion.workspace = true
 
 [lints]
 workspace = true

@@ -343,6 +343,81 @@ pub enum BodyMode {
     Static = 2,
 }
 
+/// Bounded Canon locomotion trajectory and capsule traversal policy (K63).
+/// Root samples are local millimetres at authoritative tick boundaries.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
+pub struct CharacterPhysics {
+    /// Looping semantic root samples; unused entries must be zero.
+    pub roots: [IVec3; 8],
+    /// Number of live samples, 1..=8.
+    pub root_count: u8,
+    /// Maximum traversable riser in millimetres.
+    pub step_mm: i32,
+    /// Minimum upward contact normal, signed unit scaled by 32767.
+    pub slope_min_y: i16,
+}
+
+impl Default for CharacterPhysics {
+    fn default() -> Self {
+        let mut roots = [IVec3::ZERO; 8];
+        roots[0] = IVec3 { x: 0, y: 0, z: 20 };
+        Self {
+            roots,
+            root_count: 1,
+            step_mm: 250,
+            slope_min_y: 23170,
+        }
+    }
+}
+
+impl CharacterPhysics {
+    /// Bounded policy accepted by the pure character query.
+    #[must_use]
+    pub fn is_valid(self) -> bool {
+        (1..=8).contains(&self.root_count)
+            && (0..=500).contains(&self.step_mm)
+            && self.slope_min_y > 0
+            && self
+                .roots
+                .iter()
+                .take(usize::from(self.root_count))
+                .all(|r| {
+                    i128::from(r.x) * i128::from(r.x) + i128::from(r.z) * i128::from(r.z)
+                        <= 1_000_000
+                        && r.x.unsigned_abs() <= 1000
+                        && r.y.unsigned_abs() <= 1000
+                        && r.z.unsigned_abs() <= 1000
+                })
+            && self
+                .roots
+                .iter()
+                .skip(usize::from(self.root_count))
+                .all(|r| *r == IVec3::ZERO)
+    }
+
+    /// Sample a Canon trajectory; no presenter clip or mutable time state.
+    #[must_use]
+    pub fn sample(self, tick: crate::Tick, moving: bool, yaw: YawMd) -> IVec3 {
+        if !moving || !self.is_valid() {
+            return IVec3::ZERO;
+        }
+        crate::rotate_xz(
+            self.roots[(tick.0 % u64::from(self.root_count)) as usize],
+            yaw,
+        )
+    }
+}
+
+/// Pure desired displacement, consumed inside the character island solve.
+/// This is an input description, never an independently admitted proposal.
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct CharacterDrive {
+    /// Character identity.
+    pub actor: Sigil,
+    /// Desired world-space root displacement in millimetres.
+    pub root: IVec3,
+}
+
 /// Canon-bound material and mass properties. Integers keep this configuration
 /// portable; `klotho-phys` alone converts them to its pinned scalar lane.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
@@ -351,6 +426,9 @@ pub struct BodyPhysics {
     pub mode: BodyMode,
     /// Canonical cooked collision kind for the bound hull blob.
     pub shape: ShapeKind,
+    /// Explicit driven-character binding. Legacy actors remain Motion-owned.
+    #[serde(default)]
+    pub character: Option<CharacterPhysics>,
     /// Mass in grams. Zero requests deterministic volume-derived mass.
     pub mass_grams: u32,
     /// Local centre of mass, millimetres.
@@ -368,6 +446,7 @@ impl Default for BodyPhysics {
         Self {
             mode: BodyMode::Dynamic,
             shape: ShapeKind::OrientedBox,
+            character: None,
             mass_grams: 0,
             center_of_mass: IVec3::ZERO,
             inertia_diag: [0; 3],
@@ -380,8 +459,12 @@ impl Default for BodyPhysics {
 impl BodyPhysics {
     /// Values accepted by the scalar solver. Invalid Canon fails closed.
     #[must_use]
-    pub const fn is_valid(self) -> bool {
-        self.friction_permille <= 2_000 && self.restitution_permille <= 1_000
+    pub fn is_valid(self) -> bool {
+        self.friction_permille <= 2_000
+            && self.restitution_permille <= 1_000
+            && self.character.is_none_or(|c| {
+                c.is_valid() && self.shape == ShapeKind::Capsule && self.mode == BodyMode::Dynamic
+            })
     }
 }
 

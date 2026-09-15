@@ -27,7 +27,8 @@ mod thread;
 pub use capture::{CAPTURE_HEIGHT, CAPTURE_WIDTH, CaptureDesc, HIST_BINS, PixelStats, luma};
 pub use cluster::{PointLight, TileAssign, assign_tiles};
 pub use extract::{
-    VisualBind, binds_from_cooked, extract_visual, extract_visual_with_clips, skinned_instance,
+    VisualBind, binds_from_cooked, extract_visual, extract_visual_with_clips,
+    extract_visual_with_clips_between, skinned_instance,
 };
 pub use gpu::{GOLDEN_HEIGHT, GOLDEN_WIDTH, WgpuPresenter};
 pub use hal::{HalPresenter, RenderHal, RenderHalError};

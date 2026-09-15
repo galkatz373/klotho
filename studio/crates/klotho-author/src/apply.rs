@@ -247,7 +247,11 @@ pub fn dependents_of(bundle: &ProjectBundle, target: AnchorId) -> Vec<AnchorId> 
                         }
                     }
                 }
-                SeedFact::Qty { of, .. } | SeedFact::Pose { of, .. } if of == name => {
+                SeedFact::Qty { of, .. }
+                | SeedFact::Pose { of, .. }
+                | SeedFact::Physics { of, .. }
+                    if of == name =>
+                {
                     push_unique(&mut out, target);
                 }
                 _ => {}
@@ -507,7 +511,9 @@ fn strip_object(module: &mut IntentModule, object: &ObjectAnchor) {
     let name = &object.name;
     module.body.seed.retain(|fact| match fact {
         SeedFact::Locus { name: n, .. } => n != name,
-        SeedFact::Qty { of, .. } | SeedFact::Pose { of, .. } => of != name,
+        SeedFact::Qty { of, .. } | SeedFact::Pose { of, .. } | SeedFact::Physics { of, .. } => {
+            of != name
+        }
         SeedFact::Rel { a, b, .. } => a != name && b != name,
     });
     module.body.minds.retain(|m| m.locus != *name);
@@ -534,7 +540,11 @@ fn rewrite_names(module: &mut IntentModule, kind: AnchorKind, from: &Name, to: &
                             *b = to.clone();
                         }
                     }
-                    SeedFact::Qty { of, .. } | SeedFact::Pose { of, .. } if of == from => {
+                    SeedFact::Qty { of, .. }
+                    | SeedFact::Pose { of, .. }
+                    | SeedFact::Physics { of, .. }
+                        if of == from =>
+                    {
                         *of = to.clone();
                     }
                     _ => {}
@@ -754,6 +764,12 @@ fn seed_key(fact: &SeedFact, by_name: &BTreeMap<&str, AnchorId>) -> (u8, AnchorI
         ),
         SeedFact::Qty { of, .. } => (
             2,
+            *by_name.get(of.as_str()).unwrap_or(&AnchorId::ZERO),
+            0,
+            AnchorId::ZERO,
+        ),
+        SeedFact::Physics { of, .. } => (
+            4,
             *by_name.get(of.as_str()).unwrap_or(&AnchorId::ZERO),
             0,
             AnchorId::ZERO,

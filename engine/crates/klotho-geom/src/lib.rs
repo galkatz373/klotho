@@ -10,12 +10,16 @@
 #![warn(missing_docs)]
 
 mod cast;
+mod character;
 mod query;
 mod shape;
 mod terrain;
 mod witness;
 
 pub use cast::{SweptHit, raycast, swept_against};
+pub use character::{
+    CharacterObstacle, CharacterResolution, MAX_CHARACTER_OBSTACLES, resolve_character,
+};
 pub use query::{ContactManifold, bounds, contact, manifold, penetration_mm};
 pub use shape::{
     CompoundPart, GeomError, MAX_COMPOUND_PARTS, MAX_CONVEX_VERTICES, MAX_HEIGHTFIELD_AXIS,

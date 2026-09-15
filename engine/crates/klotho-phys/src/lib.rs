@@ -929,3 +929,6 @@ mod tests {
         assert!(run(8_000, 1), "above-threshold separation must break");
     }
 }
+
+#[cfg(test)]
+mod character_tests;

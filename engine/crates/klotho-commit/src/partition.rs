@@ -118,7 +118,7 @@ pub(crate) fn partition_with_caps(
                 if j == u {
                     continue;
                 }
-                let Some(other) = posed_bounds(view, o) else {
+                let Some(other) = hulls.get(j as usize).map(|h| h.1) else {
                     continue;
                 };
                 if !aabb.intersects(other) {
@@ -202,17 +202,40 @@ fn posed_bounds(view: &WorldView<'_>, s: Sigil) -> Option<AabbMm> {
     let local = view.hull(s)?;
     let pose = view.pose(s)?;
     let shape = klotho_geom::cooked_shape(view.body_physics(s).shape, local).ok()?;
-    klotho_geom::bounds(shape, pose).ok()
+    let mut aabb = klotho_geom::bounds(shape, pose).ok()?;
+    if let Some(policy) = view.character_physics(s) {
+        let extent = policy
+            .roots
+            .iter()
+            .map(|r| r.x.unsigned_abs().max(r.z.unsigned_abs()))
+            .max()
+            .unwrap_or(0) as i32;
+        let pad = extent.saturating_add(1000); // bounded platform carry envelope
+        aabb.min.x = aabb.min.x.saturating_sub(pad);
+        aabb.min.z = aabb.min.z.saturating_sub(pad);
+        aabb.max.x = aabb.max.x.saturating_add(pad);
+        aabb.max.z = aabb.max.z.saturating_add(pad);
+        aabb.min.y = aabb.min.y.saturating_sub(policy.step_mm + 3);
+        aabb.max.y = aabb.max.y.saturating_add(policy.step_mm);
+    }
+    Some(aabb)
 }
 
 /// Actor, or a Relic that is not idle kinematic scenery.
 fn is_phys_body(view: &WorldView<'_>, s: Sigil) -> bool {
-    if view.body_physics(s).mode != BodyMode::Dynamic {
+    if view.body_physics(s).mode == BodyMode::Static {
         return false;
     }
     match s.kind() {
         Some(LocusKind::Actor) => true,
-        Some(LocusKind::Relic) => !is_idle_scenery(view, s) || is_attach_node(view, s),
+        Some(LocusKind::Relic) => {
+            (view.body_physics(s).mode == BodyMode::Dynamic
+                || view
+                    .vel(s)
+                    .is_some_and(|(v, rate)| v != Vel3::ZERO || rate != 0)
+                || view.rates(s).is_some_and(|r| r != (0, 0, 0)))
+                && (!is_idle_scenery(view, s) || is_attach_node(view, s))
+        }
         _ => false,
     }
 }

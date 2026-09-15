@@ -140,6 +140,8 @@ fn chorus_seed() -> Vec<SeedFact> {
 fn apply_seed(k: &mut CommitKernel, doc: &IntentDoc) {
     for fact in &doc.seed {
         match fact {
+            SeedFact::Physics { .. } => {} // Configuration was bound by Canon cook.
+
             SeedFact::Locus { name, kind } => {
                 let s = pin(k, name.as_str());
                 k.world_mut().insert_locus(s, *kind).expect("locus");

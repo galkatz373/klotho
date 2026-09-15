@@ -36,6 +36,13 @@ pub enum SeedFact {
         /// Initial value.
         value: i32,
     },
+    /// Canon physical configuration; does not append a Trace event.
+    Physics {
+        /// Bound locus name.
+        of: Name,
+        /// Canonical shape, material and optional character drive.
+        body: klotho_core::BodyPhysics,
+    },
     /// Initial pose.
     Pose {
         /// Locus name.
@@ -58,6 +65,16 @@ impl SeedFact {
                 res.check()
             }
             Self::Pose { of, .. } => of.check(),
+            Self::Physics { of, body } => {
+                of.check()?;
+                if body.is_valid() {
+                    Ok(())
+                } else {
+                    Err(IrError::Parse(format!(
+                        "invalid physical configuration for {of}"
+                    )))
+                }
+            }
         }
     }
 }

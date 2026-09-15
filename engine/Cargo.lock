@@ -1303,7 +1303,9 @@ dependencies = [
  "klotho-core",
  "klotho-geom",
  "klotho-ir",
+ "klotho-jobs",
  "klotho-motion",
+ "klotho-save",
  "klotho-world",
 ]
 

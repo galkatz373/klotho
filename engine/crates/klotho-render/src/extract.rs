@@ -72,6 +72,21 @@ pub fn extract_visual_with_clips(
     clips: Option<&ClipSet>,
     debug: bool,
 ) -> VisualManifest {
+    extract_visual_with_clips_between(snap, None, binds, clips, debug)
+}
+
+/// Character locomotion uses displacement between admitted snapshots, rather
+/// than the still-held Move request. A blocked root selects idle foot phase.
+/// Without a matching prior snapshot a driven character presents idle; it
+/// still uses the admitted pose. Legacy actors retain request-based sampling.
+#[must_use]
+pub fn extract_visual_with_clips_between(
+    snap: &WorldSnapshot,
+    previous: Option<&WorldSnapshot>,
+    binds: &BTreeMap<Sigil, VisualBind>,
+    clips: Option<&ClipSet>,
+    debug: bool,
+) -> VisualManifest {
     let view = snap.view();
     let mut items = Vec::new();
     let mut debug_sigils = Vec::new();
@@ -86,8 +101,26 @@ pub fn extract_visual_with_clips(
             InstancePass::Opaque => items.push((bind.mesh, pose, bind.material)),
             InstancePass::Masked => masked.push((bind.mesh, pose, bind.material)),
             InstancePass::Skinned => {
-                let vel = view.vel(*s).map(|(v, _)| v).unwrap_or(Vel3::ZERO);
-                let grounded = clip_grounded(view.support(*s).is_some(), pose.y.0);
+                let driven = view.character_physics(*s).is_some();
+                let vel = if driven {
+                    previous
+                        .filter(|p| {
+                            p.canon_hash == snap.canon_hash
+                                && p.epoch == snap.epoch
+                                && p.tick < snap.tick
+                        })
+                        .and_then(|p| p.view().pose(*s))
+                        .map_or(Vel3::ZERO, |p| {
+                            character_velocity(p, pose, view.vel(*s).map_or(Vel3::ZERO, |(v, _)| v))
+                        })
+                } else {
+                    view.vel(*s).map(|(v, _)| v).unwrap_or(Vel3::ZERO)
+                };
+                let grounded = if driven {
+                    view.support(*s).is_some()
+                } else {
+                    clip_grounded(view.support(*s).is_some(), pose.y.0)
+                };
                 if let Some((inst, slot)) =
                     skinned_instance(bind, pose, snap.tick, vel, grounded, clips, palettes.len())
                 {
@@ -153,6 +186,22 @@ pub fn skinned_instance(
         },
         slot,
     ))
+}
+
+fn character_velocity(
+    previous: klotho_core::PoseMm,
+    admitted: klotho_core::PoseMm,
+    command: Vel3,
+) -> Vel3 {
+    // An idle rider is carried by the platform without walking in place.
+    if command.x == klotho_core::VelFx::ZERO && command.z == klotho_core::VelFx::ZERO {
+        return Vel3::ZERO;
+    }
+    Vel3::new(
+        klotho_core::VelFx::from_mm_per_tick(admitted.x.0.saturating_sub(previous.x.0).signum()),
+        klotho_core::VelFx::ZERO,
+        klotho_core::VelFx::from_mm_per_tick(admitted.z.0.saturating_sub(previous.z.0).signum()),
+    )
 }
 
 #[cfg(test)]
@@ -279,6 +328,40 @@ mod tests {
             .1;
         assert_eq!(idle.bones, 0);
         assert!(idle.joints.is_empty());
+    }
+
+    #[test]
+    fn blocked_character_selects_idle_feet_at_the_admitted_root() {
+        let root = PoseMm::new(Mm(0), Mm(0), Mm(495), YawMd::ZERO);
+        let command = Vel3::new(VelFx::ZERO, VelFx::ZERO, VelFx::from_mm_per_tick(20));
+        let mut clips = ClipSet::hearth();
+        clips.clips[1].joints = vec![vec![PoseMm::new(Mm(1), Mm(2), Mm(3), YawMd::ZERO)]];
+        let binding = bind(BlobId::ZERO, InstancePass::Skinned);
+        let (instance, stopped) = skinned_instance(
+            &binding,
+            root,
+            Tick(80),
+            character_velocity(root, root, command),
+            true,
+            Some(&clips),
+            0,
+        )
+        .unwrap();
+        assert_eq!(instance.pose, root);
+        assert_eq!(stopped.bones, 0);
+        let previous = PoseMm { z: Mm(475), ..root };
+        let (_, walking) = skinned_instance(
+            &binding,
+            root,
+            Tick(80),
+            character_velocity(previous, root, command),
+            true,
+            Some(&clips),
+            0,
+        )
+        .unwrap();
+        assert_eq!(walking.bones, 1);
+        assert_eq!(character_velocity(previous, root, Vel3::ZERO), Vel3::ZERO);
     }
 
     #[test]

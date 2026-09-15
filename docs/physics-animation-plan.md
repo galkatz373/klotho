@@ -2,8 +2,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Active — PHYS-A01–A05 landed; PHYS-A06 next |
-| Date | 2026-09-14 |
+| Status | Active — PHYS-A01–A06 landed; PHYS-A07 next |
+| Date | 2026-09-15 |
 | Scope | Production 3D physics, character resolution, vehicles, destruction, and animation-driven contact |
 | Preserves | Canon + Intent + Trace + Projection; K21 atomic commit; crate firewalls |
 
@@ -171,6 +171,22 @@ Introduce a deterministic character drive constraint:
 Motion must not call Phys directly. Use one bounded, pure character proposer composed by runtime, or let the physics proposer consume a drive description deterministically derived from the same `WorldView`. Do not introduce a hidden mutable queue or proposer-to-proposer state.
 
 K63 selects one spatial owner for the actor per tick, with root motion represented as a drive constraint inside the solved island rather than a competing `MotionDelta`.
+
+PHYS-A06 binds `BodyPhysics::character` through the authored `Physics` seed fact.
+The binding contains at most eight looping, quantized root samples and the step/slope
+policy. Motion exposes the pure drive from the same read-only view consumed by Phys;
+it emits no `MotionDelta` for these actors. Unbound actors retain the legacy path.
+The shared integer capsule resolver uses bounded sweep intervals, up/forward/down
+steps, grounding and depenetration. Moving kinematic platforms join the actor's
+island and supply translation plus rotation from Projection, without a hidden
+previous-pose cache. Dynamic crates resolve in that same atomic transaction.
+The kernel reproduces the character path against static canonical geometry and
+checks final penetration against the complete proposed island. Presentation keeps
+using the admitted root; snapshot-pair extraction selects foot locomotion from
+admitted displacement and presents blocked roots and idle platform riders at rest. Queries cap occupancy at 512 obstacles and displacement
+at 1000 mm per axis; a failed query emits no island and identifies the actor on
+`SolveOut`. The combined Anvil capture/overlay work remains PHYS-A11, and the
+rejected-root/melee gate remains PHYS-A08 when motion-contact payloads land.
 
 ### Phase 4 gates
 
@@ -375,7 +391,7 @@ Each PR leaves the tree green and preserves existing non-Phys goldens.
 5. **PHYS-A05 — Static terrain and constraints — landed**
    Add static mesh/heightfield queries, slopes, fixed/hinge/spring constraints, break witnesses, and sleeping/waking gates.
 
-6. **PHYS-A06 — Character drive constraints**
+6. **PHYS-A06 — Character drive constraints — landed**
    Resolve root desire through capsule movement, steps, slopes, platforms, and dynamic-body interaction with one spatial owner.
 
 7. **PHYS-A07 — Semantic contact-track cook**

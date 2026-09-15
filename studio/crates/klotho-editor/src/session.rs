@@ -373,7 +373,9 @@ fn pin_locus(pin: &Pin) -> Option<Name> {
     match pin {
         Pin::ToSeedTrace { fact, .. } => match fact {
             SeedFact::Locus { name, .. } => Some(name.clone()),
-            SeedFact::Pose { of, .. } | SeedFact::Qty { of, .. } => Some(of.clone()),
+            SeedFact::Pose { of, .. } | SeedFact::Qty { of, .. } | SeedFact::Physics { of, .. } => {
+                Some(of.clone())
+            }
             SeedFact::Rel { a, .. } => Some(a.clone()),
         },
         Pin::ToCanon { .. } | Pin::Reject { .. } => None,

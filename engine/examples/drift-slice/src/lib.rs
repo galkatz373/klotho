@@ -88,6 +88,8 @@ fn drift_seed() -> Vec<SeedFact> {
 fn apply_seed(k: &mut CommitKernel, doc: &IntentDoc) {
     for fact in &doc.seed {
         match fact {
+            SeedFact::Physics { .. } => {} // Configuration was bound by Canon cook.
+
             SeedFact::Locus { name, kind } => {
                 // Place B arrives through Residency, not the live prefix.
                 if name.as_str() == "place_b" {

@@ -260,6 +260,30 @@ impl WorldView<'_> {
             .unwrap_or_default()
     }
 
+    /// Canon-bound, unattached driven actor policy. No implicit actor migration.
+    #[must_use]
+    pub fn character_physics(&self, s: Sigil) -> Option<klotho_core::CharacterPhysics> {
+        if s.kind() != Some(klotho_core::LocusKind::Actor) || self.attach_parent(s).is_some() {
+            return None;
+        }
+        let body = self.body_physics(s);
+        body.is_valid().then_some(body.character).flatten()
+    }
+
+    /// Pure semantic drive reconstructed from Canon, Projection and tick.
+    #[must_use]
+    pub fn character_drive(&self, s: Sigil) -> Option<klotho_core::CharacterDrive> {
+        let policy = self.character_physics(s)?;
+        let pose = self.pose(s)?;
+        let moving = self.vel(s).is_some_and(|(v, _)| {
+            v.x != klotho_core::VelFx::ZERO || v.z != klotho_core::VelFx::ZERO
+        });
+        Some(klotho_core::CharacterDrive {
+            actor: s,
+            root: policy.sample(self.tick(), moving, pose.yaw),
+        })
+    }
+
     /// Canon-bound constraint, if any.
     #[must_use]
     pub fn constraint(&self, id: Sigil) -> Option<ConstraintPhysics> {

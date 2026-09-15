@@ -464,6 +464,7 @@ impl CommitKernel {
         }
         apply_constraints(&mut spec, constraints, breaks)?;
         validate_contact_claims(&spec.view(), bodies, contacts)?;
+        validate_character_geometry(&self.world.view(), &spec.view(), bodies)?;
         let law_bodies: Vec<(Sigil, bool)> = bodies
             .iter()
             .zip(swept_hits)
@@ -527,7 +528,8 @@ impl CommitKernel {
 
         let mut swept_hits = Vec::with_capacity(bodies.len());
         for body in bodies {
-            if members.binary_search(&body.mover).is_err()
+            if view.attach_parent(body.mover).is_some()
+                || members.binary_search(&body.mover).is_err()
                 || body.witness.mover != body.mover
                 || body.witness.proposed != body.pose
             {
@@ -541,11 +543,11 @@ impl CommitKernel {
                 body.witness,
             )?);
         }
-        // PHYS-A06 adds driven Actors. Until then every unattached Relic is a
-        // solved body, Actors remain Motion-owned, and attached rows derive
-        // from their parent. A producer may not omit one coupled rigid body.
+        // Every unattached Relic and explicitly driven Actor is required.
+        // Attached rows derive from their parent in the same transaction.
         for member in members {
-            if view.kind(*member) == Some(LocusKind::Relic)
+            if (view.kind(*member) == Some(LocusKind::Relic)
+                || view.character_physics(*member).is_some())
                 && view.attach_parent(*member).is_none()
                 && bodies
                     .binary_search_by_key(member, |body| body.mover)
@@ -630,6 +632,9 @@ impl CommitKernel {
                 if witness.mover != *mover {
                     return Err(RejectReason::WrongHull);
                 }
+                if self.world.view().character_physics(*mover).is_some() {
+                    return Err(RejectReason::Conflict);
+                }
                 let hits = check_space(
                     &self.world.view(),
                     *mover,
@@ -655,6 +660,9 @@ impl CommitKernel {
             } => {
                 if witness.mover != *mover {
                     return Err(RejectReason::WrongHull);
+                }
+                if self.world.view().character_physics(*mover).is_some() {
+                    return Err(RejectReason::Conflict);
                 }
                 let hits = check_space(
                     &self.world.view(),
@@ -1065,4 +1073,97 @@ fn island_snaps(view: WorldView<'_>, tick: Tick) -> Vec<TraceEvent> {
         .into_values()
         .map(|snap| TraceEvent::new(tick, TraceBody::IslandSnap(snap)))
         .collect()
+}
+
+// Canon bindings come from the live view; the speculative view carries Projection.
+// Independently validate traversal and the complete final island geometry.
+fn validate_character_geometry(
+    before: &WorldView,
+    view: &WorldView,
+    bodies: &[BodyDelta],
+) -> Result<(), RejectReason> {
+    for body in bodies {
+        if before.character_physics(body.mover).is_none() {
+            continue;
+        }
+        let local = view.hull(body.mover).ok_or(RejectReason::WrongHull)?;
+        let shape = klotho_geom::cooked_shape(body.witness.shape, local)
+            .map_err(|_| RejectReason::WitnessMismatch)?;
+        let previous = before
+            .pose(body.mover)
+            .ok_or(RejectReason::WitnessMismatch)?;
+        let mut obstacles = Vec::new();
+        let start_bounds =
+            klotho_geom::bounds(shape, previous).map_err(|_| RejectReason::WitnessMismatch)?;
+        let end_bounds =
+            klotho_geom::bounds(shape, body.pose).map_err(|_| RejectReason::WitnessMismatch)?;
+        let mut sweep = start_bounds.swept_union(end_bounds);
+        sweep.min.y = sweep.min.y.saturating_sub(503);
+        sweep.max.y = sweep.max.y.saturating_add(503);
+        let mut static_loci = view.space_candidates(sweep, false);
+        static_loci.sort_unstable();
+        for s in static_loci {
+            if s.kind() != Some(LocusKind::Place)
+                && before.body_physics(s).mode != klotho_core::BodyMode::Static
+                && !view.opaque_closed(s)
+            {
+                continue;
+            }
+            if s == body.mover {
+                continue;
+            }
+            let (Some(local), Some(pose)) = (view.hull(s), view.pose(s)) else {
+                continue;
+            };
+            let obstacle = klotho_geom::cooked_shape(before.body_physics(s).shape, local)
+                .map_err(|_| RejectReason::WitnessMismatch)?;
+            if !klotho_geom::bounds(obstacle, pose)
+                .map_err(|_| RejectReason::WitnessMismatch)?
+                .intersects(sweep)
+            {
+                continue;
+            }
+            obstacles.push(klotho_geom::CharacterObstacle {
+                shape: obstacle,
+                pose,
+            });
+        }
+        let policy = before
+            .character_physics(body.mover)
+            .ok_or(RejectReason::WitnessMismatch)?;
+        let desire = body.pose.translation().wrapping_sub(previous.translation());
+        let reproduced =
+            klotho_geom::resolve_character(shape, previous, desire, policy, &obstacles)
+                .map_err(|_| RejectReason::WitnessMismatch)?;
+        // Validate horizontal traversal. The coupled scalar solve may resolve
+        // vertical contact or fall off a rounded ledge rather than take the
+        // query's optional ground snap. Final penetration is checked below.
+        if reproduced.pose.x.0.abs_diff(body.pose.x.0) > 2
+            || reproduced.pose.z.0.abs_diff(body.pose.z.0) > 2
+        {
+            return Err(RejectReason::WitnessMismatch);
+        }
+        let query =
+            klotho_geom::bounds(shape, body.pose).map_err(|_| RejectReason::WitnessMismatch)?;
+        let mut candidates = view.space_candidates(query, false);
+        candidates.sort_unstable();
+        for other in candidates {
+            if other == body.mover || view.attach_parent(other) == Some(body.mover) {
+                continue;
+            }
+            let (Some(local), Some(pose)) = (view.hull(other), view.pose(other)) else {
+                continue;
+            };
+            let obstacle = klotho_geom::cooked_shape(before.body_physics(other).shape, local)
+                .map_err(|_| RejectReason::WitnessMismatch)?;
+            if klotho_geom::penetration_mm(shape, body.pose, obstacle, pose)
+                .map_err(|_| RejectReason::WitnessMismatch)?
+                .unwrap_or(0)
+                > klotho_geom::CONTACT_SLOP_MM
+            {
+                return Err(RejectReason::WitnessMismatch);
+            }
+        }
+    }
+    Ok(())
 }

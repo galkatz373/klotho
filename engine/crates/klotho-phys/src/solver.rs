@@ -34,6 +34,9 @@ pub(crate) struct Body {
     friction: f32,
     restitution: f32,
     prev: PoseMm,
+    character: Option<klotho_core::CharacterPhysics>,
+    kinematic: bool,
+    grounded: bool,
 }
 
 struct Contact {
@@ -47,6 +50,7 @@ struct Contact {
 }
 
 struct Occupancy {
+    sigil: Sigil,
     local: AabbMm,
     kind: ShapeKind,
     pose: PoseMm,
@@ -65,9 +69,11 @@ pub struct SolveOut {
     /// A non-finite value must never be converted into an apparently valid
     /// integer body delta (in particular, never into an origin pose).
     pub rejected_non_finite: Vec<Sigil>,
+    /// Driven actors whose bounded geometry query failed; no island is emitted.
+    pub rejected_character_geometry: Vec<Sigil>,
 }
 
-/// Solve every Relic in `island`. Attached children and Actors are skipped.
+/// Solve Relics and Canon-driven Actors in `island`; skip attached children.
 #[must_use]
 pub fn solve_island(island: u16, view: &WorldView<'_>) -> SolveOut {
     if island == NO_ISLAND {
@@ -75,6 +81,7 @@ pub fn solve_island(island: u16, view: &WorldView<'_>) -> SolveOut {
             proposals: Vec::new(),
             residuals_mm: Vec::new(),
             rejected_non_finite: Vec::new(),
+            rejected_character_geometry: Vec::new(),
         };
     }
     let members = collect_members(island, view);
@@ -84,15 +91,30 @@ pub fn solve_island(island: u16, view: &WorldView<'_>) -> SolveOut {
             proposals: Vec::new(),
             residuals_mm: Vec::new(),
             rejected_non_finite: Vec::new(),
+            rejected_character_geometry: Vec::new(),
         };
     }
     let statics = collect_statics(view, &bodies);
+    if prepare_characters(view, &mut bodies, &statics).is_err() {
+        return SolveOut {
+            proposals: Vec::new(),
+            residuals_mm: Vec::new(),
+            rejected_non_finite: Vec::new(),
+            rejected_character_geometry: bodies
+                .iter()
+                .filter(|b| b.character.is_some())
+                .map(|b| b.sigil)
+                .collect(),
+        };
+    }
     let mut joints = collect_joints(view, &bodies);
     let dt = 1.0 / SUBSTEPS as f32;
     let mut last_support: Vec<Option<Support>> = vec![None; bodies.len()];
     for _ in 0..SUBSTEPS {
         for b in &mut bodies {
-            b.v[1] -= GRAVITY_MM_PER_TICK2 * dt;
+            if !b.kinematic && !(b.character.is_some() && b.grounded) {
+                b.v[1] -= GRAVITY_MM_PER_TICK2 * dt;
+            }
         }
         let impact_v: Vec<[f32; 3]> = bodies.iter().map(|b| b.v).collect();
         for b in &mut bodies {
@@ -120,6 +142,87 @@ pub fn solve_island(island: u16, view: &WorldView<'_>) -> SolveOut {
     emit(island, members, view, &bodies, &last_support, &joints)
 }
 
+fn prepare_characters(
+    view: &WorldView<'_>,
+    bodies: &mut [Body],
+    statics: &[Occupancy],
+) -> Result<(), klotho_geom::GeomError> {
+    use klotho_core::IVec3;
+    use klotho_geom::{CharacterObstacle, resolve_character};
+    if bodies.iter().all(|b| b.character.is_none()) {
+        return Ok(());
+    }
+    let mut obstacles = Vec::new();
+    for s in statics {
+        obstacles.push(CharacterObstacle {
+            shape: cooked_shape(s.kind, s.local)?,
+            pose: s.pose,
+        });
+    }
+    let platforms: Vec<_> = bodies
+        .iter()
+        .filter(|b| b.kinematic)
+        .map(|b| (b.sigil, b.local, b.kind, b.prev, b.v, b.omega_md))
+        .collect();
+    for body in bodies.iter_mut().filter(|b| b.character.is_some()) {
+        let policy = body.character.unwrap();
+        let shape = cooked_shape(body.kind, body.local)?;
+        let drive = klotho_motion::Motion::drive(view, body.sigil)
+            .ok_or(klotho_geom::GeomError::Malformed)?;
+        let mut desire = drive.root;
+        let mut character_obstacles = obstacles.clone();
+        let mut carried = false;
+        for &(_, local, kind, pose, v, omega) in &platforms {
+            let platform = cooked_shape(kind, local)?;
+            let probe = PoseMm {
+                y: klotho_core::Mm(body.prev.y.0 - 3),
+                ..body.prev
+            };
+            let riding = !carried
+                && contact(shape, probe, platform, pose)?
+                    .is_some_and(|h| h.normal.1 >= policy.slope_min_y);
+            let mut future = pose;
+            future.x.0 = future.x.0.saturating_add(v[0].floor() as i32);
+            future.y.0 = future.y.0.saturating_add(v[1].floor() as i32);
+            future.z.0 = future.z.0.saturating_add(v[2].floor() as i32);
+            future.yaw.0 = future.yaw.0.saturating_add(omega[0].floor() as i32);
+            future.pitch.0 = future.pitch.0.saturating_add(omega[1].floor() as i32);
+            future.roll.0 = future.roll.0.saturating_add(omega[2].floor() as i32);
+            if riding {
+                carried = true;
+                body.angle_md[0] += omega[0];
+                let relative = body.prev.translation().wrapping_sub(pose.translation());
+                let rotated = rotate(
+                    relative,
+                    YawMd(omega[0].floor() as i32),
+                    YawMd(omega[1].floor() as i32),
+                    YawMd(omega[2].floor() as i32),
+                );
+                desire = desire
+                    .wrapping_add(rotated.wrapping_sub(relative))
+                    .wrapping_add(future.translation().wrapping_sub(pose.translation()));
+            }
+            character_obstacles.push(CharacterObstacle {
+                shape: platform,
+                pose: future,
+            });
+        }
+        let current = resolve_character(shape, body.prev, IVec3::ZERO, policy, &obstacles)?;
+        body.grounded = current.support.is_some() || carried;
+        let resolved = resolve_character(shape, body.prev, desire, policy, &character_obstacles)?;
+        // Lift before horizontal integration so a stair path is up/over/down,
+        // rather than a diagonal penetration into the riser.
+        body.x[1] = resolved.pose.y.0 as f32;
+        body.v[0] = (resolved.pose.x.0 - body.prev.x.0) as f32;
+        body.v[2] = (resolved.pose.z.0 - body.prev.z.0) as f32;
+        if body.grounded {
+            body.v[1] = 0.0;
+        }
+        body.omega_md = [0.0; 3];
+    }
+    Ok(())
+}
+
 fn collect_members(island: u16, view: &WorldView<'_>) -> Vec<Sigil> {
     let mut members: Vec<Sigil> = view
         .loci()
@@ -135,14 +238,14 @@ fn collect_bodies(island: u16, view: &WorldView<'_>) -> Vec<Body> {
         if view.island(s).map(|(id, _)| id) != Some(island) {
             continue;
         }
-        if s.kind() != Some(LocusKind::Relic) {
+        if s.kind() != Some(LocusKind::Relic) && view.character_physics(s).is_none() {
             continue;
         }
         if view.attach_parent(s).is_some() {
             continue;
         }
         let physics = view.body_physics(s);
-        if physics.mode != BodyMode::Dynamic || !physics.is_valid() {
+        if physics.mode == BodyMode::Static || !physics.is_valid() {
             continue;
         }
         let Some(pose) = view.pose(s) else {
@@ -191,12 +294,23 @@ fn collect_bodies(island: u16, view: &WorldView<'_>) -> Vec<Body> {
             v,
             angle_md: [pose.yaw.0 as f32, pose.pitch.0 as f32, pose.roll.0 as f32],
             omega_md,
-            inv_mass: mass_properties(local, physics).0,
-            inv_inertia: mass_properties(local, physics).1,
+            inv_mass: if physics.mode == BodyMode::Kinematic {
+                0.0
+            } else {
+                mass_properties(local, physics).0
+            },
+            inv_inertia: if physics.mode == BodyMode::Kinematic || physics.character.is_some() {
+                [0.0; 3]
+            } else {
+                mass_properties(local, physics).1
+            },
             center_of_mass: physics.center_of_mass,
             friction: f32::from(physics.friction_permille) / 1_000.0,
             restitution: f32::from(physics.restitution_permille) / 1_000.0,
             prev: pose,
+            character: view.character_physics(s),
+            kinematic: physics.mode == BodyMode::Kinematic,
+            grounded: false,
         });
     }
     out.sort_by_key(|b| b.sigil);
@@ -243,6 +357,7 @@ fn collect_statics(view: &WorldView<'_>, bodies: &[Body]) -> Vec<Occupancy> {
             };
             let physics = view.body_physics(s);
             out.push(Occupancy {
+                sigil: s,
                 local,
                 kind: physics.shape,
                 pose,
@@ -250,6 +365,42 @@ fn collect_statics(view: &WorldView<'_>, bodies: &[Body]) -> Vec<Occupancy> {
                 restitution: f32::from(physics.restitution_permille) / 1_000.0,
             });
         }
+    }
+    // Character steps and grounding need occupancy beyond the linear root AABB.
+    for b in bodies.iter().filter(|b| b.character.is_some()) {
+        let Ok(shape) = cooked_shape(b.kind, b.local) else {
+            continue;
+        };
+        let Ok(mut query) = bounds(shape, b.prev) else {
+            continue;
+        };
+        query.min.x = query.min.x.saturating_sub(2000);
+        query.min.z = query.min.z.saturating_sub(2000);
+        query.max.x = query.max.x.saturating_add(2000);
+        query.max.z = query.max.z.saturating_add(2000);
+        query.min.y = query.min.y.saturating_sub(1000);
+        query.max.y = query.max.y.saturating_add(1000);
+        let mut loci = view.space_candidates(query, false);
+        loci.sort_unstable();
+        for s in loci {
+            if skip.contains(&s) || !seen.insert(s) || !is_occupancy(view, s) {
+                continue;
+            }
+            if let (Some(local), Some(pose)) = (view.hull(s), view.pose(s)) {
+                let p = view.body_physics(s);
+                out.push(Occupancy {
+                    sigil: s,
+                    local,
+                    kind: p.shape,
+                    pose,
+                    friction: f32::from(p.friction_permille) / 1000.0,
+                    restitution: f32::from(p.restitution_permille) / 1000.0,
+                });
+            }
+        }
+    }
+    if bodies.iter().any(|b| b.character.is_some()) {
+        out.sort_by_key(|o| o.sigil);
     }
     out
 }
@@ -722,10 +873,12 @@ fn emit(
     let mut deltas = Vec::with_capacity(bodies.len());
     let mut residuals_mm = Vec::with_capacity(bodies.len());
     let mut rejected_non_finite = Vec::new();
-    let island_active = bodies
-        .iter()
-        .enumerate()
-        .any(|(i, b)| view.phys_req(b.sigil).is_some() || !is_quiet(b, support[i]));
+    let island_active = bodies.iter().enumerate().any(|(i, b)| {
+        b.character.is_some()
+            || b.kinematic
+            || view.phys_req(b.sigil).is_some()
+            || !is_quiet(b, support[i])
+    });
     for (i, b) in bodies.iter().enumerate() {
         let Some(attitude) = quantized_attitude(b) else {
             rejected_non_finite.push(b.sigil);
@@ -758,6 +911,13 @@ fn emit(
         } else {
             prev_sleep.saturating_add(1).min(SLEEP_AFTER_TICKS)
         };
+        if b.character.is_some() {
+            // Horizontal velocity is the existing locomotion request; the
+            // resolved pose carries physical displacement and wall correction.
+            let command = view.vel(b.sigil).map_or(Vel3::ZERO, |(v, _)| v);
+            vel.x = command.x;
+            vel.z = command.z;
+        }
         if sleep_ticks >= SLEEP_AFTER_TICKS {
             vel = Vel3::ZERO;
             yaw_rate = 0;
@@ -801,6 +961,7 @@ fn emit(
         proposals,
         residuals_mm,
         rejected_non_finite,
+        rejected_character_geometry: Vec::new(),
     }
 }
 
@@ -897,6 +1058,9 @@ mod tests {
             friction: 0.9,
             restitution: 0.0,
             prev: PoseMm::default(),
+            character: None,
+            kinematic: false,
+            grounded: false,
         }
     }
 

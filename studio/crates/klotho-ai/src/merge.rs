@@ -166,7 +166,9 @@ pub fn diff_ops(base: &AuthoringSnapshot, head: &AuthoringSnapshot) -> Vec<Autho
                         });
                     }
                 }
-                klotho_ir::SeedFact::Locus { .. } => {}
+                // Physics is Canon configuration; the best-effort fact diff
+                // currently covers Rel/Qty/Pose. Module snapshots retain it.
+                klotho_ir::SeedFact::Locus { .. } | klotho_ir::SeedFact::Physics { .. } => {}
             }
         }
         let base_diffs = base_mod

@@ -580,6 +580,44 @@ mod tests {
     }
 
     #[test]
+    fn character_physics_is_cooked_hashed_and_packed() {
+        use klotho_core::{BodyPhysics, CharacterPhysics, ShapeKind};
+        let mut doc = empty_doc(&[]);
+        doc.seed[0] = SeedFact::Locus {
+            name: Name::from("walker"),
+            kind: LocusKind::Actor,
+        };
+        let body = BodyPhysics {
+            shape: ShapeKind::Capsule,
+            character: Some(CharacterPhysics::default()),
+            ..BodyPhysics::default()
+        };
+        doc.seed.push(SeedFact::Physics {
+            of: Name::from("walker"),
+            body,
+        });
+        let cooked = cook_doc(&doc).unwrap();
+        let restored = crate::unpack_warp(&crate::pack_warp(&cooked).unwrap()).unwrap();
+        assert_eq!(
+            restored
+                .canon
+                .body_physics(restored.canon.pin("walker").unwrap()),
+            Some(body)
+        );
+        let before = cooked.canon_hash;
+        let SeedFact::Physics { body, .. } = &mut doc.seed[1] else {
+            panic!()
+        };
+        body.character.as_mut().unwrap().roots[0].z = 21;
+        assert_ne!(before, cook_doc(&doc).unwrap().canon_hash);
+        let SeedFact::Physics { body, .. } = &mut doc.seed[1] else {
+            panic!()
+        };
+        body.character.as_mut().unwrap().root_count = 0;
+        assert!(cook_doc(&doc).is_err());
+    }
+
+    #[test]
     fn missing_tag_is_cook_error() {
         let doc = empty_doc(&["no.such.tag"]);
         let e = cook_doc(&doc).unwrap_err();

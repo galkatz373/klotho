@@ -103,7 +103,32 @@ pub fn check_phys_body(
         let occ = cooked_shape(occ_kind, ol).map_err(|_| RejectReason::WitnessMismatch)?;
         let hit = swept_against(shape, prev, proposed, occ, opose)
             .map_err(|_| RejectReason::WitnessMismatch)?;
-        if hit.crossing || hit.end_depth_mm > CONTACT_SLOP_MM {
+        let legal_step = if let Some(policy) = view.character_physics(mover) {
+            let dy = proposed.y.0.saturating_sub(prev.y.0);
+            if dy > 0 && dy <= policy.step_mm && !occ_kind.is_static_occupancy() {
+                let up = PoseMm {
+                    y: proposed.y,
+                    ..prev
+                };
+                let over = PoseMm {
+                    y: proposed.y,
+                    ..proposed
+                };
+                let first = swept_against(shape, prev, up, occ, opose)
+                    .map_err(|_| RejectReason::WitnessMismatch)?;
+                let second = swept_against(shape, up, over, occ, opose)
+                    .map_err(|_| RejectReason::WitnessMismatch)?;
+                !first.crossing
+                    && !second.crossing
+                    && first.end_depth_mm <= CONTACT_SLOP_MM
+                    && second.end_depth_mm <= CONTACT_SLOP_MM
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+        if (hit.crossing && !legal_step) || hit.end_depth_mm > CONTACT_SLOP_MM {
             return Err(RejectReason::WitnessMismatch);
         }
     }

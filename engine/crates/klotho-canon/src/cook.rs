@@ -79,7 +79,9 @@ fn cook_inner(
                         intern.intern_resource(res)?;
                     }
                 }
-                SeedFact::Pose { of, .. } => require_pin(&intern, of)?,
+                SeedFact::Pose { of, .. } | SeedFact::Physics { of, .. } => {
+                    require_pin(&intern, of)?
+                }
                 SeedFact::Locus { .. } => {}
             }
         }
@@ -184,7 +186,7 @@ fn cook_inner(
     let affordance_by_name = intern.affordances.clone();
     let rite_by_name = intern.rites.clone();
 
-    Ok(Canon::from_parts(
+    let mut canon = Canon::from_parts(
         laws,
         affordances,
         rites,
@@ -198,7 +200,23 @@ fn cook_inner(
         affordance_by_name,
         rite_by_name,
         resource_by_name,
-    ))
+    );
+    for fact in seed {
+        if let SeedFact::Physics { of, body } = fact {
+            let locus = canon
+                .pin(of.as_str())
+                .ok_or_else(|| CookError::UnboundName(of.0.clone()))?;
+            if body.character.is_some() && locus.kind() != Some(LocusKind::Actor) {
+                return Err(CookError::InvalidDoc(format!(
+                    "character physics requires an Actor: {of}"
+                )));
+            }
+            if !canon.bind_physics(locus, *body) {
+                return Err(CookError::DuplicateId(of.0.clone()));
+            }
+        }
+    }
+    Ok(canon)
 }
 
 fn cook_mind_names(program: &MindProgram, intern: &mut Interner) -> Result<(), CookError> {

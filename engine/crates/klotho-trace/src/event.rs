@@ -237,6 +237,35 @@ pub enum TraceBody {
         /// Optional second slot.
         b: Option<Sigil>,
     },
+    /// Verified player origin of a Canon-bound contact action. Proposers do
+    /// not author this event or acquire Agency from it.
+    MotionActionAuthorized {
+        /// Actor owning the action.
+        actor: Sigil,
+        /// Canon Rite identity.
+        rite: u16,
+        /// Exact Rite instance.
+        instance: Tick,
+        /// Original player claim channel.
+        channel: u8,
+    },
+    /// Admitted semantic instrument contact; sampled bones stay off Trace.
+    MotionContactAdmitted {
+        /// Actor carrying the instrument.
+        actor: Sigil,
+        /// Canon instrument binding identity.
+        instrument: klotho_core::Hash,
+        /// Semantic target.
+        target: Sigil,
+        /// Active Rite identity.
+        rite: u16,
+        /// Exact action instance start tick.
+        instance: Tick,
+        /// Authenticated action channel wire tag.
+        channel: u8,
+        /// Authoritative contact interval.
+        boundary: u16,
+    },
     /// Host-committed utterance. Client cosmetics cannot add facts.
     Uttered {
         /// Speaker.

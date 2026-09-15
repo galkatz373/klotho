@@ -34,6 +34,7 @@ pub fn admit_phys_laws(
     canon: &Canon,
     view: &WorldView,
     bodies: &[(Sigil, bool)],
+    contacts: &[(Sigil, Sigil, u8)],
     pred_ops: &mut u32,
 ) -> Result<(), RejectReason> {
     for law in &canon.laws {
@@ -50,6 +51,21 @@ pub fn admit_phys_laws(
                 swept_hits,
                 pred_ops,
             )?;
+            if let Some(&(_, target, channel)) = contacts.iter().find(|c| c.0 == actor) {
+                let channel = Channel::from_u8(channel).ok_or(RejectReason::UnclaimedAgency)?;
+                admit_law(
+                    canon,
+                    view,
+                    law,
+                    actor,
+                    Some(target),
+                    Verb::Use,
+                    SourceKind::Player,
+                    &[channel],
+                    false,
+                    pred_ops,
+                )?;
+            }
         }
     }
     Ok(())

@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Active — PHYS-A01–A07 landed; PHYS-A08 next |
+| Status | Active — PHYS-A01–A08 landed; PHYS-A09 next |
 | Date | 2026-09-15 |
 | Scope | Production 3D physics, character resolution, vehicles, destruction, and animation-driven contact |
 | Preserves | Canon + Intent + Trace + Projection; K21 atomic commit; crate firewalls |
@@ -186,7 +186,7 @@ using the admitted root; snapshot-pair extraction selects foot locomotion from
 admitted displacement and presents blocked roots and idle platform riders at rest. Queries cap occupancy at 512 obstacles and displacement
 at 1000 mm per axis; a failed query emits no island and identifies the actor on
 `SolveOut`. The combined Anvil capture/overlay work remains PHYS-A11, and the
-rejected-root/melee gate remains PHYS-A08 when motion-contact payloads land.
+rejected-root/melee gate is landed by PHYS-A08.
 
 ### Phase 4 gates
 
@@ -286,6 +286,28 @@ The admitted contact advances the Rite or supplies evidence to a Law that emits 
 - One swing cannot hit the same target twice unless Canon permits it.
 - A blocked or rejected character root cannot leave a detached hit sweep behind.
 - Infer and Mind cannot claim the player's melee channel or Agency.
+
+PHYS-A08 binds the active Canon WAIT to a player-authorized action instance and
+admits `MotionContact` only inside the coupled physical island. The proposal carries
+the exact Canon `ContactTrack`, channel, interval and bounded narrow-phase sample;
+the kernel reproduces the sample against the resolved root and the target hull.
+A contact evidence Trace event records only semantic participants and the approved
+instrument identity. Its action ledger, original player channel and absolute WAIT
+clock persist in Projection and snapshot v3; a seeded or stale Rite cannot supply
+Agency. One target/contact per action is the initial bounded policy. Contact
+consequences, Laws, spawned rows and body writes are included in the same
+speculative write set, so a Law, witness, root, or member rejection leaves the
+Projection byte-identical. Runtime jobs stamp the next authoritative tick, and
+stream Place rows refuse live action metadata. Bounded integer capsule sampling
+fails closed on query overflow; broad-phase AABB hints never establish a hit.
+
+### Phase 6 gates — landed
+
+- Rotated-box, convex-void, thin-wall, small-radius and excess-work queries are covered by pure geometry tests.
+- Hits, visible misses, stale windows, blocked roots, invalid members and Law rejection are covered by Anvil-style kernel tests.
+- Save/replay retains the action instance, original player authorization, WAIT clock and contact ledger.
+- Mind and Infer cannot start, resume, or mint the player contact channel.
+- One and eight worker execution produce identical contact Trace and snapshots.
 
 ## Phase 7 — Vehicles
 
@@ -421,7 +443,7 @@ Each PR leaves the tree green and preserves existing non-Phys goldens.
 7. **PHYS-A07 — Semantic contact-track cook — landed**
    Cook quantized socket/sweep tracks, enforce compatibility signatures, and add Distaff preview overlays.
 
-8. **PHYS-A08 — Motion-contact admission**
+8. **PHYS-A08 — Motion-contact admission — landed**
    Bind active Rite windows to validated instrument sweeps; prove spatially aligned melee without AnimNotify authority.
 
 9. **PHYS-A09 — Vehicle rigs**

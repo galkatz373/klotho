@@ -1217,6 +1217,7 @@ dependencies = [
  "klotho-anim",
  "klotho-commit",
  "klotho-core",
+ "klotho-geom",
  "klotho-ir",
  "klotho-world",
 ]

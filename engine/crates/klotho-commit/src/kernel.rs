@@ -317,7 +317,7 @@ impl CommitKernel {
         written: &mut BTreeMap<(u128, u8), ()>,
     ) -> Result<Vec<TraceEvent>, RejectReason> {
         if matches!(p, Proposal::PhysIsland { .. }) {
-            return self.admit_phys_island(p, tick, pred_ops, written);
+            return self.admit_phys_island(p, tick, pred_ops, rite_steps, written);
         }
         let (actor, mut target, verb, source, claimed, swept_hits) =
             self.preflight(&p, tick, budget)?;
@@ -417,6 +417,7 @@ impl CommitKernel {
         p: Proposal,
         tick: Tick,
         pred_ops: &mut u32,
+        rite_steps: &mut u32,
         written: &mut BTreeMap<(u128, u8), ()>,
     ) -> Result<Vec<TraceEvent>, RejectReason> {
         let Proposal::PhysIsland {
@@ -426,6 +427,7 @@ impl CommitKernel {
             members,
             bodies,
             contacts,
+            motion_contacts,
             constraints,
             breaks,
         } = &p
@@ -443,11 +445,20 @@ impl CommitKernel {
             breaks,
             tick,
         )?;
-        let (cells, attachments) = phys_write_cells(bodies, constraints, &self.world.view())?;
+        let (mut cells, attachments) = phys_write_cells(bodies, constraints, &self.world.view())?;
         if cells.iter().any(|cell| written.contains_key(cell)) {
             return Err(RejectReason::Conflict);
         }
 
+        crate::motion_contact::validate(&self.world.view(), bodies, motion_contacts)?;
+        for body in bodies {
+            if self.world.view().contact_window(body.mover).is_some() {
+                cells.push((body.mover.raw(), 1));
+            }
+        }
+        if cells.iter().any(|cell| written.contains_key(cell)) {
+            return Err(RejectReason::Conflict);
+        }
         let mut spec = self.world.mutate().begin_spec();
         for body in bodies {
             apply_body(&mut spec, *island, body)?;
@@ -470,8 +481,67 @@ impl CommitKernel {
             .zip(swept_hits)
             .map(|(body, hits)| (body.mover, hits))
             .collect();
-        admit_phys_laws(self.world.canon(), &spec.view(), &law_bodies, pred_ops)?;
 
+        let before_view = self.world.view();
+        let contact_law_contexts: Vec<_> = bodies
+            .iter()
+            .filter_map(|b| {
+                if let Some(claim) = motion_contacts.iter().find(|c| c.actor == b.mover) {
+                    return Some((claim.actor, claim.target, claim.track.channel));
+                }
+                let track = before_view.contact_track(b.mover)?;
+                let rite = self
+                    .world
+                    .canon()
+                    .rites
+                    .iter()
+                    .find(|r| r.name.as_str() == track.rite)?;
+                let machine = self.world.view().rite(b.mover, rite.id)?;
+                machine
+                    .contact_hit
+                    .then_some((b.mover, machine.target?, machine.contact_agency))
+            })
+            .collect();
+        crate::rite::admit_motion_windows(
+            &mut spec,
+            self.world.canon(),
+            bodies,
+            motion_contacts,
+            rite_steps,
+            pred_ops,
+            tick,
+        )?;
+        admit_phys_laws(
+            self.world.canon(),
+            &spec.view(),
+            &law_bodies,
+            &contact_law_contexts,
+            pred_ops,
+        )?;
+        // Capture every physical and semantic write before publication.
+        if bodies
+            .iter()
+            .any(|b| before_view.contact_track(b.mover).is_some())
+        {
+            for locus in spec.write_loci() {
+                cells.push((locus.raw(), 0));
+                cells.push((locus.raw(), 1));
+            }
+        }
+        cells.sort_unstable();
+        cells.dedup();
+        if cells
+            .iter()
+            .map(|c| c.0)
+            .collect::<std::collections::BTreeSet<_>>()
+            .len()
+            > MAX_PHYS_ISLAND_WRITE_LOCI
+        {
+            return Err(RejectReason::IslandTooLarge);
+        }
+        if cells.iter().any(|cell| written.contains_key(cell)) {
+            return Err(RejectReason::Conflict);
+        }
         let events = spec.events().to_vec();
         self.world.mutate().commit_spec(spec);
         for cell in cells {

@@ -25,7 +25,8 @@ pub fn ingest_island_jobs(
 ) -> u32 {
     let t0 = Instant::now();
     let batch = {
-        let view = kernel.world().view();
+        let current = kernel.world().view();
+        let view = current.at_tick(current.tick().saturating_add(1));
         let mut groups: BTreeMap<u16, Vec<Sigil>> = BTreeMap::new();
         for s in view.loci() {
             if let Some((id, _)) = view.island(s) {

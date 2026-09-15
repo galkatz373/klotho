@@ -17,6 +17,7 @@ klotho-world.workspace = true
 klotho-motion.workspace = true
 
 [dev-dependencies]
+klotho-trace.workspace = true
 drift-slice = { path = "../../examples/drift-slice" }
 klotho-canon.workspace = true
 klotho-save.workspace = true

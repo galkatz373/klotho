@@ -102,6 +102,32 @@ pub fn run_burst(
                 }
             }
             RiteOp::Wait(ticks, ch) => {
+                if let Some(track) = canon
+                    .contact_tracks
+                    .get(&actor)
+                    .filter(|t| t.rite == rite.name.as_str())
+                {
+                    if source != SourceKind::Player
+                        || !claimed.iter().any(|c| c.as_u8() == track.channel)
+                    {
+                        return Err(RejectReason::UnclaimedAgency);
+                    }
+                    let machine = spec
+                        .view()
+                        .rite(actor, rite.id)
+                        .ok_or(RejectReason::UnclaimedAgency)?;
+                    if machine.contact_agency == 0 {
+                        spec.push(TraceEvent::new(
+                            tick,
+                            TraceBody::MotionActionAuthorized {
+                                actor,
+                                rite: rite.id.0,
+                                instance: machine.started_at,
+                                channel: track.channel,
+                            },
+                        ));
+                    }
+                }
                 let resume = next.unwrap_or(pc);
                 spec.push(TraceEvent::new(
                     tick,
@@ -112,10 +138,30 @@ pub fn run_burst(
                         wait_left: *ticks,
                     },
                 ));
+                if spec
+                    .view()
+                    .rite(actor, rite.id)
+                    .is_some_and(|m| m.contact_hit && m.target != target)
+                {
+                    return Err(RejectReason::WitnessMismatch);
+                }
                 spec.put_rite(
                     actor,
                     rite.id,
                     RiteMachine {
+                        contact_agency: spec
+                            .view()
+                            .rite(actor, rite.id)
+                            .map_or(0, |m| m.contact_agency),
+                        contact_hit: spec
+                            .view()
+                            .rite(actor, rite.id)
+                            .is_some_and(|m| m.contact_hit),
+                        started_at: spec
+                            .view()
+                            .rite(actor, rite.id)
+                            .map_or(tick, |m| m.started_at),
+                        wait_at: tick,
                         pc: resume,
                         wait_left: *ticks,
                         target,
@@ -151,10 +197,30 @@ pub fn run_burst(
                         n.first().copied()
                     }
                 };
+                if spec
+                    .view()
+                    .rite(actor, rite.id)
+                    .is_some_and(|m| m.contact_hit && m.target != target)
+                {
+                    return Err(RejectReason::WitnessMismatch);
+                }
                 spec.put_rite(
                     actor,
                     rite.id,
                     RiteMachine {
+                        contact_agency: spec
+                            .view()
+                            .rite(actor, rite.id)
+                            .map_or(0, |m| m.contact_agency),
+                        contact_hit: spec
+                            .view()
+                            .rite(actor, rite.id)
+                            .is_some_and(|m| m.contact_hit),
+                        started_at: spec
+                            .view()
+                            .rite(actor, rite.id)
+                            .map_or(tick, |m| m.started_at),
+                        wait_at: tick,
                         pc: next.unwrap_or(pc),
                         wait_left: 0,
                         target,
@@ -354,6 +420,16 @@ pub fn drive_rite(
     tick: Tick,
 ) -> Result<(), RejectReason> {
     if let Some((rid, machine)) = spec.view().first_rite(actor) {
+        if canon.contact_tracks.get(&actor).is_some_and(|track| {
+            canon
+                .rites
+                .iter()
+                .any(|r| r.id == rid && r.name.as_str() == track.rite)
+        }) {
+            // Only the coupled island may advance a contact-bound action.
+            // Player may start it; player, Mind and Infer may not shortcut it.
+            return Err(RejectReason::UnclaimedAgency);
+        }
         check_wait_agency(&machine, source, claimed)?;
         let rite = canon
             .rites
@@ -376,6 +452,17 @@ pub fn drive_rite(
     let Some(rite) = pick_start_rite(canon, spec, verb, target) else {
         return Ok(());
     };
+    if canon
+        .contact_tracks
+        .get(&actor)
+        .is_some_and(|track| track.rite == rite.name.as_str())
+        && canon
+            .body_physics(actor)
+            .and_then(|b| b.character)
+            .is_none()
+    {
+        return Err(RejectReason::WrongHull);
+    }
     spec.push(TraceEvent::new(
         tick,
         TraceBody::RiteBegan {
@@ -384,7 +471,8 @@ pub fn drive_rite(
             target,
         },
     ));
-    let hit = verb == Verb::Fire || rite.name.as_str() == "melee";
+    let hit = verb == Verb::Fire
+        || (rite.name.as_str() == "melee" && !canon.contact_tracks.contains_key(&actor));
     let _ = run_burst(
         spec,
         canon,
@@ -613,4 +701,211 @@ fn alloc_spawn_sigil(spec: &SpecDelta) -> Result<Sigil, RejectReason> {
         next = next.max(s.id().saturating_add(1));
     }
     Sigil::pack(LocusKind::Relic, 0, next).ok_or(RejectReason::Budget)
+}
+
+/// Advance contact-bound WAITs only from their actor's admitted island. The
+/// initial profile consumes a one-target action at its first validated hit;
+/// expiration ends it without running its hit tail.
+pub(crate) fn admit_motion_windows(
+    spec: &mut SpecDelta,
+    canon: &Canon,
+    bodies: &[crate::BodyDelta],
+    claims: &[crate::MotionContact],
+    rite_steps: &mut u32,
+    pred_ops: &mut u32,
+    tick: Tick,
+) -> Result<(), RejectReason> {
+    for body in bodies {
+        let Some(track) = canon.contact_tracks.get(&body.mover) else {
+            continue;
+        };
+        let Some(rite) = canon.rites.iter().find(|r| r.name.as_str() == track.rite) else {
+            return Err(RejectReason::WitnessMismatch);
+        };
+        let Some(machine) = spec.view().rite(body.mover, rite.id) else {
+            continue;
+        };
+        if machine.contact_agency != track.channel {
+            return Err(RejectReason::UnclaimedAgency);
+        }
+        let index = rite
+            .chunk
+            .instrs
+            .iter()
+            .position(|i| i.pc == track.wait_pc)
+            .ok_or(RejectReason::WitnessMismatch)?;
+        let resume = rite
+            .chunk
+            .instrs
+            .get(index + 1)
+            .ok_or(RejectReason::WitnessMismatch)?
+            .pc;
+        if tick.0.saturating_sub(machine.wait_at.0) > u64::from(track.wait_ticks)
+            && machine.pc == resume
+        {
+            spec.push(TraceEvent::new(
+                tick,
+                TraceBody::RiteEnded {
+                    actor: body.mover,
+                    rite: rite.id.0,
+                    status: RiteEnd::Fail,
+                },
+            ));
+            continue;
+        }
+        let elapsed = tick.0.saturating_sub(machine.wait_at.0);
+        if machine.pc != resume {
+            // Startup/recovery WAITs progress from their absolute clock. A
+            // recovery tail may consume only previously admitted evidence.
+            let pc_index = rite
+                .chunk
+                .instrs
+                .iter()
+                .position(|i| i.pc == machine.pc)
+                .ok_or(RejectReason::WitnessMismatch)?;
+            let previous = pc_index
+                .checked_sub(1)
+                .and_then(|i| rite.chunk.instrs.get(i))
+                .ok_or(RejectReason::WitnessMismatch)?;
+            let RiteOp::Wait(duration, _) = previous.op else {
+                return Err(RejectReason::WitnessMismatch);
+            };
+            if elapsed < u64::from(duration) {
+                spec.push(TraceEvent::new(
+                    tick,
+                    TraceBody::RiteAdvanced {
+                        actor: body.mover,
+                        rite: rite.id.0,
+                        pc: machine.pc,
+                        wait_left: duration - elapsed as u16,
+                    },
+                ));
+            } else {
+                let channel =
+                    Channel::from_u8(track.channel).ok_or(RejectReason::UnclaimedAgency)?;
+                let start_events = spec.events().len();
+                let _ = run_burst(
+                    spec,
+                    canon,
+                    rite,
+                    body.mover,
+                    machine.target,
+                    Verb::Use,
+                    SourceKind::Player,
+                    &[channel],
+                    machine.pc,
+                    rite_steps,
+                    pred_ops,
+                    tick,
+                )?;
+                if machine.contact_hit
+                    && spec.events()[start_events..]
+                        .iter()
+                        .any(|e| matches!(e.body, TraceBody::Emitted { .. }))
+                {
+                    drive_apply_hit(
+                        spec,
+                        canon,
+                        machine.target,
+                        Verb::Use,
+                        SourceKind::Player,
+                        &[channel],
+                        rite_steps,
+                        pred_ops,
+                        tick,
+                    )?;
+                    if spec.view().rite(body.mover, rite.id).is_some() {
+                        spec.push(TraceEvent::new(
+                            tick,
+                            TraceBody::RiteEnded {
+                                actor: body.mover,
+                                rite: rite.id.0,
+                                status: RiteEnd::Success,
+                            },
+                        ));
+                    }
+                }
+            }
+            continue;
+        }
+        if let Some(claim) = claims.iter().find(|c| c.actor == body.mover) {
+            if !hittable(&spec.view(), canon, claim.target) {
+                return Err(RejectReason::WitnessMismatch);
+            }
+            let channel = Channel::from_u8(track.channel).ok_or(RejectReason::UnclaimedAgency)?;
+            spec.push(TraceEvent::new(
+                tick,
+                TraceBody::MotionContactAdmitted {
+                    actor: body.mover,
+                    instrument: track.instrument,
+                    target: claim.target,
+                    rite: rite.id.0,
+                    instance: machine.started_at,
+                    channel: track.channel,
+                    boundary: claim.boundary,
+                },
+            ));
+            let start_events = spec.events().len();
+            let _ = run_burst(
+                spec,
+                canon,
+                rite,
+                body.mover,
+                Some(claim.target),
+                Verb::Use,
+                SourceKind::Player,
+                &[channel],
+                machine.pc,
+                rite_steps,
+                pred_ops,
+                tick,
+            )?;
+            if spec.events()[start_events..]
+                .iter()
+                .any(|e| matches!(e.body, TraceBody::Emitted { .. }))
+            {
+                drive_apply_hit(
+                    spec,
+                    canon,
+                    Some(claim.target),
+                    Verb::Use,
+                    SourceKind::Player,
+                    &[channel],
+                    rite_steps,
+                    pred_ops,
+                    tick,
+                )?;
+                if spec.view().rite(body.mover, rite.id).is_some() {
+                    spec.push(TraceEvent::new(
+                        tick,
+                        TraceBody::RiteEnded {
+                            actor: body.mover,
+                            rite: rite.id.0,
+                            status: RiteEnd::Success,
+                        },
+                    ));
+                }
+            }
+        } else if elapsed < u64::from(track.wait_ticks) {
+            spec.push(TraceEvent::new(
+                tick,
+                TraceBody::RiteAdvanced {
+                    actor: body.mover,
+                    rite: rite.id.0,
+                    pc: machine.pc,
+                    wait_left: track.wait_ticks - elapsed as u16,
+                },
+            ));
+        } else {
+            spec.push(TraceEvent::new(
+                tick,
+                TraceBody::RiteEnded {
+                    actor: body.mover,
+                    rite: rite.id.0,
+                    status: RiteEnd::Fail,
+                },
+            ));
+        }
+    }
+    Ok(())
 }

@@ -18,7 +18,7 @@ mod budget;
 mod contact;
 pub use contact::{
     CONTACT_ERROR_MM, ContactSocket, ContactSweep, ContactTrack, FootPlant, MAX_CONTACT_CHANNELS,
-    MAX_CONTACT_SAMPLES,
+    MAX_CONTACT_SAMPLES, SweepSample,
 };
 mod hash;
 mod id;

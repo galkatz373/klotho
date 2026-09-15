@@ -56,6 +56,14 @@ impl Motion {
         view.character_drive(actor)
     }
 
+    /// Pure semantic evidence carried by the resolved physical transaction.
+    pub fn contacts(
+        view: &WorldView<'_>,
+        bodies: &[klotho_commit::BodyDelta],
+    ) -> Result<Vec<klotho_commit::MotionContact>, klotho_geom::GeomError> {
+        klotho_commit::sample_motion_contacts(view, bodies)
+    }
+
     /// Cooked table in use.
     #[must_use]
     pub fn clips(&self) -> &ClipSet {

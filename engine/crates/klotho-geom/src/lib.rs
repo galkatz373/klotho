@@ -12,9 +12,14 @@
 mod cast;
 mod character;
 mod query;
+mod semantic;
 mod shape;
 mod terrain;
 mod witness;
+pub use semantic::{
+    MAX_SWEEP_SAMPLES, SWEEP_SPACING_MM, SweepSample, semantic_sample_count, semantic_sweep,
+    verify_semantic_sweep,
+};
 
 pub use cast::{SweptHit, raycast, swept_against};
 pub use character::{

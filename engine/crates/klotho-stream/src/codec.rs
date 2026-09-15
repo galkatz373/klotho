@@ -627,6 +627,15 @@ fn encode_row(buf: &mut Vec<u8>, row: &PlaceRow) -> Result<(), StreamError> {
     }
     put_u32(buf, u32_len(row.rites.len())?);
     for (rite, m) in &row.rites {
+        // Place cooking transports seed rows, never a live authorised action.
+        // Exact dynamic state belongs to saves (snapshot v3), not residency.
+        if m.started_at != klotho_core::Tick::ZERO
+            || m.wait_at != klotho_core::Tick::ZERO
+            || m.contact_hit
+            || m.contact_agency != 0
+        {
+            return Err(StreamError::Kind);
+        }
         put_u16(buf, *rite);
         put_u16(buf, m.pc);
         put_u16(buf, m.wait_left);
@@ -734,6 +743,10 @@ fn decode_row(rest: &mut &[u8]) -> Result<PlaceRow, StreamError> {
         row.rites.push((
             rite,
             RiteMachine {
+                contact_agency: 0,
+                contact_hit: false,
+                started_at: klotho_core::Tick::ZERO,
+                wait_at: klotho_core::Tick::ZERO,
                 pc,
                 wait_left,
                 target,
@@ -993,6 +1006,10 @@ mod tests {
         row.rites = vec![(
             3,
             RiteMachine {
+                contact_agency: 0,
+                contact_hit: false,
+                started_at: klotho_core::Tick::ZERO,
+                wait_at: klotho_core::Tick::ZERO,
                 pc: 4,
                 wait_left: 5,
                 target: Some(relic(7)),

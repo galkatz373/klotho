@@ -1030,6 +1030,10 @@ mod tests {
             (
                 1,
                 RiteMachine {
+                    contact_agency: 0,
+                    contact_hit: false,
+                    started_at: klotho_core::Tick::ZERO,
+                    wait_at: klotho_core::Tick::ZERO,
                     pc: 0,
                     wait_left: 0,
                     target: None,

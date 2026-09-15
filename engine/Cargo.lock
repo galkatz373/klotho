@@ -1276,6 +1276,7 @@ dependencies = [
  "klotho-canon",
  "klotho-commit",
  "klotho-core",
+ "klotho-geom",
  "klotho-ir",
  "klotho-world",
 ]
@@ -1306,6 +1307,7 @@ dependencies = [
  "klotho-jobs",
  "klotho-motion",
  "klotho-save",
+ "klotho-trace",
  "klotho-world",
 ]
 

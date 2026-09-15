@@ -55,6 +55,14 @@ pub struct Projection {
 /// In-progress rite row.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct RiteMachine {
+    /// Tick identity of this action instance, reconstructed from RiteBegan.
+    pub started_at: klotho_core::Tick,
+    /// Absolute start of the current WAIT, reconstructed from RiteAdvanced.
+    pub wait_at: klotho_core::Tick,
+    /// One-target action ledger: validated contact pending/consumed by its Rite.
+    pub contact_hit: bool,
+    /// Verified original player channel, zero for an unauthorised seed row.
+    pub contact_agency: u8,
     /// Program counter.
     pub pc: u16,
     /// Remaining WAIT ticks.
@@ -1065,6 +1073,10 @@ impl Projection {
                     Arc::make_mut(&mut self.rites).insert(
                         (i, *rite),
                         RiteMachine {
+                            contact_agency: 0,
+                            contact_hit: false,
+                            started_at: e.tick,
+                            wait_at: e.tick,
                             pc: 0,
                             wait_left: 0,
                             target: *target,
@@ -1081,6 +1093,9 @@ impl Projection {
             } => {
                 if let Some(i) = self.packed(*actor) {
                     if let Some(m) = Arc::make_mut(&mut self.rites).get_mut(&(i, *rite)) {
+                        if m.pc != *pc || m.wait_left == 0 || *wait_left > m.wait_left {
+                            m.wait_at = e.tick;
+                        }
                         m.pc = *pc;
                         m.wait_left = *wait_left;
                     }
@@ -1124,6 +1139,35 @@ impl Projection {
             TraceBody::Spawned { sigil, at, .. } => {
                 if self.insert_locus(*sigil, LocusKind::Relic).is_ok() {
                     let _ = self.set_pose(*sigil, *at);
+                }
+            }
+            TraceBody::MotionActionAuthorized {
+                actor,
+                rite,
+                instance,
+                channel,
+            } => {
+                if let Some(i) = self.packed(*actor) {
+                    if let Some(machine) = Arc::make_mut(&mut self.rites).get_mut(&(i, *rite)) {
+                        if machine.started_at == *instance {
+                            machine.contact_agency = *channel;
+                        }
+                    }
+                }
+            }
+            TraceBody::MotionContactAdmitted {
+                actor,
+                target,
+                rite,
+                instance,
+                ..
+            } => {
+                if let Some(i) = self.packed(*actor) {
+                    if let Some(machine) = Arc::make_mut(&mut self.rites).get_mut(&(i, *rite)) {
+                        if machine.started_at == *instance && machine.target == Some(*target) {
+                            machine.contact_hit = true;
+                        }
+                    }
                 }
             }
             TraceBody::SaveRequested

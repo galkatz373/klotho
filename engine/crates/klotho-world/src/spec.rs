@@ -18,6 +18,7 @@ use crate::view::WorldView;
 #[derive(Clone, Debug)]
 pub struct SpecDelta {
     proj: Projection,
+    written: std::collections::BTreeSet<Sigil>,
     events: Vec<TraceEvent>,
     epoch: Epoch,
     tick: Tick,
@@ -43,19 +44,46 @@ impl SpecDelta {
         &self.events
     }
 
+    /// Every locus touched by speculative physical or semantic writes.
+    pub fn write_loci(&self) -> impl Iterator<Item = Sigil> + '_ {
+        self.written.iter().copied()
+    }
+
     /// Apply an event to the spec projection and queue it.
     pub fn push(&mut self, e: TraceEvent) {
+        match &e.body {
+            TraceBody::MotionActionAuthorized { actor, .. }
+            | TraceBody::MotionContactAdmitted { actor, .. }
+            | TraceBody::RiteBegan { actor, .. }
+            | TraceBody::RiteAdvanced { actor, .. }
+            | TraceBody::RiteEnded { actor, .. } => {
+                self.written.insert(*actor);
+            }
+            TraceBody::QtyChanged { id, .. } => {
+                self.written.insert(*id);
+            }
+            TraceBody::RelAdd { a, b, .. } | TraceBody::RelDel { a, b, .. } => {
+                self.written.insert(*a);
+                self.written.insert(*b);
+            }
+            TraceBody::Spawned { sigil, .. } => {
+                self.written.insert(*sigil);
+            }
+            _ => {}
+        }
         self.proj.apply_event(&e);
         self.events.push(e);
     }
 
     /// Write pose on the spec (then typically [`Self::push`] a `PoseCommitted`).
     pub fn set_pose(&mut self, s: Sigil, p: PoseMm) -> Result<(), WorldError> {
+        self.written.insert(s);
         self.proj.set_pose(s, p)
     }
 
     /// Write vel columns on the spec.
     pub fn set_vel(&mut self, s: Sigil, vel: Vel3, yaw_rate: i32) -> Result<(), WorldError> {
+        self.written.insert(s);
         self.proj.set_vel(s, vel, yaw_rate)
     }
 
@@ -67,26 +95,31 @@ impl SpecDelta {
         pitch_rate: i32,
         roll_rate: i32,
     ) -> Result<(), WorldError> {
+        self.written.insert(s);
         self.proj.set_rates(s, yaw_rate, pitch_rate, roll_rate)
     }
 
     /// Write support on the spec.
     pub fn set_support(&mut self, s: Sigil, support: Option<Support>) -> Result<(), WorldError> {
+        self.written.insert(s);
         self.proj.set_support(s, support)
     }
 
     /// Write seat offset on the spec.
     pub fn set_attach_local(&mut self, s: Sigil, local: Option<IVec3>) -> Result<(), WorldError> {
+        self.written.insert(s);
         self.proj.set_attach_local(s, local)
     }
 
     /// Write island/sleep on the spec.
     pub fn set_island(&mut self, s: Sigil, island: u16, sleep: u16) -> Result<(), WorldError> {
+        self.written.insert(s);
         self.proj.set_island(s, island, sleep)
     }
 
     /// Write a quantity without a Trace event (tests / Conserve pre-read).
     pub fn set_qty(&mut self, s: Sigil, r: ResourceId, v: i32) -> Result<(), WorldError> {
+        self.written.insert(s);
         self.proj.set_qty(s, r, v)
     }
 
@@ -97,16 +130,19 @@ impl SpecDelta {
         a: AffordanceId,
         on: bool,
     ) -> Result<(), WorldError> {
+        self.written.insert(s);
         self.proj.set_affordance(s, a, on)
     }
 
     /// Write a `PHYS_REQ` column. Not a quantity.
     pub fn set_phys_req(&mut self, s: Sigil, req: PhysRequest) -> Result<(), WorldError> {
+        self.written.insert(s);
         self.proj.set_phys_req(s, req)
     }
 
     /// Drop a consumed `PHYS_REQ` row.
     pub fn clear_phys_req(&mut self, s: Sigil) -> Result<(), WorldError> {
+        self.written.insert(s);
         self.proj.clear_phys_req(s)
     }
 
@@ -117,21 +153,25 @@ impl SpecDelta {
 
     /// Relation write.
     pub fn add_rel(&mut self, a: Sigil, r: Rel, b: Sigil) -> Result<(), WorldError> {
+        self.written.extend([a, b]);
         self.proj.add_rel(a, r, b)
     }
 
     /// Relation delete.
     pub fn del_rel(&mut self, a: Sigil, r: Rel, b: Sigil) -> Result<(), WorldError> {
+        self.written.extend([a, b]);
         self.proj.del_rel(a, r, b)
     }
 
     /// Local hull.
     pub fn set_hull(&mut self, s: Sigil, local: AabbMm, id: BlobId) -> Result<(), WorldError> {
+        self.written.insert(s);
         self.proj.set_hull(s, local, id)
     }
 
     /// Patch a rite machine (WAIT channel, pc).
     pub fn put_rite(&mut self, actor: Sigil, rite: RiteId, m: RiteMachine) {
+        self.written.insert(actor);
         self.proj.put_rite(actor, rite, m);
     }
 
@@ -174,6 +214,7 @@ impl SpecDelta {
         Self {
             proj,
             events: Vec::new(),
+            written: std::collections::BTreeSet::new(),
             epoch,
             tick,
         }

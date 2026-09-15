@@ -85,6 +85,29 @@ impl ContactClaim {
     }
 }
 
+/// One exact semantic-track contact inside its actor's physical transaction.
+/// The first admission profile permits one bound target and one hit per action.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct MotionContact {
+    /// Actor whose resolved root carries this sweep.
+    pub actor: Sigil,
+    /// Exact action instance; a retry cannot attach to a later swing.
+    pub rite_instance: Tick,
+    /// Target bound by the active Rite.
+    pub target: Sigil,
+    /// Exact approved artifact, including its compatibility identity.
+    pub track: klotho_core::ContactTrack,
+    /// Swept channel index in the name-ordered artifact.
+    pub sweep: u8,
+    /// Authoritative interval in the active WAIT.
+    pub boundary: u16,
+    /// Narrow-phase temporal and segment sample that proves intersection.
+    pub witness: klotho_core::SweepSample,
+}
+
+/// Maximum semantic contacts per physical transaction.
+pub const MAX_MOTION_CONTACTS: usize = 8;
+
 /// Canon constraint participating in an island solve.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct ConstraintRef {
@@ -128,6 +151,8 @@ pub enum Proposal {
         bodies: Vec<BodyDelta>,
         /// Sorted gameplay-visible contact claims.
         contacts: Vec<ContactClaim>,
+        /// Sorted actor contacts; root rejection discards these too.
+        motion_contacts: Vec<MotionContact>,
         /// Sorted participating constraints.
         constraints: Vec<ConstraintRef>,
         /// Sorted break claims. Empty unless a threshold is crossed this tick.

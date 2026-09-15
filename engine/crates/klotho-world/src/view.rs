@@ -22,7 +22,7 @@ pub struct WorldView<'a> {
     pub(crate) canon: Option<&'a Canon>,
 }
 
-impl WorldView<'_> {
+impl<'a> WorldView<'a> {
     /// Wrap a projection at tick 0 (tests). Prefer [`Self::at`].
     #[must_use]
     pub fn of(proj: &Projection) -> WorldView<'_> {
@@ -47,7 +47,7 @@ impl WorldView<'_> {
     }
 
     /// Wrap a live or snapshotted Projection with its frozen Canon.
-    pub(crate) fn with_canon<'a>(
+    pub(crate) fn with_canon(
         proj: &'a Projection,
         canon: &'a Canon,
         epoch: Epoch,
@@ -71,6 +71,13 @@ impl WorldView<'_> {
     #[must_use]
     pub fn tick(self) -> Tick {
         self.tick
+    }
+
+    /// Rebind the read-only view to the next authoritative boundary. Runtime
+    /// job proposers use this before `CommitKernel::step` advances the clock.
+    #[must_use]
+    pub fn at_tick(self, tick: Tick) -> WorldView<'a> {
+        Self { tick, ..self }
     }
 
     /// Loci that currently hold `a`.
@@ -280,8 +287,59 @@ impl WorldView<'_> {
         });
         Some(klotho_core::CharacterDrive {
             actor: s,
-            root: policy.sample(self.tick(), moving, pose.yaw),
+            root: if self.contact_window(s).is_some() {
+                let track = self.contact_track(s)?;
+                let i = usize::from(self.contact_boundary(s)?);
+                klotho_core::rotate(
+                    track.roots[i + 1].wrapping_sub(track.roots[i]),
+                    pose.yaw,
+                    pose.pitch,
+                    pose.roll,
+                )
+            } else {
+                policy.sample(self.tick(), moving, pose.yaw)
+            },
         })
+    }
+
+    /// Frozen semantic contact artifact for an actor.
+    pub fn contact_track(&self, actor: Sigil) -> Option<&klotho_core::ContactTrack> {
+        self.canon?.contact_tracks.get(&actor)
+    }
+
+    /// Exact WAIT row for the artifact, including its canonical resume PC.
+    pub fn contact_window(&self, actor: Sigil) -> Option<(RiteId, crate::RiteMachine)> {
+        let track = self.contact_track(actor)?;
+        let rite = self
+            .canon?
+            .rites
+            .iter()
+            .find(|r| r.name.as_str() == track.rite)?;
+        let index = rite
+            .chunk
+            .instrs
+            .iter()
+            .position(|i| i.pc == track.wait_pc)?;
+        let machine = self.rite(actor, rite.id)?;
+        (machine.contact_agency == track.channel
+            && !machine.contact_hit
+            && machine.pc == rite.chunk.instrs.get(index + 1)?.pc
+            && machine.wait_left > 0
+            && machine.wait_left <= track.wait_ticks
+            && self.tick.0.saturating_sub(machine.wait_at.0) <= u64::from(track.wait_ticks)
+            && machine.wait_ch.is_some_and(|c| c.as_u8() == track.channel))
+        .then_some((rite.id, machine))
+    }
+
+    /// Current authoritative sample interval; skipped ticks never extend it.
+    pub fn contact_boundary(&self, actor: Sigil) -> Option<u16> {
+        let (_, machine) = self.contact_window(actor)?;
+        Some(
+            self.tick
+                .0
+                .saturating_sub(machine.wait_at.0)
+                .saturating_sub(1) as u16,
+        )
     }
 
     /// Canon-bound constraint, if any.
@@ -313,13 +371,31 @@ impl WorldView<'_> {
     /// Active rite, if any.
     #[must_use]
     pub fn first_rite(&self, s: Sigil) -> Option<(RiteId, crate::RiteMachine)> {
-        self.proj.first_rite(s)
+        let (id, _) = self.proj.first_rite(s)?;
+        Some((id, self.rite(s, id)?))
     }
 
     /// Named rite row.
     #[must_use]
     pub fn rite(&self, actor: Sigil, rite: RiteId) -> Option<crate::RiteMachine> {
-        self.proj.rite(actor, rite)
+        let mut machine = self.proj.rite(actor, rite)?;
+        if machine.wait_ch.is_none() && machine.wait_left > 0 {
+            if let Some(code) = self
+                .canon
+                .and_then(|c| c.rites.iter().find(|r| r.id == rite))
+            {
+                if let Some(index) = code.chunk.instrs.iter().position(|i| i.pc == machine.pc) {
+                    if let Some(previous) =
+                        index.checked_sub(1).and_then(|i| code.chunk.instrs.get(i))
+                    {
+                        if let klotho_ir::RiteOp::Wait(_, channel) = previous.op {
+                            machine.wait_ch = channel;
+                        }
+                    }
+                }
+            }
+        }
+        Some(machine)
     }
 
     /// Knows bit. Missing mind or fact is `false`.

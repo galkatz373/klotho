@@ -14,6 +14,7 @@
 mod admit;
 mod kernel;
 mod laws;
+mod motion_contact;
 mod partition;
 mod proposal;
 mod rite;
@@ -23,12 +24,13 @@ pub use admit::{AdmitBuf, IslandProposer, SyncProposer};
 pub use kernel::{CommitKernel, EpochApplyError};
 pub use klotho_core::{KernelFault, RejectReason};
 pub use klotho_trace::TraceDelta;
+pub use motion_contact::sample_motion_contacts;
 pub use partition::{Partition, partition_islands};
 pub use proposal::{
-    BodyDelta, ConstraintBreakClaim, ConstraintRef, ContactClaim, MAX_PHYS_ISLAND_BODIES,
-    MAX_PHYS_ISLAND_BREAKS, MAX_PHYS_ISLAND_CHILDREN, MAX_PHYS_ISLAND_CONSTRAINTS,
-    MAX_PHYS_ISLAND_CONTACTS, MAX_PHYS_ISLAND_MEMBERS, MAX_PHYS_ISLAND_WRITE_LOCI, Proposal,
-    ResidencyOp,
+    BodyDelta, ConstraintBreakClaim, ConstraintRef, ContactClaim, MAX_MOTION_CONTACTS,
+    MAX_PHYS_ISLAND_BODIES, MAX_PHYS_ISLAND_BREAKS, MAX_PHYS_ISLAND_CHILDREN,
+    MAX_PHYS_ISLAND_CONSTRAINTS, MAX_PHYS_ISLAND_CONTACTS, MAX_PHYS_ISLAND_MEMBERS,
+    MAX_PHYS_ISLAND_WRITE_LOCI, MotionContact, Proposal, ResidencyOp,
 };
 
 /// PlaceSnap rows applied on a residency load (`TraceBody::PlaceLoaded.n`).
@@ -356,6 +358,7 @@ mod tests {
             members,
             bodies: vec![body_delta(mover, pose)],
             contacts: Vec::new(),
+            motion_contacts: Vec::new(),
             constraints: Vec::new(),
             breaks: Vec::new(),
         }
@@ -698,6 +701,7 @@ mod tests {
                 body_delta(b, PoseMm::new(Mm(1_100), Mm(0), Mm(0), YawMd::ZERO)),
             ],
             contacts: Vec::new(),
+            motion_contacts: Vec::new(),
             constraints: Vec::new(),
             breaks: Vec::new(),
         };
@@ -754,6 +758,7 @@ mod tests {
                 members,
                 bodies,
                 contacts: Vec::new(),
+                motion_contacts: Vec::new(),
                 constraints: Vec::new(),
                 breaks: Vec::new(),
             });
@@ -795,6 +800,7 @@ mod tests {
                 island: 0,
                 members: vec![a],
                 bodies: vec![body],
+                motion_contacts: Vec::new(),
                 contacts: if stale_tick {
                     Vec::new()
                 } else {
@@ -909,6 +915,7 @@ mod tests {
                 members: vec![mover],
                 bodies: vec![body],
                 contacts: Vec::new(),
+                motion_contacts: Vec::new(),
                 constraints: Vec::new(),
                 breaks: Vec::new(),
             });
@@ -956,6 +963,7 @@ mod tests {
             members: vec![mover],
             bodies: vec![body],
             contacts: Vec::new(),
+            motion_contacts: Vec::new(),
             constraints: Vec::new(),
             breaks: Vec::new(),
         });
@@ -992,6 +1000,7 @@ mod tests {
             members: vec![a, b],
             bodies: vec![body_a, body_b],
             contacts: vec![aabb_only],
+            motion_contacts: Vec::new(),
             constraints: Vec::new(),
             breaks: Vec::new(),
         });
@@ -1071,6 +1080,7 @@ mod tests {
             members: vec![long, stub],
             bodies: vec![body_delta(long, pa0), body_delta(stub, pb)],
             contacts: vec![claim],
+            motion_contacts: Vec::new(),
             constraints: Vec::new(),
             breaks: Vec::new(),
         });
@@ -1109,6 +1119,7 @@ mod tests {
             island: 0,
             members: vec![long, stub],
             bodies: vec![body_delta(long, pa90), body_delta(stub, pb)],
+            motion_contacts: Vec::new(),
             contacts: vec![ContactClaim {
                 a: long,
                 b: stub,
@@ -1294,6 +1305,7 @@ mod tests {
             members: vec![a, b],
             bodies: vec![body_delta(a, start_a), body_delta(b, start_b)],
             contacts: Vec::new(),
+            motion_contacts: Vec::new(),
             constraints: vec![crate::ConstraintRef {
                 constraint: cid,
                 binding,
@@ -1324,6 +1336,7 @@ mod tests {
             members: vec![a],
             bodies: vec![body_delta(a, start)],
             contacts: Vec::new(),
+            motion_contacts: Vec::new(),
             constraints: vec![crate::ConstraintRef {
                 constraint: relic(9),
                 binding: hull_id(7),

@@ -401,6 +401,7 @@ mod tests {
                 support: None,
             }],
             contacts: Vec::new(),
+            motion_contacts: Vec::new(),
             constraints: Vec::new(),
             breaks: Vec::new(),
         });
@@ -932,3 +933,6 @@ mod tests {
 
 #[cfg(test)]
 mod character_tests;
+
+#[cfg(test)]
+mod contact_tests;

@@ -12,8 +12,8 @@ use crate::world::WorldSnapshot;
 
 /// Snapshot blob magic.
 pub const SNAP_MAGIC: [u8; 4] = *b"KSNP";
-/// Snapshot blob version. v1 has no constraint table; v2 appends one.
-pub const SNAP_VERSION: u8 = 2;
+/// Snapshot blob version. v1 has no constraint table; v2 appends one; v3 preserves action identity, WAIT clock and contact ledger.
+pub const SNAP_VERSION: u8 = 3;
 /// Oldest readable snapshot version.
 pub const SNAP_VERSION_MIN: u8 = 1;
 /// Constraint-state rows in one snapshot.
@@ -246,7 +246,7 @@ fn decode_parts(bytes: &[u8]) -> Result<SnapParts, SnapError> {
     let n = take_capped_count(&mut rest, MAX_SNAP_ROWS)?;
     let mut rows = Vec::new();
     for _ in 0..n {
-        rows.push(decode_row(&mut rest)?);
+        rows.push(decode_row(&mut rest, version)?);
     }
     let mut constraints = Vec::new();
     if version >= 2 {
@@ -335,6 +335,10 @@ fn encode_row(buf: &mut Vec<u8>, row: &SnapRow) -> Result<(), SnapError> {
         put_u16(buf, *rite);
         put_u16(buf, m.pc);
         put_u16(buf, m.wait_left);
+        buf.extend_from_slice(&m.started_at.0.to_le_bytes());
+        buf.extend_from_slice(&m.wait_at.0.to_le_bytes());
+        buf.push(u8::from(m.contact_hit));
+        buf.push(m.contact_agency);
         match m.target {
             None => buf.push(0),
             Some(t) => {
@@ -364,7 +368,7 @@ fn encode_row(buf: &mut Vec<u8>, row: &SnapRow) -> Result<(), SnapError> {
     Ok(())
 }
 
-fn decode_row(rest: &mut &[u8]) -> Result<SnapRow, SnapError> {
+fn decode_row(rest: &mut &[u8], version: u8) -> Result<SnapRow, SnapError> {
     let sigil = Sigil::from_raw(take_u128(rest)?);
     let kind = LocusKind::from_u8(take_u8(rest)?).ok_or(SnapError::Kind)?;
     let mut row = SnapRow::new(sigil, kind);
@@ -423,6 +427,34 @@ fn decode_row(rest: &mut &[u8]) -> Result<SnapRow, SnapError> {
         let rite = take_u16(rest)?;
         let pc = take_u16(rest)?;
         let wait_left = take_u16(rest)?;
+        let started_at = if version >= 3 {
+            klotho_core::Tick(take_u64(rest)?)
+        } else {
+            klotho_core::Tick::ZERO
+        };
+        let wait_at = if version >= 3 {
+            klotho_core::Tick(take_u64(rest)?)
+        } else {
+            klotho_core::Tick::ZERO
+        };
+        let contact_hit = if version >= 3 {
+            match take_u8(rest)? {
+                0 => false,
+                1 => true,
+                _ => return Err(SnapError::Kind),
+            }
+        } else {
+            false
+        };
+        let contact_agency = if version >= 3 {
+            let v = take_u8(rest)?;
+            if v > 4 {
+                return Err(SnapError::Kind);
+            }
+            v
+        } else {
+            0
+        };
         let target = match take_u8(rest)? {
             0 => None,
             1 => Some(Sigil::from_raw(take_u128(rest)?)),
@@ -435,6 +467,10 @@ fn decode_row(rest: &mut &[u8]) -> Result<SnapRow, SnapError> {
         row.rites.push((
             rite,
             RiteMachine {
+                contact_agency,
+                contact_hit,
+                started_at,
+                wait_at,
                 pc,
                 wait_left,
                 target,

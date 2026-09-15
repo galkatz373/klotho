@@ -943,6 +943,21 @@ fn emit(
         residuals_mm.push(residual);
     }
     let (constraints, breaks) = emit_refs(joints);
+    let motion_contacts = match klotho_motion::Motion::contacts(view, &deltas) {
+        Ok(contacts) => contacts,
+        Err(_) => {
+            return SolveOut {
+                proposals: Vec::new(),
+                residuals_mm,
+                rejected_non_finite,
+                rejected_character_geometry: deltas
+                    .iter()
+                    .filter(|b| view.contact_window(b.mover).is_some())
+                    .map(|b| b.mover)
+                    .collect(),
+            };
+        }
+    };
     let proposals = if rejected_non_finite.is_empty() && !deltas.is_empty() {
         vec![Proposal::PhysIsland {
             epoch: view.epoch(),
@@ -951,6 +966,7 @@ fn emit(
             members,
             bodies: deltas,
             contacts: Vec::new(),
+            motion_contacts,
             constraints,
             breaks,
         }]

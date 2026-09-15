@@ -25,6 +25,8 @@ const TAG_PLACE_LOADED: u8 = 13;
 const TAG_PLACE_EVICTED: u8 = 14;
 const TAG_SPAWNED: u8 = 15;
 const TAG_DESPAWNED: u8 = 16;
+const TAG_MOTION_CONTACT: u8 = 17;
+const TAG_MOTION_AUTHORIZED: u8 = 18;
 
 /// Encode one event to canonical LE bytes.
 #[must_use]
@@ -115,6 +117,36 @@ pub fn encode_event(e: &TraceEvent) -> Vec<u8> {
             b.u16_le(*kind);
             b.sigil(*a);
             b.opt_sigil(*obj);
+        }
+        TraceBody::MotionActionAuthorized {
+            actor,
+            rite,
+            instance,
+            channel,
+        } => {
+            b.u8(TAG_MOTION_AUTHORIZED);
+            b.sigil(*actor);
+            b.u16_le(*rite);
+            b.u64_le(instance.0);
+            b.u8(*channel);
+        }
+        TraceBody::MotionContactAdmitted {
+            actor,
+            instrument,
+            target,
+            rite,
+            instance,
+            channel,
+            boundary,
+        } => {
+            b.u8(TAG_MOTION_CONTACT);
+            b.sigil(*actor);
+            b.bytes.extend_from_slice(&instrument.0);
+            b.sigil(*target);
+            b.u16_le(*rite);
+            b.u64_le(instance.0);
+            b.u8(*channel);
+            b.u16_le(*boundary);
         }
         TraceBody::Uttered { speaker, fact_ids } => {
             b.u8(TAG_UTTERED);
@@ -235,6 +267,23 @@ pub fn decode_event(bytes: &[u8]) -> Result<TraceEvent, TraceError> {
             kind: r.u16_le()?,
             a: r.sigil()?,
             b: r.opt_sigil()?,
+        },
+        TAG_MOTION_AUTHORIZED => TraceBody::MotionActionAuthorized {
+            actor: r.sigil()?,
+            rite: r.u16_le()?,
+            instance: Tick(r.u64_le()?),
+            channel: r.u8()?,
+        },
+        TAG_MOTION_CONTACT => TraceBody::MotionContactAdmitted {
+            actor: r.sigil()?,
+            instrument: klotho_core::Hash(
+                r.take(32)?.try_into().map_err(|_| TraceError::BadEvent)?,
+            ),
+            target: r.sigil()?,
+            rite: r.u16_le()?,
+            instance: Tick(r.u64_le()?),
+            channel: r.u8()?,
+            boundary: r.u16_le()?,
         },
         TAG_UTTERED => {
             let speaker = r.sigil()?;
@@ -502,7 +551,7 @@ impl Reader<'_> {
 
 #[cfg(test)]
 mod tests {
-    use klotho_core::{LocusKind, Mm, PoseMm, YawMd};
+    use klotho_core::{Hash, LocusKind, Mm, PoseMm, YawMd};
 
     use super::*;
     use crate::event::{PoseReason, ProposalKind, RelTag, RiteEnd, TraceBody};
@@ -711,6 +760,36 @@ mod tests {
         assert_eq!(decode_event(&bytes), Err(TraceError::BadEvent));
         bytes[last] = 99;
         assert_eq!(decode_event(&bytes), Err(TraceError::BadEvent));
+    }
+
+    #[test]
+    fn motion_contact_and_authorization_round_trip() {
+        let events = [
+            TraceEvent::new(
+                Tick(7),
+                TraceBody::MotionActionAuthorized {
+                    actor: actor(1),
+                    rite: 3,
+                    instance: Tick(6),
+                    channel: 2,
+                },
+            ),
+            TraceEvent::new(
+                Tick(8),
+                TraceBody::MotionContactAdmitted {
+                    actor: actor(1),
+                    instrument: Hash::from_bytes([9; 32]),
+                    target: actor(2),
+                    rite: 3,
+                    instance: Tick(6),
+                    channel: 2,
+                    boundary: 1,
+                },
+            ),
+        ];
+        for event in events {
+            assert_eq!(decode_event(&encode_event(&event)).unwrap(), event);
+        }
     }
 
     #[test]

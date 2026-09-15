@@ -157,6 +157,7 @@ fn phys_island(
             support: None,
         }],
         contacts: Vec::new(),
+        motion_contacts: Vec::new(),
         constraints: Vec::new(),
         breaks: Vec::new(),
     }

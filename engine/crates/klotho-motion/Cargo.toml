@@ -10,6 +10,7 @@ readme = false
 publish = false
 
 [dependencies]
+klotho-geom.workspace = true
 klotho-anim.workspace = true
 klotho-commit.workspace = true
 klotho-core.workspace = true

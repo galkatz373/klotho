@@ -121,3 +121,12 @@ impl ContactTrack {
             })
     }
 }
+
+/// Reproducible narrow-phase sample in a quantized semantic capsule interval.
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct SweepSample {
+    /// Temporal sample index; denominator is derived from Canon geometry.
+    pub time: u16,
+    /// Capsule centre-line sample index; denominator is derived from geometry.
+    pub segment: u16,
+}

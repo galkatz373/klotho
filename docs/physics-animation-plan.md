@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Active — PHYS-A01–A09 landed; PHYS-A10 next |
+| Status | Active — PHYS-A01–A10 landed; PHYS-A11 next |
 | Date | 2026-09-15 |
 | Scope | Production 3D physics, character resolution, vehicles, destruction, and animation-driven contact |
 | Preserves | Canon + Intent + Trace + Projection; K21 atomic commit; crate firewalls |
@@ -13,7 +13,7 @@ Klotho needs more than a stronger solver. It needs physical interaction to be au
 
 > Canon defines physical meaning and authored constraints. Physics and Motion derive bounded proposals. `CommitKernel` atomically admits them. Trace records gameplay consequences. Manifest presents the result.
 
-The landed `klotho-phys` establishes the correct authority boundary and proves gravity, oriented contact, stacking, character drive, animation-contact admission, and Canon-bound four-wheel vehicle rigs. It does not yet prove breakable structures or the combined Anvil slice.
+The landed `klotho-phys` establishes the correct authority boundary and proves gravity, oriented contact, stacking, character drive, animation-contact admission, Canon-bound four-wheel vehicle rigs, and admitted constraint breaks with fragment caps. It does not yet prove the combined Anvil slice.
 
 Because the existing AAA sequence is marked complete, this work starts with an HLD amendment and a new PR series. It must not silently expand the claims of AAA-08 through AAA-10.
 
@@ -336,7 +336,7 @@ integer geometry against occupancy, including oriented boxes and heightfield
 ramps. Surface friction comes from the occupancy material. Tire caches stay
 disposable. Unbound Driveable relics keep the legacy one-shot Δv fold, so
 original Drift goldens are unchanged. Presented wheel rate derives from the
-admitted chassis velocity and Canon radius. Breakable structures remain PHYS-A10.
+admitted chassis velocity and Canon radius. Breakable structures are landed by PHYS-A10.
 
 ### Phase 7 gates
 
@@ -360,7 +360,14 @@ Canonical breakable structures use relations and constraints:
 
 A presentation fracture may never determine whether a passage is open, an object is destroyed, or a Law can proceed.
 
-### Phase 8 gates
+PHYS-A10 admits `ConstraintBreakClaim` as the semantic break. The kernel RelDels
+`PartOf` between the joint endpoints, records one `ConstraintBroken` evidence
+event, and spawns Canon `fragments` (0..=64) as Fragment Relics with hulls in
+the same speculative write set. Global live-fragment count is 128, matching
+Ember; a tighter Cap Law still rejects the island. Cosmetic chips extract as
+Manifest TTL `OneShotMesh` with no Sigil. Anvil capture/overlay remains PHYS-A11.
+
+### Phase 8 gates — landed
 
 - Below-threshold impulses do not break the constraint.
 - Above-threshold impulses produce one semantic break.
@@ -460,7 +467,7 @@ Each PR leaves the tree green and preserves existing non-Phys goldens.
 9. **PHYS-A09 — Vehicle rigs — landed**
    Add chassis, suspension, tires, surface friction, `PhysRequest` controls, and expanded bounded Drift regressions. Unbound Driveable relics keep the legacy PHYS_REQ Δv fold so original Drift goldens stay put.
 
-10. **PHYS-A10 — Breakable structures**
+10. **PHYS-A10 — Breakable structures — landed**
     Admit constraint breaks, authoritative fragment caps, and Manifest-only debris.
 
 11. **PHYS-A11 — Anvil and production diagnostics**

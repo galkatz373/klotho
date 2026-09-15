@@ -933,6 +933,9 @@ mod tests {
 }
 
 #[cfg(test)]
+mod break_tests;
+
+#[cfg(test)]
 mod character_tests;
 
 #[cfg(test)]

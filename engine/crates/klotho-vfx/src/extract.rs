@@ -15,6 +15,8 @@ pub const RECIPE_IMPACT: &str = "vfx.decal.impact";
 pub const RECIPE_SCORCH: &str = "vfx.decal.scorch";
 /// Recipe key for `Emitted` one-shot meshes.
 pub const RECIPE_BURST: &str = "vfx.oneshot.burst";
+/// Recipe key for constraint-break chips. Presentation TTL only; no Sigil.
+pub const RECIPE_DEBRIS: &str = "vfx.oneshot.debris";
 /// Recipe key for GPU particle emitters. Presentation only.
 pub const RECIPE_PARTICLE: &str = "vfx.particle.burst";
 /// Recipe key for GPU ribbons. Presentation only.
@@ -236,6 +238,10 @@ fn cues(body: &TraceBody) -> Vec<Cue> {
                 key: RECIPE_PARTICLE,
             },
         ],
+        TraceBody::ConstraintBroken { a, .. } => vec![Cue::OneShot {
+            pose: CuePos::Locus(*a),
+            key: RECIPE_DEBRIS,
+        }],
         _ => Vec::new(),
     }
 }
@@ -312,6 +318,7 @@ mod tests {
         m.insert(RECIPE_IMPACT.into(), blob(1));
         m.insert(RECIPE_SCORCH.into(), blob(2));
         m.insert(RECIPE_BURST.into(), blob(3));
+        m.insert(RECIPE_DEBRIS.into(), blob(4));
         m
     }
 
@@ -338,6 +345,32 @@ mod tests {
         assert!(vis.decals.is_empty());
         assert!(vis.one_shots.is_empty());
         assert!(vis.clusters.is_empty());
+    }
+
+    #[test]
+    fn constraint_break_emits_identityless_debris() {
+        let a = relic(1);
+        let vis = extract(&[TraceEvent::new(
+            Tick(1),
+            TraceBody::ConstraintBroken {
+                constraint: relic(9),
+                a,
+                b: relic(2),
+                impulse: 40,
+                fragments: 0,
+            },
+        )]);
+        assert_eq!(vis.one_shots.len(), 1);
+        assert_eq!(vis.one_shots[0].blob, blob(4));
+        assert_eq!(vis.one_shots[0].pose, pose_at(100));
+        assert!(vis.decals.is_empty());
+        let OneShotMesh {
+            blob: _,
+            pose: _,
+            material: _,
+            born: _,
+            ttl_ticks: _,
+        } = vis.one_shots[0];
     }
 
     #[test]

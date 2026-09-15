@@ -679,6 +679,8 @@ pub struct ConstraintPhysics {
     pub limit_md: i32,
     /// Impulse that produces a break. Zero is unbreakable.
     pub break_impulse: i32,
+    /// Authoritative physical fragments to spawn on an admitted break, 0..=64.
+    pub fragments: u8,
     /// Canonical binding observed by the proposer and kernel.
     pub binding: BlobId,
 }
@@ -696,6 +698,7 @@ impl Default for ConstraintPhysics {
             stiffness_permille: 1_000,
             limit_md: 0,
             break_impulse: 0,
+            fragments: 0,
             binding: BlobId::ZERO,
         }
     }
@@ -711,8 +714,14 @@ impl ConstraintPhysics {
             && self.stiffness_permille <= 2_000
             && self.limit_md >= 0
             && self.break_impulse >= 0
+            && self.fragments <= MAX_COLLAPSE_FRAGMENTS
     }
 }
+
+/// Per-collapse cap on authoritative physical fragments (K41 / Ember).
+pub const MAX_COLLAPSE_FRAGMENTS: u8 = 64;
+/// Global cap on live Fragment-marked loci. Extra chips are Manifest-only.
+pub const MAX_FRAGMENTS_GLOBAL: u16 = 128;
 
 /// Admitted constraint row. Solver caches are illegal; this is Projection.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Serialize, Deserialize)]
@@ -922,6 +931,11 @@ mod tests {
         assert!(!ok.is_valid());
         ok.a = a;
         ok.stiffness_permille = 2_001;
+        assert!(!ok.is_valid());
+        ok.stiffness_permille = 1_000;
+        ok.fragments = MAX_COLLAPSE_FRAGMENTS;
+        assert!(ok.is_valid());
+        ok.fragments = MAX_COLLAPSE_FRAGMENTS + 1;
         assert!(!ok.is_valid());
         assert!(ShapeKind::Heightfield.is_static_occupancy());
         assert!(!ShapeKind::Convex.is_static_occupancy());

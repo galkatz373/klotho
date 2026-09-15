@@ -12,6 +12,7 @@
 #![warn(missing_docs)]
 
 mod admit;
+mod breakage;
 mod kernel;
 mod laws;
 mod motion_contact;
@@ -46,9 +47,9 @@ mod tests {
 
     use klotho_canon::cook_diffs;
     use klotho_core::{
-        AabbMm, BlobId, BodyPhysics, Budget, Epoch, Hash, HullWitness, IVec3, LocusKind, Mm,
-        NO_ISLAND, PlayerId, PoseMm, QuantizedContact, ResourceId, ShapeKind, Sigil, Tick, Vel3,
-        YawMd, rotate_xz,
+        AabbMm, BlobId, BodyPhysics, Budget, Epoch, Hash, HullWitness, IVec3, LocusKind,
+        MAX_FRAGMENTS_GLOBAL, Mm, NO_ISLAND, PlayerId, PoseMm, QuantizedContact, ResourceId,
+        ShapeKind, Sigil, Tick, Vel3, YawMd, rotate_xz,
     };
     use klotho_ir::{
         Agency, Analog, CanonDiff, Channel, IntentTarget, MindIntent, PlayerIntent, Rel, Verb,
@@ -1276,6 +1277,61 @@ mod tests {
         assert_eq!(k.world().view().pose(s).unwrap().x, Mm(10));
     }
 
+    fn fragment_canon(cap: u16, fragments: u8) -> klotho_canon::Canon {
+        let src = format!(
+            r#"[
+            AddAffordance(Affordance(id: "Fragment", requires: [], grants: [], conflicts: [])),
+            AddLaw(Law(id: "fragment.cap", when: EqVerb(Fire), body: Cap(mark: Affordance(Self, "Fragment"), n: {cap}, require_rel: None)))
+        ]"#
+        );
+        let mut canon = cook(&src);
+        let a = relic(1);
+        let b = relic(2);
+        assert!(canon.bind_constraint(
+            relic(9),
+            klotho_core::ConstraintPhysics {
+                a,
+                b,
+                binding: hull_id(7),
+                break_impulse: 10,
+                fragments,
+                ..klotho_core::ConstraintPhysics::default()
+            }
+        ));
+        canon
+    }
+
+    fn ingest_break(k: &mut CommitKernel, impulse: i32, with_break: bool) {
+        let a = relic(1);
+        let b = relic(2);
+        let cid = relic(9);
+        let start_a = PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd::ZERO);
+        let start_b = PoseMm::new(Mm(400), Mm(0), Mm(0), YawMd::ZERO);
+        let tick = k.world().tick().saturating_add(1);
+        k.ingest(Proposal::PhysIsland {
+            epoch: Epoch::ZERO,
+            tick,
+            island: 0,
+            members: vec![a, b],
+            bodies: vec![body_delta(a, start_a), body_delta(b, start_b)],
+            contacts: Vec::new(),
+            motion_contacts: Vec::new(),
+            constraints: vec![crate::ConstraintRef {
+                constraint: cid,
+                binding: hull_id(7),
+                impulse,
+            }],
+            breaks: if with_break {
+                vec![crate::ConstraintBreakClaim {
+                    constraint: cid,
+                    impulse,
+                }]
+            } else {
+                Vec::new()
+            },
+        });
+    }
+
     #[test]
     fn phys_island_admits_valid_constraint_and_break() {
         let a = relic(1);
@@ -1298,29 +1354,291 @@ mod tests {
         let start_b = PoseMm::new(Mm(400), Mm(0), Mm(0), YawMd::ZERO);
         plant_mover(&mut k, a, start_a, 0, 0);
         plant_mover(&mut k, b, start_b, 0, 0);
-        k.ingest(Proposal::PhysIsland {
-            epoch: Epoch::ZERO,
-            tick: Tick(1),
-            island: 0,
-            members: vec![a, b],
-            bodies: vec![body_delta(a, start_a), body_delta(b, start_b)],
-            contacts: Vec::new(),
-            motion_contacts: Vec::new(),
-            constraints: vec![crate::ConstraintRef {
-                constraint: cid,
-                binding,
-                impulse: 12,
-            }],
-            breaks: vec![crate::ConstraintBreakClaim {
-                constraint: cid,
-                impulse: 12,
-            }],
-        });
+        k.world_mut().add_rel(a, Rel::PartOf, b).unwrap();
+        ingest_break(&mut k, 12, true);
         let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
         assert!(d.rejects.is_empty(), "{d:?}");
         let state = k.world().view().constraint_state(cid).unwrap();
         assert!(state.broken);
         assert_eq!(state.impulse, 12);
+        assert!(!k.world().view().has_rel(a, Rel::PartOf, b));
+        assert!(
+            d.events.iter().any(|e| matches!(
+                e.body,
+                TraceBody::ConstraintBroken {
+                    constraint,
+                    fragments: 0,
+                    ..
+                } if constraint == cid
+            )),
+            "{d:?}"
+        );
+        assert_eq!(
+            d.events
+                .iter()
+                .filter(|e| matches!(e.body, TraceBody::ConstraintBroken { .. }))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn phys_island_rejects_below_threshold_break_claim() {
+        let a = relic(1);
+        let b = relic(2);
+        let cid = relic(9);
+        let mut canon = cook("[]");
+        assert!(canon.bind_constraint(
+            cid,
+            klotho_core::ConstraintPhysics {
+                a,
+                b,
+                binding: hull_id(7),
+                break_impulse: 10,
+                ..klotho_core::ConstraintPhysics::default()
+            }
+        ));
+        let mut k = CommitKernel::new(klotho_world::World::new(Arc::new(canon), Hash::ZERO));
+        let start_a = PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd::ZERO);
+        plant_mover(&mut k, a, start_a, 0, 0);
+        plant_mover(
+            &mut k,
+            b,
+            PoseMm::new(Mm(400), Mm(0), Mm(0), YawMd::ZERO),
+            0,
+            0,
+        );
+        k.world_mut().add_rel(a, Rel::PartOf, b).unwrap();
+        ingest_break(&mut k, 9, true);
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert_eq!(
+            d.rejects,
+            vec![(ProposalKind::Phys, RejectReason::WitnessMismatch)]
+        );
+        assert!(k.world().view().has_rel(a, Rel::PartOf, b));
+        assert!(k.world().view().constraint_state(cid).is_none());
+        assert!(d.events.is_empty());
+    }
+
+    #[test]
+    fn phys_island_hold_below_threshold_keeps_constraint() {
+        let a = relic(1);
+        let b = relic(2);
+        let cid = relic(9);
+        let mut canon = cook("[]");
+        assert!(canon.bind_constraint(
+            cid,
+            klotho_core::ConstraintPhysics {
+                a,
+                b,
+                binding: hull_id(7),
+                break_impulse: 10,
+                ..klotho_core::ConstraintPhysics::default()
+            }
+        ));
+        let mut k = CommitKernel::new(klotho_world::World::new(Arc::new(canon), Hash::ZERO));
+        plant_mover(
+            &mut k,
+            a,
+            PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd::ZERO),
+            0,
+            0,
+        );
+        plant_mover(
+            &mut k,
+            b,
+            PoseMm::new(Mm(400), Mm(0), Mm(0), YawMd::ZERO),
+            0,
+            0,
+        );
+        k.world_mut().add_rel(a, Rel::PartOf, b).unwrap();
+        ingest_break(&mut k, 9, false);
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(d.rejects.is_empty(), "{d:?}");
+        let state = k.world().view().constraint_state(cid).unwrap();
+        assert!(!state.broken);
+        assert!(k.world().view().has_rel(a, Rel::PartOf, b));
+        assert!(
+            !d.events
+                .iter()
+                .any(|e| matches!(e.body, TraceBody::ConstraintBroken { .. }))
+        );
+    }
+
+    #[test]
+    fn phys_island_spawns_authoritative_fragments_and_respects_caps() {
+        let a = relic(1);
+        let b = relic(2);
+        let mut k = CommitKernel::new(klotho_world::World::new(
+            Arc::new(fragment_canon(128, 3)),
+            Hash::ZERO,
+        ));
+        plant_mover(
+            &mut k,
+            a,
+            PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd::ZERO),
+            0,
+            0,
+        );
+        plant_mover(
+            &mut k,
+            b,
+            PoseMm::new(Mm(400), Mm(0), Mm(0), YawMd::ZERO),
+            0,
+            0,
+        );
+        let before = k.world().view().loci().count();
+        ingest_break(&mut k, 12, true);
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(d.rejects.is_empty(), "{d:?}");
+        let mark = k.canon().affordance_id("Fragment").unwrap();
+        let spawned: Vec<_> = k
+            .world()
+            .view()
+            .loci()
+            .filter(|&s| k.world().view().has_affordance(s, mark))
+            .collect();
+        assert_eq!(spawned.len(), 3);
+        assert_eq!(k.world().view().loci().count(), before + 3);
+        for s in spawned {
+            assert!(k.world().view().hull(s).is_some(), "{s:?}");
+            assert_eq!(
+                k.world().view().island(s).map(|(id, _)| id),
+                Some(NO_ISLAND)
+            );
+        }
+        assert_eq!(
+            d.events
+                .iter()
+                .filter(|e| matches!(e.body, TraceBody::Spawned { .. }))
+                .count(),
+            3
+        );
+    }
+
+    #[test]
+    fn phys_island_fragment_cap_law_rejects_and_rolls_back() {
+        let a = relic(1);
+        let b = relic(2);
+        let mut k = CommitKernel::new(klotho_world::World::new(
+            Arc::new(fragment_canon(2, 3)),
+            Hash::ZERO,
+        ));
+        plant_mover(
+            &mut k,
+            a,
+            PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd::ZERO),
+            0,
+            0,
+        );
+        plant_mover(
+            &mut k,
+            b,
+            PoseMm::new(Mm(400), Mm(0), Mm(0), YawMd::ZERO),
+            0,
+            0,
+        );
+        k.world_mut().add_rel(a, Rel::PartOf, b).unwrap();
+        let mut before = k.snapshot().encode().unwrap();
+        ingest_break(&mut k, 12, true);
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert!(
+            d.rejects
+                .iter()
+                .any(|(kind, reason)| *kind == ProposalKind::Phys
+                    && matches!(reason, RejectReason::Law(_))),
+            "{d:?}"
+        );
+        assert!(k.world().view().has_rel(a, Rel::PartOf, b));
+        assert!(k.world().view().constraint_state(relic(9)).is_none());
+        assert_eq!(k.world().view().loci().count(), 2);
+        let mut after = k.snapshot().encode().unwrap();
+        before[16..24].fill(0);
+        after[16..24].fill(0);
+        assert_eq!(before, after);
+    }
+
+    #[test]
+    fn phys_island_global_fragment_cap_rejects() {
+        let a = relic(1);
+        let b = relic(2);
+        let mut k = CommitKernel::new(klotho_world::World::new(
+            Arc::new(fragment_canon(128, 1)),
+            Hash::ZERO,
+        ));
+        plant_mover(
+            &mut k,
+            a,
+            PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd::ZERO),
+            0,
+            0,
+        );
+        plant_mover(
+            &mut k,
+            b,
+            PoseMm::new(Mm(400), Mm(0), Mm(0), YawMd::ZERO),
+            0,
+            0,
+        );
+        let mark = k.canon().affordance_id("Fragment").unwrap();
+        for i in 0..MAX_FRAGMENTS_GLOBAL {
+            let s = relic(1_000 + u128::from(i));
+            k.world_mut().insert_locus(s, LocusKind::Relic).unwrap();
+            k.world_mut().set_affordance(s, mark, true).unwrap();
+            k.world_mut().set_island(s, NO_ISLAND, 0).unwrap();
+        }
+        let loci = k.world().view().loci().count();
+        ingest_break(&mut k, 12, true);
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert_eq!(d.rejects, vec![(ProposalKind::Phys, RejectReason::Budget)]);
+        assert_eq!(k.world().view().loci().count(), loci);
+        assert!(k.world().view().constraint_state(relic(9)).is_none());
+    }
+
+    #[test]
+    fn phys_island_already_broken_constraint_rejects() {
+        let a = relic(1);
+        let b = relic(2);
+        let cid = relic(9);
+        let mut canon = cook("[]");
+        assert!(canon.bind_constraint(
+            cid,
+            klotho_core::ConstraintPhysics {
+                a,
+                b,
+                binding: hull_id(7),
+                break_impulse: 10,
+                ..klotho_core::ConstraintPhysics::default()
+            }
+        ));
+        let mut k = CommitKernel::new(klotho_world::World::new(Arc::new(canon), Hash::ZERO));
+        plant_mover(
+            &mut k,
+            a,
+            PoseMm::new(Mm(0), Mm(0), Mm(0), YawMd::ZERO),
+            0,
+            0,
+        );
+        plant_mover(
+            &mut k,
+            b,
+            PoseMm::new(Mm(400), Mm(0), Mm(0), YawMd::ZERO),
+            0,
+            0,
+        );
+        ingest_break(&mut k, 12, true);
+        assert!(
+            k.step(Tick(1), Budget::HEARTH, &mut [])
+                .unwrap()
+                .rejects
+                .is_empty()
+        );
+        ingest_break(&mut k, 12, true);
+        let d = k.step(Tick(1), Budget::HEARTH, &mut []).unwrap();
+        assert_eq!(
+            d.rejects,
+            vec![(ProposalKind::Phys, RejectReason::WitnessMismatch)]
+        );
     }
 
     #[test]

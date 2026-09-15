@@ -59,6 +59,10 @@ impl SpecDelta {
             | TraceBody::RiteEnded { actor, .. } => {
                 self.written.insert(*actor);
             }
+            TraceBody::ConstraintBroken { a, b, .. } => {
+                self.written.insert(*a);
+                self.written.insert(*b);
+            }
             TraceBody::QtyChanged { id, .. } => {
                 self.written.insert(*id);
             }

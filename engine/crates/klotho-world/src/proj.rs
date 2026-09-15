@@ -1175,7 +1175,8 @@ impl Projection {
             | TraceBody::Uttered { .. }
             | TraceBody::PlaceLoaded { .. }
             | TraceBody::PlaceEvicted { .. }
-            | TraceBody::Despawned { .. } => {}
+            | TraceBody::Despawned { .. }
+            | TraceBody::ConstraintBroken { .. } => {}
             TraceBody::Learned { mind, fact } => {
                 if let Some(i) = self.packed(*mind) {
                     Arc::make_mut(&mut self.knows).insert((i, *fact));

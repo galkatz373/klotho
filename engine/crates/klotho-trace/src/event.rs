@@ -249,6 +249,19 @@ pub enum TraceBody {
         /// Original player claim channel.
         channel: u8,
     },
+    /// Admitted physical constraint break. Debris meshes stay off Trace.
+    ConstraintBroken {
+        /// Canon constraint identity.
+        constraint: Sigil,
+        /// First endpoint.
+        a: Sigil,
+        /// Second endpoint.
+        b: Sigil,
+        /// Quantized impulse witness that crossed the Canon threshold.
+        impulse: i32,
+        /// Authoritative fragments spawned in this transaction, 0..=64.
+        fragments: u8,
+    },
     /// Admitted semantic instrument contact; sampled bones stay off Trace.
     MotionContactAdmitted {
         /// Actor carrying the instrument.

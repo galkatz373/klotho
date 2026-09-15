@@ -10,8 +10,8 @@ mod extract;
 
 pub use extract::{
     DEFAULT_TTL_TICKS, MAX_DECALS, MAX_ONESHOTS, MAX_PARTICLES, MAX_RIBBONS, RECIPE_BURST,
-    RECIPE_IMPACT, RECIPE_PARTICLE, RECIPE_RIBBON, RECIPE_SCORCH, area_effect_golden, extract_vfx,
-    present_particles,
+    RECIPE_DEBRIS, RECIPE_IMPACT, RECIPE_PARTICLE, RECIPE_RIBBON, RECIPE_SCORCH,
+    area_effect_golden, extract_vfx, present_particles,
 };
 
 pub use klotho_manifest::{

@@ -474,6 +474,7 @@ impl CommitKernel {
                 .map_err(|_| RejectReason::Budget)?;
         }
         apply_constraints(&mut spec, constraints, breaks)?;
+        crate::breakage::apply_constraint_breaks(&mut spec, self.world.canon(), breaks, tick)?;
         validate_contact_claims(&spec.view(), bodies, contacts)?;
         validate_character_geometry(&self.world.view(), &spec.view(), bodies)?;
         let law_bodies: Vec<(Sigil, bool)> = bodies
@@ -518,13 +519,17 @@ impl CommitKernel {
             &contact_law_contexts,
             pred_ops,
         )?;
-        // Capture every physical and semantic write before publication.
+        // Capture every physical and semantic write before publication so a
+        // Law, break, or spawn rejection leaves Projection byte-identical.
+        // Lane 1 is action/constraint metadata, not every newly written locus.
+        for locus in spec.write_loci() {
+            cells.push((locus.raw(), 0));
+        }
         if bodies
             .iter()
             .any(|b| before_view.contact_track(b.mover).is_some())
         {
             for locus in spec.write_loci() {
-                cells.push((locus.raw(), 0));
                 cells.push((locus.raw(), 1));
             }
         }

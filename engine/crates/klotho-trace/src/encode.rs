@@ -27,6 +27,7 @@ const TAG_SPAWNED: u8 = 15;
 const TAG_DESPAWNED: u8 = 16;
 const TAG_MOTION_CONTACT: u8 = 17;
 const TAG_MOTION_AUTHORIZED: u8 = 18;
+const TAG_CONSTRAINT_BROKEN: u8 = 19;
 
 /// Encode one event to canonical LE bytes.
 #[must_use]
@@ -117,6 +118,20 @@ pub fn encode_event(e: &TraceEvent) -> Vec<u8> {
             b.u16_le(*kind);
             b.sigil(*a);
             b.opt_sigil(*obj);
+        }
+        TraceBody::ConstraintBroken {
+            constraint,
+            a,
+            b: obj,
+            impulse,
+            fragments,
+        } => {
+            b.u8(TAG_CONSTRAINT_BROKEN);
+            b.sigil(*constraint);
+            b.sigil(*a);
+            b.sigil(*obj);
+            b.i32_le(*impulse);
+            b.u8(*fragments);
         }
         TraceBody::MotionActionAuthorized {
             actor,
@@ -267,6 +282,13 @@ pub fn decode_event(bytes: &[u8]) -> Result<TraceEvent, TraceError> {
             kind: r.u16_le()?,
             a: r.sigil()?,
             b: r.opt_sigil()?,
+        },
+        TAG_CONSTRAINT_BROKEN => TraceBody::ConstraintBroken {
+            constraint: r.sigil()?,
+            a: r.sigil()?,
+            b: r.sigil()?,
+            impulse: r.i32_le()?,
+            fragments: r.u8()?,
         },
         TAG_MOTION_AUTHORIZED => TraceBody::MotionActionAuthorized {
             actor: r.sigil()?,
@@ -760,6 +782,21 @@ mod tests {
         assert_eq!(decode_event(&bytes), Err(TraceError::BadEvent));
         bytes[last] = 99;
         assert_eq!(decode_event(&bytes), Err(TraceError::BadEvent));
+    }
+
+    #[test]
+    fn constraint_broken_round_trip() {
+        let e = TraceEvent::new(
+            Tick(4),
+            TraceBody::ConstraintBroken {
+                constraint: actor(9),
+                a: actor(1),
+                b: actor(2),
+                impulse: 40,
+                fragments: 3,
+            },
+        );
+        assert_eq!(decode_event(&encode_event(&e)).unwrap(), e);
     }
 
     #[test]

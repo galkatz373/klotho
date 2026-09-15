@@ -695,7 +695,7 @@ fn part_of_parent(spec: &SpecDelta, s: Sigil) -> Option<Sigil> {
     n.into_iter().find(|&p| p != s)
 }
 
-fn alloc_spawn_sigil(spec: &SpecDelta) -> Result<Sigil, RejectReason> {
+pub(crate) fn alloc_spawn_sigil(spec: &SpecDelta) -> Result<Sigil, RejectReason> {
     let mut next: u128 = 0;
     for s in spec.view().loci() {
         next = next.max(s.id().saturating_add(1));

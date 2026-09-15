@@ -82,6 +82,8 @@ pub struct DccArtifact {
     pub skinned: Option<Vec<u8>>,
     /// KLTH ClipSet bytes when animations were present.
     pub clips: Option<Vec<u8>>,
+    /// Approved semantic samples for an animated contact-bound import.
+    pub contact_track: Option<klotho_core::ContactTrack>,
     /// blake3 of the glTF bytes, external buffers, and license sidecar.
     pub source_hash: Hash,
 }
@@ -221,6 +223,18 @@ pub fn cook_with(doc: &IntentDoc, kit: &Kitbash) -> Result<Cooked, CompileError>
         kit_blobs.push(id);
     }
 
+    for track in canon.contact_tracks.values() {
+        let bytes = crate::encode_contact_track(track)?;
+        let id = cas.put(&bytes).map_err(CompileError::prove)?;
+        put_artifact(
+            &mut dag,
+            id,
+            ArtifactKind::ContactTrack,
+            license.clone(),
+            &[cook_act, comp_agent],
+        )?;
+        kit_blobs.push(id);
+    }
     for rite in &canon.rites {
         let bytes = encode_rite(&rite.chunk)?;
         validate_rite(&bytes)?;
@@ -415,6 +429,26 @@ pub fn cook_with_dcc(doc: &IntentDoc, imports: &[DccArtifact]) -> Result<Cooked,
             dcc_blobs.push(id);
         }
         if let Some(cl) = &a.clips {
+            if !canon.contact_tracks.is_empty() {
+                let visual = a.contact_track.as_ref().ok_or_else(|| {
+                    CompileError::Gltf("contact-bound animation requires semantic samples".into())
+                })?;
+                let track = canon
+                    .contact_tracks
+                    .values()
+                    .find(|t| {
+                        t.instrument == visual.instrument
+                            && t.skeleton == visual.skeleton
+                            && t.action == visual.action
+                            && t.rite == visual.rite
+                            && t.wait_pc == visual.wait_pc
+                    })
+                    .ok_or_else(|| {
+                        CompileError::Gltf("animation has no Canon contact binding".into())
+                    })?;
+                crate::certify_contact_clip(track, visual, crate::contact_signature(track)?)?;
+            }
+
             validate_clipset(cl)?;
             let id = cas.put(cl).map_err(CompileError::prove)?;
             put_artifact(
@@ -429,6 +463,19 @@ pub fn cook_with_dcc(doc: &IntentDoc, imports: &[DccArtifact]) -> Result<Cooked,
         }
     }
 
+    for track in canon.contact_tracks.values() {
+        let bytes = crate::encode_contact_track(track)?;
+        let id = cas.put(&bytes).map_err(CompileError::prove)?;
+        put_artifact(
+            &mut dag,
+            id,
+            ArtifactKind::ContactTrack,
+            license.clone(),
+            &[cook_act, comp_agent],
+        )?;
+        dcc_blobs.push(id);
+        semantic_blobs.push(id);
+    }
     for rite in &canon.rites {
         let bytes = encode_rite(&rite.chunk)?;
         validate_rite(&bytes)?;
@@ -740,6 +787,7 @@ mod tests {
             hull,
             skinned: None,
             clips: None,
+            contact_track: None,
             source_hash: Hash::ZERO,
         }
     }
@@ -799,5 +847,73 @@ mod tests {
         let after = cook_with_dcc(&doc, &[b]).unwrap();
         assert_ne!(before.cook_hash, after.cook_hash);
         assert_eq!(before.canon_hash, after.canon_hash);
+    }
+}
+
+#[cfg(test)]
+mod contact_import_tests {
+    use super::*;
+    use klotho_core::{ContactTrack, LocusKind};
+    use klotho_ir::{ProvenanceId, SeedFact, StyleIntent};
+    #[test]
+    fn contact_import_certification_and_cosmetic_identity() {
+        let track: ContactTrack =
+            klotho_ir::from_ron(include_str!("../fixtures/sword-contact.ron")).unwrap();
+        let doc = IntentDoc {
+            style: StyleIntent {
+                notes: String::new(),
+                palettes: vec![],
+                kitbash_tags: vec![],
+            },
+            canon_diffs: klotho_ir::from_ron::<Vec<klotho_ir::CanonDiff>>(include_str!(
+                "../../klotho-canon/fixtures/ember.ron"
+            ))
+            .unwrap()
+            .into_iter()
+            .filter(|d| matches!(d, klotho_ir::CanonDiff::AddRite(r) if r.id.as_str() == "melee"))
+            .collect(),
+            seed: vec![
+                SeedFact::Locus {
+                    name: "swordsman".into(),
+                    kind: LocusKind::Actor,
+                },
+                SeedFact::ContactTrack {
+                    of: "swordsman".into(),
+                    track: track.clone(),
+                },
+            ],
+            minds: vec![],
+            provenance: ProvenanceId(Hash::ZERO),
+        };
+        let mut art = DccArtifact {
+            tag: "biped".into(),
+            license: LicenseSpan::spdx("CC0-1.0", "test").unwrap(),
+            mesh: crate::encode_mesh_i16(&[[0, 0, 0], [100, 0, 0], [0, 100, 0]], &[0, 1, 2])
+                .unwrap(),
+            hull: encode_hull(klotho_core::AabbMm::new(
+                klotho_core::IVec3::ZERO,
+                klotho_core::IVec3 {
+                    x: 100,
+                    y: 100,
+                    z: 100,
+                },
+            )),
+            skinned: None,
+            clips: Some(encode_clipset(&hearth_biped_clips()).unwrap()),
+            contact_track: Some(track.clone()),
+            source_hash: Hash::ZERO,
+        };
+        let base = cook_with_dcc(&doc, &[art.clone()]).unwrap();
+        art.mesh =
+            crate::encode_mesh_i16(&[[0, 0, 0], [90, 0, 0], [0, 90, 0]], &[0, 1, 2]).unwrap();
+        let cosmetic = cook_with_dcc(&doc, &[art.clone()]).unwrap();
+        assert_eq!(base.canon_hash, cosmetic.canon_hash);
+        assert_ne!(base.cook_hash, cosmetic.cook_hash);
+        let restored = crate::unpack_warp(&crate::pack_warp(&cosmetic).unwrap()).unwrap();
+        assert_eq!(restored.canon_hash, cosmetic.canon_hash);
+        art.contact_track.as_mut().unwrap().instrument = Hash([2; 32]);
+        assert!(cook_with_dcc(&doc, &[art.clone()]).is_err());
+        art.contact_track = None;
+        assert!(cook_with_dcc(&doc, &[art]).is_err());
     }
 }

@@ -250,6 +250,7 @@ pub fn dependents_of(bundle: &ProjectBundle, target: AnchorId) -> Vec<AnchorId> 
                 SeedFact::Qty { of, .. }
                 | SeedFact::Pose { of, .. }
                 | SeedFact::Physics { of, .. }
+                | SeedFact::ContactTrack { of, .. }
                     if of == name =>
                 {
                     push_unique(&mut out, target);
@@ -511,9 +512,10 @@ fn strip_object(module: &mut IntentModule, object: &ObjectAnchor) {
     let name = &object.name;
     module.body.seed.retain(|fact| match fact {
         SeedFact::Locus { name: n, .. } => n != name,
-        SeedFact::Qty { of, .. } | SeedFact::Pose { of, .. } | SeedFact::Physics { of, .. } => {
-            of != name
-        }
+        SeedFact::Qty { of, .. }
+        | SeedFact::Pose { of, .. }
+        | SeedFact::Physics { of, .. }
+        | SeedFact::ContactTrack { of, .. } => of != name,
         SeedFact::Rel { a, b, .. } => a != name && b != name,
     });
     module.body.minds.retain(|m| m.locus != *name);
@@ -543,6 +545,7 @@ fn rewrite_names(module: &mut IntentModule, kind: AnchorKind, from: &Name, to: &
                     SeedFact::Qty { of, .. }
                     | SeedFact::Pose { of, .. }
                     | SeedFact::Physics { of, .. }
+                    | SeedFact::ContactTrack { of, .. }
                         if of == from =>
                     {
                         *of = to.clone();
@@ -764,6 +767,12 @@ fn seed_key(fact: &SeedFact, by_name: &BTreeMap<&str, AnchorId>) -> (u8, AnchorI
         ),
         SeedFact::Qty { of, .. } => (
             2,
+            *by_name.get(of.as_str()).unwrap_or(&AnchorId::ZERO),
+            0,
+            AnchorId::ZERO,
+        ),
+        SeedFact::ContactTrack { of, .. } => (
+            5,
             *by_name.get(of.as_str()).unwrap_or(&AnchorId::ZERO),
             0,
             AnchorId::ZERO,

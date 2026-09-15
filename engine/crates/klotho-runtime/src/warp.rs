@@ -61,7 +61,7 @@ pub fn kernel_from_cooked_profile(
 fn apply_seed(k: &mut CommitKernel, seed: &[SeedFact]) -> Result<(), String> {
     for fact in seed {
         match fact {
-            SeedFact::Physics { .. } => {} // Configuration was bound by Canon cook.
+            SeedFact::Physics { .. } | SeedFact::ContactTrack { .. } => {} // Configuration was bound by Canon cook.
 
             SeedFact::Locus { name, kind } => {
                 let s = k

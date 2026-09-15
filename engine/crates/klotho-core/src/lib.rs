@@ -15,6 +15,11 @@
 #![warn(missing_docs)]
 
 mod budget;
+mod contact;
+pub use contact::{
+    CONTACT_ERROR_MM, ContactSocket, ContactSweep, ContactTrack, FootPlant, MAX_CONTACT_CHANNELS,
+    MAX_CONTACT_SAMPLES,
+};
 mod hash;
 mod id;
 mod reject;

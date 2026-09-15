@@ -29,6 +29,8 @@ pub enum ArtifactKind {
     Evidence = 9,
     /// Cook-baked irradiance probe volume (KAI-17).
     ProbeGrid = 10,
+    /// Canon semantic contact trajectory.
+    ContactTrack = 11,
 }
 
 impl ArtifactKind {
@@ -47,6 +49,7 @@ impl ArtifactKind {
             8 => Some(Self::SkinnedMesh),
             9 => Some(Self::Evidence),
             10 => Some(Self::ProbeGrid),
+            11 => Some(Self::ContactTrack),
             _ => None,
         }
     }
@@ -71,6 +74,7 @@ mod tests {
         assert_eq!(ArtifactKind::from_u8(8), Some(ArtifactKind::SkinnedMesh));
         assert_eq!(ArtifactKind::from_u8(9), Some(ArtifactKind::Evidence));
         assert_eq!(ArtifactKind::from_u8(10), Some(ArtifactKind::ProbeGrid));
-        assert_eq!(ArtifactKind::from_u8(11), None);
+        assert_eq!(ArtifactKind::from_u8(11), Some(ArtifactKind::ContactTrack));
+        assert_eq!(ArtifactKind::from_u8(12), None);
     }
 }

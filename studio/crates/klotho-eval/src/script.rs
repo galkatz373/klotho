@@ -116,7 +116,10 @@ impl ScriptHost {
                     host.qty
                         .insert((of.as_str().to_owned(), res.as_str().to_owned()), *value);
                 }
-                SeedFact::Locus { .. } | SeedFact::Pose { .. } | SeedFact::Physics { .. } => {}
+                SeedFact::Locus { .. }
+                | SeedFact::Pose { .. }
+                | SeedFact::Physics { .. }
+                | SeedFact::ContactTrack { .. } => {}
             }
         }
         if !host.has_rel(door.as_str(), Rel::LockedBy, door.as_str()) {

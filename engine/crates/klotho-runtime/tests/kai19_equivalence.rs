@@ -83,7 +83,7 @@ fn run_canon(doc: &IntentDoc, intern: bool) -> Vec<TraceRun> {
     let mut kernel = klotho_commit::CommitKernel::new(World::new(Arc::new(canon), Hash::ZERO));
     for fact in &doc.seed {
         match fact {
-            SeedFact::Physics { .. } => {} // Configuration was bound by Canon cook.
+            SeedFact::Physics { .. } | SeedFact::ContactTrack { .. } => {} // Configuration was bound by Canon cook.
 
             SeedFact::Locus { name, kind } => {
                 let sigil = kernel.canon().pin(name.as_str()).unwrap();

@@ -149,7 +149,31 @@ pub fn unpack_warp(bytes: &[u8]) -> Result<Cooked, CompileError> {
     } else {
         digest
     };
-    if expected_cook != cook_hash || digest != canon_hash {
+    // Kitbash retains its frozen identity; DCC separately hashes semantic artifacts.
+    let has_kitbash = dag.iter().any(|n| {
+        matches!(
+            n.kind,
+            ProvenanceKind::Agent {
+                agent: Agent::Kitbash
+            }
+        )
+    });
+    let semantic_digest = if has_kitbash {
+        digest
+    } else {
+        let ids: Vec<_> = cas
+            .iter()
+            .filter_map(|(id, bytes)| {
+                matches!(
+                    peek_kind(bytes),
+                    Ok(ArtifactKind::Hull | ArtifactKind::ContactTrack)
+                )
+                .then_some(id)
+            })
+            .collect();
+        cook_digest(&doc, &ids)
+    };
+    if expected_cook != cook_hash || semantic_digest != canon_hash {
         return Err(warp_err("canon hash mismatch"));
     }
     Ok(Cooked {
@@ -409,7 +433,8 @@ fn kit_blobs_from_cas(cas: &Cas) -> Vec<BlobId> {
             | ArtifactKind::Hull
             | ArtifactKind::Grain
             | ArtifactKind::ClipSet
-            | ArtifactKind::SkinnedMesh,
+            | ArtifactKind::SkinnedMesh
+            | ArtifactKind::ContactTrack,
         ) = peek_kind(bytes)
         {
             ids.push(id);

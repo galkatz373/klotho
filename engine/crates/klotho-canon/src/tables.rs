@@ -30,6 +30,8 @@ pub struct Canon {
     pub pin_sigils: Vec<Option<Sigil>>,
     /// Canon-bound per-locus physical configuration.
     pub physics: BTreeMap<Sigil, BodyPhysics>,
+    /// Approved semantic motion tracks by actor.
+    pub contact_tracks: BTreeMap<Sigil, klotho_core::ContactTrack>,
     /// Canon-bound physical constraints, keyed by constraint identity.
     pub constraints: BTreeMap<Sigil, ConstraintPhysics>,
     law_by_name: BTreeMap<Name, LawId>,
@@ -66,6 +68,7 @@ impl Canon {
             pin_names,
             pin_sigils,
             physics: BTreeMap::new(),
+            contact_tracks: BTreeMap::new(),
             constraints: BTreeMap::new(),
             law_by_name,
             affordance_by_name,

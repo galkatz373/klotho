@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Active — PHYS-A01–A06 landed; PHYS-A07 next |
+| Status | Active — PHYS-A01–A07 landed; PHYS-A08 next |
 | Date | 2026-09-15 |
 | Scope | Production 3D physics, character resolution, vehicles, destruction, and animation-driven contact |
 | Preserves | Canon + Intent + Trace + Projection; K21 atomic commit; crate firewalls |
@@ -216,6 +216,30 @@ This replaces the overly weak guarantee that any ClipSet swap leaves melee uncha
 
 > Cosmetic animation variation may not change Trace, while a changed authoritative contact trajectory is an explicit Canon change.
 
+PHYS-A07 binds an approved `ContactTrack` to an Actor through a configuration-only
+seed fact. The first track format uses swept capsules, up to 65 authoritative
+boundaries, eight named sockets, eight channels, and sixteen non-overlapping
+foot-plant intervals. Absolute root-local coordinates are bounded to 100 m and
+capsule radii to 1–2000 mm. Sampling is explicitly 30 or 60 Hz and names the exact
+labeled, channel-bearing Rite `WAIT` instruction and its duration. Convex channels
+can extend this artifact later; they are not encoded by the first format.
+
+Cook writes a validated `KLTH` kind-11 CAS artifact with canonical integer RON
+payload and a 128 KiB pre-parse cap. The compatibility signature hashes the entire
+semantic artifact, including skeleton, instrument, action, timing and geometry.
+Approved DCC semantic sidecars are separate from visual glTF palettes; contact-bound
+animated imports require them and fail cook when identities, roots, timing,
+channel topology or capsule radii differ. Socket and capsule-endpoint retargeting
+must stay within the frozen 5 mm Euclidean envelope. Cosmetic mesh/palette bytes
+stay outside the signature. Warp reconstruction preserves the Canon binding;
+`cook_contact_epoch_pack` explicitly advances the epoch when an approved trajectory
+changes. No runtime clip notify or sampled palette is consumed by simulation.
+
+Distaff exposes a read-only Actor contact preview from cooked Canon, with desired
+root, named sockets, capsule intervals, foot plants, compatibility identity and
+cooked WAIT-window status at an authoritative boundary. It does not write Intent,
+Trace or Projection. Kernel hit admission remains PHYS-A08.
+
 ### Phase 5 gates
 
 - Contact samples are invariant to render rate and interpolation.
@@ -394,7 +418,7 @@ Each PR leaves the tree green and preserves existing non-Phys goldens.
 6. **PHYS-A06 — Character drive constraints — landed**
    Resolve root desire through capsule movement, steps, slopes, platforms, and dynamic-body interaction with one spatial owner.
 
-7. **PHYS-A07 — Semantic contact-track cook**
+7. **PHYS-A07 — Semantic contact-track cook — landed**
    Cook quantized socket/sweep tracks, enforce compatibility signatures, and add Distaff preview overlays.
 
 8. **PHYS-A08 — Motion-contact admission**

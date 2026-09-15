@@ -79,9 +79,9 @@ fn cook_inner(
                         intern.intern_resource(res)?;
                     }
                 }
-                SeedFact::Pose { of, .. } | SeedFact::Physics { of, .. } => {
-                    require_pin(&intern, of)?
-                }
+                SeedFact::Pose { of, .. }
+                | SeedFact::Physics { of, .. }
+                | SeedFact::ContactTrack { of, .. } => require_pin(&intern, of)?,
                 SeedFact::Locus { .. } => {}
             }
         }
@@ -212,6 +212,30 @@ fn cook_inner(
                 )));
             }
             if !canon.bind_physics(locus, *body) {
+                return Err(CookError::DuplicateId(of.0.clone()));
+            }
+        }
+    }
+    for fact in seed {
+        if let SeedFact::ContactTrack { of, track } = fact {
+            let actor = canon
+                .pin(of.as_str())
+                .ok_or_else(|| CookError::UnboundName(of.0.clone()))?;
+            let rite = canon.rites.iter().find(|r| r.name.as_str() == track.rite);
+            if actor.kind() != Some(LocusKind::Actor)
+                || !track.is_valid()
+                || !rite.is_some_and(|r| {
+                    r.chunk.instrs.iter().any(|i| {
+                        i.pc == track.wait_pc
+                            && matches!(i.op, RiteOp::Wait(t, Some(c)) if t == track.wait_ticks && c.as_u8() == track.channel)
+                    })
+                })
+            {
+                return Err(CookError::InvalidDoc(format!(
+                    "invalid contact binding for {of}"
+                )));
+            }
+            if canon.contact_tracks.insert(actor, track.clone()).is_some() {
                 return Err(CookError::DuplicateId(of.0.clone()));
             }
         }

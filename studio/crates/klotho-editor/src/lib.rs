@@ -10,7 +10,9 @@
 
 mod a11y;
 mod assistant;
+mod contact;
 mod dashboard;
+pub use contact::{ContactPreview, SweepOverlay, preview_contact_track};
 mod error;
 mod feel;
 mod inspector;

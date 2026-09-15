@@ -43,6 +43,13 @@ pub enum SeedFact {
         /// Canonical shape, material and optional character drive.
         body: klotho_core::BodyPhysics,
     },
+    /// Canon semantic motion binding; never appends Trace.
+    ContactTrack {
+        /// Actor name.
+        of: Name,
+        /// Approved quantized trajectory.
+        track: klotho_core::ContactTrack,
+    },
     /// Initial pose.
     Pose {
         /// Locus name.
@@ -65,6 +72,14 @@ impl SeedFact {
                 res.check()
             }
             Self::Pose { of, .. } => of.check(),
+            Self::ContactTrack { of, track } => {
+                of.check()?;
+                if track.is_valid() {
+                    Ok(())
+                } else {
+                    Err(IrError::Parse(format!("invalid contact track for {of}")))
+                }
+            }
             Self::Physics { of, body } => {
                 of.check()?;
                 if body.is_valid() {

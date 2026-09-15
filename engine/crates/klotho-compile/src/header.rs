@@ -64,6 +64,9 @@ pub fn validate_blob(bytes: &[u8]) -> Result<(), CompileError> {
         ArtifactKind::ClipSet => {
             validate_clipset(bytes)?;
         }
+        ArtifactKind::ContactTrack => {
+            crate::decode_contact_track(bytes)?;
+        }
         ArtifactKind::RiteChunk => {
             validate_rite(bytes)?;
         }

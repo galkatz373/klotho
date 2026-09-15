@@ -24,6 +24,8 @@
 #![warn(missing_docs)]
 
 mod asset;
+mod contact;
+pub use contact::with_contact_sidecar;
 mod error;
 mod import;
 mod pipeline;
@@ -81,6 +83,7 @@ impl From<GltfImport> for DccArtifact {
             hull: g.hull,
             skinned: g.skinned,
             clips: g.clips,
+            contact_track: None,
             source_hash: g.source_hash,
         }
     }

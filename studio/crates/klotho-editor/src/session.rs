@@ -153,6 +153,25 @@ impl EditorSession {
         k.world().view().pose(s)
     }
 
+    /// Preview the cooked Canon track for an actor without changing the editor or simulation.
+    pub fn contact_preview(
+        &self,
+        actor: &Name,
+        tick: u16,
+    ) -> Result<crate::ContactPreview, EditorError> {
+        let cooked = self.cooked.as_ref().ok_or(EditorError::NoCook)?;
+        let sigil = cooked
+            .canon
+            .pin(actor.as_str())
+            .ok_or_else(|| EditorError::UnknownLocus(actor.clone()))?;
+        let track = cooked
+            .canon
+            .contact_tracks
+            .get(&sigil)
+            .ok_or_else(|| EditorError::Boot(format!("no contact track for {actor}")))?;
+        crate::preview_contact_track(track, tick).map_err(|e| EditorError::Boot(e.to_string()))
+    }
+
     /// Overlay pose if present, else seed, else kernel.
     #[must_use]
     pub fn preview_pose(&self, locus: &Name) -> Option<PoseMm> {
@@ -373,9 +392,10 @@ fn pin_locus(pin: &Pin) -> Option<Name> {
     match pin {
         Pin::ToSeedTrace { fact, .. } => match fact {
             SeedFact::Locus { name, .. } => Some(name.clone()),
-            SeedFact::Pose { of, .. } | SeedFact::Qty { of, .. } | SeedFact::Physics { of, .. } => {
-                Some(of.clone())
-            }
+            SeedFact::Pose { of, .. }
+            | SeedFact::Qty { of, .. }
+            | SeedFact::Physics { of, .. }
+            | SeedFact::ContactTrack { of, .. } => Some(of.clone()),
             SeedFact::Rel { a, .. } => Some(a.clone()),
         },
         Pin::ToCanon { .. } | Pin::Reject { .. } => None,

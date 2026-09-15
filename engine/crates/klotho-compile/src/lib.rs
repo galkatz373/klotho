@@ -17,7 +17,12 @@
 
 mod bake;
 mod catalog;
+mod contact;
 mod cook;
+pub use contact::{
+    MAX_CONTACT_TRACK_BYTES, certify_contact_clip, contact_signature, decode_contact_track,
+    encode_contact_track,
+};
 mod encode;
 mod epoch;
 mod error;
@@ -44,7 +49,8 @@ pub use cook::{
 };
 pub use encode::{encode_clipset, encode_hull, encode_mesh_i16};
 pub use epoch::{
-    COMPILER_EPOCH_PACK_VERSION, CanonEpochPack, cook_epoch_pack, cook_next_epoch_pack,
+    COMPILER_EPOCH_PACK_VERSION, CanonEpochPack, cook_contact_epoch_pack, cook_epoch_pack,
+    cook_next_epoch_pack,
 };
 pub use error::{CompileError, check_ship_allowlist};
 pub use header::{

@@ -41,6 +41,26 @@ pub fn cook_epoch_pack(
     cook_epoch_pack_from(&base.doc, &base.canon, base.canon_hash, from_epoch, diffs)
 }
 
+/// Replace an approved semantic track through an explicit Canon epoch change.
+/// The actor and Rite must already be bound; cosmetic clip certification uses no epoch.
+pub fn cook_contact_epoch_pack(
+    base: &Cooked,
+    from_epoch: Epoch,
+    actor: &str,
+    track: klotho_core::ContactTrack,
+) -> Result<CanonEpochPack, CompileError> {
+    let mut doc = base.doc.clone();
+    let fact = doc
+        .seed
+        .iter_mut()
+        .find(|f| matches!(f, klotho_ir::SeedFact::ContactTrack { of, .. } if of.as_str() == actor))
+        .ok_or_else(|| CompileError::Canon(format!("unbound contact actor {actor}")))?;
+    if let klotho_ir::SeedFact::ContactTrack { track: current, .. } = fact {
+        *current = track;
+    }
+    cook_epoch_pack_from(&doc, &base.canon, base.canon_hash, from_epoch, &[])
+}
+
 /// Cook the successor of an already-cooked epoch pack.
 pub fn cook_next_epoch_pack(
     base: &CanonEpochPack,
@@ -75,6 +95,14 @@ fn cook_epoch_pack_from(
     bytes.extend_from_slice(&next.0.to_le_bytes());
     put_section(&mut bytes, patch.as_bytes());
     put_section(&mut bytes, whole.as_bytes());
+    if !canon.contact_tracks.is_empty() {
+        bytes.extend_from_slice(b"CTRK");
+        for (actor, track) in &canon.contact_tracks {
+            let actor_bytes = to_ron(actor).map_err(|e| CompileError::Canon(e.to_string()))?;
+            put_section(&mut bytes, actor_bytes.as_bytes());
+            put_section(&mut bytes, &crate::encode_contact_track(track)?);
+        }
+    }
     let canon_hash = hash_bytes(&bytes);
     Ok(CanonEpochPack {
         from_canon_hash: base_hash,

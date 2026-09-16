@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use klotho_core::{Epoch, Hash, Tick};
 use klotho_ir::PlayerIntent;
-use klotho_save::{SaveBlob, pause_save};
+use klotho_save::{SaveBlob, SavePortability, pause_save};
 use klotho_trace::TraceEvent;
 use klotho_world::WorldSnapshot;
 
@@ -115,6 +115,8 @@ pub struct SaveQuad {
     pub suffix: Vec<TraceEvent>,
     /// Snapshot tick (`trace_from_tick`).
     pub trace_from_tick: Tick,
+    /// Platform compatibility of the checkpoint.
+    pub portability: SavePortability,
 }
 
 impl From<SaveBlob> for SaveQuad {
@@ -126,6 +128,7 @@ impl From<SaveBlob> for SaveQuad {
             snapshot: blob.snap,
             suffix: blob.suffix,
             trace_from_tick: blob.trace_from_tick,
+            portability: blob.portability,
         }
     }
 }
@@ -139,6 +142,7 @@ impl SaveQuad {
             snap: Arc::clone(&self.snapshot),
             suffix: self.suffix.clone(),
             trace_from_tick: self.trace_from_tick,
+            portability: self.portability,
         }
     }
 }

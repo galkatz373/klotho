@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use klotho_core::{Epoch, Hash, Tick};
+use klotho_core::{Epoch, Hash, LocusKind, Tick};
 use klotho_trace::{TraceEvent, fold_prefix};
 use klotho_world::WorldSnapshot;
 
@@ -23,10 +23,69 @@ pub struct SaveBlob {
     pub suffix: Vec<TraceEvent>,
     /// Snapshot tick (`trace_from_tick`).
     pub trace_from_tick: Tick,
+    /// Platform compatibility for authoritative physical checkpoints.
+    pub portability: SavePortability,
+}
+
+/// Physics checkpoints are local to their OS and CPU family until a stronger
+/// cross-platform determinism result is available.
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum SavePortability {
+    /// No movable hull was present when the checkpoint was made.
+    Portable,
+    /// The checkpoint may resume only on this OS and CPU family.
+    SamePlatform {
+        /// Encoded operating system family.
+        os: u8,
+        /// Encoded CPU family.
+        arch: u8,
+    },
+}
+
+impl SavePortability {
+    /// Current supported host identity; unknown platforms fail closed.
+    #[must_use]
+    pub fn current() -> Self {
+        let os = if cfg!(target_os = "linux") {
+            1
+        } else if cfg!(target_os = "macos") {
+            2
+        } else if cfg!(target_os = "windows") {
+            3
+        } else {
+            0
+        };
+        let arch = if cfg!(target_arch = "x86_64") {
+            1
+        } else if cfg!(target_arch = "aarch64") {
+            2
+        } else {
+            0
+        };
+        Self::SamePlatform { os, arch }
+    }
+
+    pub(crate) fn compatible(self) -> bool {
+        match self {
+            Self::Portable => true,
+            Self::SamePlatform { os: 0, .. } | Self::SamePlatform { arch: 0, .. } => false,
+            other => other == Self::current(),
+        }
+    }
 }
 
 /// Copy the published snapshot with an empty suffix. Does not append Trace.
 pub fn pause_save(snap: &Arc<WorldSnapshot>) -> Result<SaveBlob, SaveError> {
+    let physical = requires_platform(snap);
+    let portability = if physical {
+        let host = SavePortability::current();
+        if !host.compatible() {
+            return Err(SaveError::PlatformMismatch);
+        }
+        host
+    } else {
+        SavePortability::Portable
+    };
     Ok(SaveBlob {
         canon_hash: snap.canon_hash,
         epoch: snap.epoch,
@@ -34,6 +93,7 @@ pub fn pause_save(snap: &Arc<WorldSnapshot>) -> Result<SaveBlob, SaveError> {
         snap: Arc::clone(snap),
         suffix: Vec::new(),
         trace_from_tick: snap.tick,
+        portability,
     })
 }
 
@@ -56,7 +116,19 @@ pub fn check_load(
     if fold_prefix(blob.prefix, &blob.suffix) != expected_prefix {
         return Err(SaveError::PrefixMismatch);
     }
+    if !blob.portability.compatible()
+        || (requires_platform(&blob.snap) && blob.portability == SavePortability::Portable)
+    {
+        return Err(SaveError::PlatformMismatch);
+    }
     Ok(())
+}
+
+fn requires_platform(snap: &WorldSnapshot) -> bool {
+    let view = snap.view();
+    view.loci().any(|s| {
+        matches!(s.kind(), Some(LocusKind::Actor | LocusKind::Relic)) && view.hull(s).is_some()
+    })
 }
 
 /// Restore the blob if ancestry matches.

@@ -14,6 +14,7 @@ klotho-commit.workspace = true
 klotho-core.workspace = true
 klotho-ir.workspace = true
 klotho-phys.workspace = true
+klotho-save.workspace = true
 klotho-trace.workspace = true
 klotho-world.workspace = true
 

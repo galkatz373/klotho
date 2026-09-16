@@ -105,6 +105,7 @@ dependencies = [
  "klotho-core",
  "klotho-ir",
  "klotho-phys",
+ "klotho-save",
  "klotho-trace",
  "klotho-world",
 ]

@@ -14,7 +14,7 @@ mod codec;
 mod epoch;
 mod error;
 
-pub use blob::{SaveBlob, check_load, load, pause_save, restore};
+pub use blob::{SaveBlob, SavePortability, check_load, load, pause_save, restore};
 pub use codec::{
     MAX_EVENT_BYTES, MAX_SUFFIX_EVENTS, SAVE_CAP, SAVE_MAGIC, SAVE_VERSION, assembled_size,
     check_assembled_size, decode, encode,
@@ -90,6 +90,40 @@ mod tests {
         assert_eq!(blob.prefix, snap.trace_prefix_hash);
         assert_eq!(blob.trace_from_tick, snap.tick);
         assert!(Arc::ptr_eq(&blob.snap, &snap));
+        assert_eq!(blob.portability, SavePortability::Portable);
+    }
+
+    #[test]
+    fn physical_save_round_trip_records_and_enforces_origin() {
+        let mut row = SnapRow::new(relic(1), LocusKind::Relic);
+        row.hull = Some(klotho_core::AabbMm::new(
+            klotho_core::IVec3 { x: -1, y: 0, z: -1 },
+            klotho_core::IVec3 { x: 1, y: 2, z: 1 },
+        ));
+        let snap = Arc::new(
+            WorldSnapshot::from_snap_rows(
+                Epoch::ZERO,
+                Tick::ZERO,
+                Hash::ZERO,
+                genesis_hash(),
+                None,
+                vec![row],
+            )
+            .unwrap(),
+        );
+        let save = pause_save(&snap).unwrap();
+        assert_eq!(save.portability, SavePortability::current());
+        let bytes = encode(&save).unwrap();
+        assert_eq!(decode(&bytes).unwrap().portability, save.portability);
+        let mut foreign = decode(&bytes).unwrap();
+        foreign.portability = SavePortability::SamePlatform { os: 99, arch: 99 };
+        assert_eq!(
+            check_load(&foreign, foreign.prefix, foreign.canon_hash),
+            Err(SaveError::PlatformMismatch)
+        );
+        let mut legacy = bytes;
+        legacy[4] = 1;
+        assert_eq!(decode(&legacy).unwrap_err(), SaveError::Version(1));
     }
 
     #[test]
@@ -153,6 +187,7 @@ mod tests {
             snap,
             suffix: vec![event],
             trace_from_tick: Tick(10),
+            portability: SavePortability::Portable,
         };
         assert_eq!(
             check_load(&blob, base, blob.canon_hash),

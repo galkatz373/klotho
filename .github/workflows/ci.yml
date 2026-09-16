@@ -66,6 +66,10 @@ jobs:
         run: test "$(uname -m)" = x86_64
       - name: Phys residual and long-run goldens
         run: cargo test --manifest-path engine/Cargo.toml -p klotho-phys
+      - name: Anvil release acceptance on pinned scalar artifact
+        env:
+          KLOTHO_ANVIL_HASH_PRINT: "1"
+        run: cargo test --manifest-path engine/Cargo.toml -p anvil-slice --test release_acceptance -- --nocapture
 
   jobs-unsafe:
     name: jobs Miri · Klotho

@@ -42,12 +42,58 @@ pub struct WorldSnapshot {
     canon: Arc<Canon>,
 }
 
+/// A checkpoint cannot be resumed against different Canon or Trace ancestry.
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum ResumeError {
+    /// The supplied cooked Canon identity differs from the checkpoint.
+    CanonMismatch,
+    /// The supplied Trace does not end at the checkpoint prefix or tick.
+    TraceMismatch,
+}
+
+impl core::fmt::Display for ResumeError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl core::error::Error for ResumeError {}
+
 impl World {
     /// Empty world on a cooked Canon. `canon_hash` is the cook digest.
     /// Locus cap is [`MAX_LOCI`] (Hearth).
     #[must_use]
     pub fn new(canon: Arc<Canon>, canon_hash: Hash) -> Self {
         Self::with_locus_cap(canon, canon_hash, MAX_LOCI)
+    }
+
+    /// Resume an exact checkpoint with its cooked Canon and complete Trace prefix.
+    /// The snapshot supplies Projection; Trace and Canon remain the sources.
+    pub fn resume(
+        canon: Arc<Canon>,
+        canon_hash: Hash,
+        snap: &WorldSnapshot,
+        trace: TraceLog,
+    ) -> Result<Self, ResumeError> {
+        if canon_hash != snap.canon_hash {
+            return Err(ResumeError::CanonMismatch);
+        }
+        if trace.prefix_hash() != snap.trace_prefix_hash
+            || trace.events().iter().any(|e| e.tick > snap.tick)
+        {
+            return Err(ResumeError::TraceMismatch);
+        }
+        Ok(Self {
+            canon,
+            canon_hash,
+            trace,
+            view: (*snap.blob).clone(),
+            intents: IntentHeap::new(),
+            epoch: snap.epoch,
+            tick: snap.tick,
+            snaps: [None, None],
+            snap_i: 0,
+        })
     }
 
     /// Empty world with a packed-row cap. Cap is clamped to

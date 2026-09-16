@@ -48,6 +48,7 @@ pub fn migrate_save(blob: &SaveBlob, pack: &CanonEpochPack) -> Result<SaveBlob, 
         snap,
         suffix,
         trace_from_tick: blob.trace_from_tick,
+        portability: blob.portability,
     })
 }
 

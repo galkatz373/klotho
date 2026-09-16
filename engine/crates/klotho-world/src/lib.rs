@@ -39,7 +39,7 @@ pub use snap_blob::{
 #[cfg(any(test, feature = "mutate"))]
 pub use spec::SpecDelta;
 pub use view::{HITSCAN_RANGE_MM, WorldView};
-pub use world::{World, WorldSnapshot};
+pub use world::{ResumeError, World, WorldSnapshot};
 
 /// Hearth packed-row cap. Process cap is [`MAX_LOCI_PROCESS`].
 pub const MAX_LOCI: usize = MAX_LOCI_HEARTH;

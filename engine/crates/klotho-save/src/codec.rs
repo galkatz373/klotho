@@ -4,13 +4,13 @@ use klotho_core::{Epoch, Hash, Tick};
 use klotho_trace::{decode_event, encode_event};
 use klotho_world::WorldSnapshot;
 
-use crate::blob::SaveBlob;
+use crate::blob::{SaveBlob, SavePortability};
 use crate::error::SaveError;
 
 /// Save file magic.
 pub const SAVE_MAGIC: [u8; 4] = *b"KSAV";
 /// Save file version.
-pub const SAVE_VERSION: u8 = 1;
+pub const SAVE_VERSION: u8 = 2;
 /// Total encoded size cap.
 pub const SAVE_CAP: usize = 64 * 1024 * 1024;
 /// Per-event payload cap.
@@ -91,7 +91,11 @@ pub fn encode(blob: &SaveBlob) -> Result<Vec<u8>, SaveError> {
     let mut buf = Vec::with_capacity(size);
     buf.extend_from_slice(&SAVE_MAGIC);
     buf.push(SAVE_VERSION);
-    buf.extend_from_slice(&[0, 0, 0]);
+    let platform = match blob.portability {
+        SavePortability::Portable => [0, 0, 0],
+        SavePortability::SamePlatform { os, arch } => [1, os, arch],
+    };
+    buf.extend_from_slice(&platform);
     buf.extend_from_slice(blob.canon_hash.as_bytes());
     buf.extend_from_slice(&blob.epoch.0.to_le_bytes());
     buf.extend_from_slice(blob.prefix.as_bytes());
@@ -127,9 +131,14 @@ pub fn decode(bytes: &[u8]) -> Result<SaveBlob, SaveError> {
         return Err(SaveError::Version(version));
     }
     let pad = take(&mut rest, 3)?;
-    if pad != [0, 0, 0] {
-        return Err(SaveError::Pad);
-    }
+    let portability = match pad {
+        [0, 0, 0] => SavePortability::Portable,
+        [1, os, arch] if *os != 0 && *arch != 0 => SavePortability::SamePlatform {
+            os: *os,
+            arch: *arch,
+        },
+        _ => return Err(SaveError::Pad),
+    };
     let canon_hash = take_hash(&mut rest)?;
     let epoch = Epoch(take_u64(&mut rest)?);
     let prefix = take_hash(&mut rest)?;
@@ -195,6 +204,7 @@ pub fn decode(bytes: &[u8]) -> Result<SaveBlob, SaveError> {
         snap: std::sync::Arc::new(snap),
         suffix,
         trace_from_tick: tick,
+        portability,
     })
 }
 

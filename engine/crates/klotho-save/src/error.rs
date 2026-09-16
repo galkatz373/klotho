@@ -27,6 +27,8 @@ pub enum SaveError {
     PrefixMismatch,
     /// `canon_hash` does not match the expected cook digest.
     CanonMismatch,
+    /// A physical checkpoint came from a different OS or CPU family.
+    PlatformMismatch,
     /// Extra bytes after a well-formed record.
     Trailing,
     /// A suffix event is at or before the snapshot tick, or ticks go backwards.
@@ -49,6 +51,7 @@ impl fmt::Display for SaveError {
             Self::Oversize { size, cap } => write!(f, "Oversize({size} > {cap})"),
             Self::PrefixMismatch => write!(f, "PrefixMismatch"),
             Self::CanonMismatch => write!(f, "CanonMismatch"),
+            Self::PlatformMismatch => write!(f, "PlatformMismatch"),
             Self::Trailing => write!(f, "Trailing"),
             Self::TickWindow => write!(f, "TickWindow"),
             Self::BadEvent => write!(f, "BadEvent"),

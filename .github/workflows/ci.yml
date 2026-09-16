@@ -68,8 +68,8 @@ jobs:
         run: cargo test --manifest-path engine/Cargo.toml -p klotho-phys
       - name: Anvil release acceptance on pinned scalar artifact
         env:
-          KLOTHO_ANVIL_HASH_PRINT: "1"
-        run: cargo test --manifest-path engine/Cargo.toml -p anvil-slice --test release_acceptance -- --nocapture
+          KLOTHO_PINNED_PHYS: "1"
+        run: cargo test --manifest-path engine/Cargo.toml -p anvil-slice --test release_acceptance
 
   jobs-unsafe:
     name: jobs Miri · Klotho

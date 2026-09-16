@@ -121,6 +121,11 @@ mod tests {
             check_load(&foreign, foreign.prefix, foreign.canon_hash),
             Err(SaveError::PlatformMismatch)
         );
+        foreign.portability = SavePortability::Portable;
+        assert_eq!(
+            check_load(&foreign, foreign.prefix, foreign.canon_hash),
+            Err(SaveError::PlatformMismatch)
+        );
         let mut legacy = bytes;
         legacy[4] = 1;
         assert_eq!(decode(&legacy).unwrap_err(), SaveError::Version(1));

@@ -76,10 +76,16 @@ impl SavePortability {
 
 /// Copy the published snapshot with an empty suffix. Does not append Trace.
 pub fn pause_save(snap: &Arc<WorldSnapshot>) -> Result<SaveBlob, SaveError> {
-    let view = snap.view();
-    let physical = view.loci().any(|s| {
-        matches!(s.kind(), Some(LocusKind::Actor | LocusKind::Relic)) && view.hull(s).is_some()
-    });
+    let physical = requires_platform(snap);
+    let portability = if physical {
+        let host = SavePortability::current();
+        if !host.compatible() {
+            return Err(SaveError::PlatformMismatch);
+        }
+        host
+    } else {
+        SavePortability::Portable
+    };
     Ok(SaveBlob {
         canon_hash: snap.canon_hash,
         epoch: snap.epoch,
@@ -87,11 +93,7 @@ pub fn pause_save(snap: &Arc<WorldSnapshot>) -> Result<SaveBlob, SaveError> {
         snap: Arc::clone(snap),
         suffix: Vec::new(),
         trace_from_tick: snap.tick,
-        portability: if physical {
-            SavePortability::current()
-        } else {
-            SavePortability::Portable
-        },
+        portability,
     })
 }
 
@@ -114,10 +116,19 @@ pub fn check_load(
     if fold_prefix(blob.prefix, &blob.suffix) != expected_prefix {
         return Err(SaveError::PrefixMismatch);
     }
-    if !blob.portability.compatible() {
+    if !blob.portability.compatible()
+        || (requires_platform(&blob.snap) && blob.portability == SavePortability::Portable)
+    {
         return Err(SaveError::PlatformMismatch);
     }
     Ok(())
+}
+
+fn requires_platform(snap: &WorldSnapshot) -> bool {
+    let view = snap.view();
+    view.loci().any(|s| {
+        matches!(s.kind(), Some(LocusKind::Actor | LocusKind::Relic)) && view.hull(s).is_some()
+    })
 }
 
 /// Restore the blob if ancestry matches.

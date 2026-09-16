@@ -32,8 +32,11 @@ fn run(ticks: usize) -> (Hash, Vec<u8>) {
 #[test]
 fn long_run_is_repeatable_and_remains_inside_behavior_envelopes() {
     let first = run(120);
-    if std::env::var_os("KLOTHO_ANVIL_HASH_PRINT").is_some() {
-        eprintln!("PHYS-A12 Anvil 120-tick Trace prefix: {}", first.0);
+    if std::env::var_os("KLOTHO_PINNED_PHYS").is_some() {
+        assert_eq!(
+            first.0.to_string(),
+            "9075e1b7db1a8374889ed3965aa4c65ec39d655bf9ffd3d8e77ba192b0763564"
+        );
     }
     assert_eq!(first, run(120));
 

@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Active — PHYS-A01–A11 landed; PHYS-A12 next |
+| Status | Active — PHYS-A01–A12 acceptance gates landed; production throughput remains open |
 | Date | 2026-09-16 |
 | Scope | Production 3D physics, character resolution, vehicles, destruction, and animation-driven contact |
 | Preserves | Canon + Intent + Trace + Projection; K21 atomic commit; crate firewalls |
@@ -13,7 +13,7 @@ Klotho needs more than a stronger solver. It needs physical interaction to be au
 
 > Canon defines physical meaning and authored constraints. Physics and Motion derive bounded proposals. `CommitKernel` atomically admits them. Trace records gameplay consequences. Manifest presents the result.
 
-The landed `klotho-phys` establishes the correct authority boundary and proves gravity, oriented contact, stacking, character drive, animation-contact admission, Canon-bound four-wheel vehicle rigs, and admitted constraint breaks with fragment caps. PHYS-A11 adds a bounded combined Anvil slice and read-only diagnostics; PHYS-A12 owns release acceptance.
+The landed `klotho-phys` establishes the correct authority boundary and proves gravity, oriented contact, stacking, character drive, animation-contact admission, Canon-bound four-wheel vehicle rigs, and admitted constraint breaks with fragment caps. PHYS-A11 adds a bounded combined Anvil slice and read-only diagnostics. PHYS-A12 lands repeatable release gates and records the remaining throughput risk.
 
 Because the existing AAA sequence is marked complete, this work starts with an HLD amendment and a new PR series. It must not silently expand the claims of AAA-08 through AAA-10.
 
@@ -473,8 +473,8 @@ Each PR leaves the tree green and preserves existing non-Phys goldens.
 11. **PHYS-A11 — Anvil and production diagnostics — landed**
     The bounded Anvil scene contains five crates with a rotated middle body, 200/250 mm stairs, 30°/50° slope geometry, hinge and breakable constraints, a translating/rotating platform with rider, a character pushing a crate, and a Canon-bound sword track. A 30-tick combined golden admits one sword hit and one break while push and platform motion use the same kernel. An invalid crate hull rejects its entire island byte-identically. Published-snapshot island captures retain Canon identity, epoch, tick and exact proposal payload; pure replay compares the proposal. Read-only overlays expose hulls, prior/proposed poses, character desire/resolution and step/slope policy, WAIT sweeps, support/sleep, and constraint impulses/thresholds. Distaff can request a capture without admitting it. Reject explanations name the kernel reason. Disposable timings record broad/character/vehicle/narrow/constraint/encode stages and p50/p95/p99/max summaries with body/contact/constraint/island-size maxima. Captures are in-memory diagnostics; pinned Linux, supported-OS, persistence, and long-run envelopes remain PHYS-A12 gates.
 
-12. **PHYS-A12 — Release acceptance**
-    Run pinned determinism, supported-OS behavior, save/load, replay, scale, long-run stability, and crate-firewall gates; update HLD claims only after evidence lands.
+12. **PHYS-A12 — Release acceptance gates — landed**
+    The pinned Linux job freezes the 120-tick Anvil Trace prefix at `9075e1b7db1a8374889ed3965aa4c65ec39d655bf9ffd3d8e77ba192b0763564`. Three-OS CI runs behavioral envelopes, while focused Phys tests retain one/eight-worker equality and residual gates. Anvil resumes the combined action, break, stack, push, and platform scene from exact pause saves at ticks 3, 16, and 31, then compares 60-tick Trace and Projection results. Captures replay across 30 boundaries. A 2,000-body independent-island case verifies admission capacity; a 120-tick run verifies bounded scene behavior and repeatability. The import firewall remains a CI gate. Save format v2 records OS/CPU origin for checkpoints with movable hulls and refuses cross-platform loads; unlabelled v1 saves are refused. This is correctness and capacity evidence, not a first-title throughput certification: a local optimized 2,000-island serial tick took about 1.3 s, far above the AAA adventure critical-path budget. Production throughput remains a release blocker until a representative pinned-runtime profile meets the 10 ms propose, 8 ms admit, and 21 ms critical-path gates.
 
 ## Completion checklist
 

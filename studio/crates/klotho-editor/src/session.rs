@@ -172,6 +172,14 @@ impl EditorSession {
         crate::preview_contact_track(track, tick).map_err(|e| EditorError::Boot(e.to_string()))
     }
 
+    /// Read-only physics proposal preview for an already partitioned live island.
+    /// Publishing a snapshot does not admit the proposal or change Projection.
+    #[must_use]
+    pub fn physics_capture(&mut self, island: u16) -> Option<klotho_debug::IslandCapture> {
+        let kernel = self.kernel.as_mut()?;
+        klotho_debug::capture_island(kernel.snapshot(), island)
+    }
+
     /// Overlay pose if present, else seed, else kernel.
     #[must_use]
     pub fn preview_pose(&self, locus: &Name) -> Option<PoseMm> {

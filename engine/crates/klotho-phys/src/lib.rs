@@ -8,7 +8,9 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod capture;
 mod joints;
+mod profile;
 mod quant;
 mod solver;
 mod vehicle;
@@ -19,8 +21,13 @@ use klotho_commit::{AdmitBuf, IslandProposer, SyncProposer};
 use klotho_core::{NO_ISLAND, Tick};
 use klotho_world::WorldView;
 
+pub use capture::{
+    BodyOverlay, ConstraintOverlay, IslandCapture, ReplayMismatch, SweepOverlay, capture_island,
+    replay_capture,
+};
+pub use profile::{PerformanceSummary, StageQuantiles, summarize_timings};
 pub use quant::{METRIC_QUANT_RESIDUAL_MM, METRIC_REJECTED_NON_FINITE};
-pub use solver::{SolveOut, solve_island};
+pub use solver::{SolveOut, SolveTimings, solve_island};
 
 /// Zero-sized proposer. All inputs come from `&WorldView` (K22).
 #[derive(Copy, Clone, Debug, Default)]

@@ -1,6 +1,7 @@
 //! Sequential positional correction on oriented boxes. Contacts rebuilt each substep.
 
 use std::collections::BTreeSet;
+use std::time::Instant;
 
 use klotho_commit::{BodyDelta, Proposal};
 use klotho_core::{
@@ -75,11 +76,43 @@ pub struct SolveOut {
     pub rejected_character_geometry: Vec<Sigil>,
     /// Bound vehicles whose wheel query overflowed; no island is emitted.
     pub rejected_vehicle_geometry: Vec<Sigil>,
+    /// Disposable wall-clock diagnostics. Never included in Proposal or Trace.
+    pub timings: SolveTimings,
+}
+
+/// Per-stage proposer telemetry in microseconds. Zero on an early failure.
+#[derive(Copy, Clone, Debug, Default)]
+pub struct SolveTimings {
+    /// Gather island bodies and occupancy candidates.
+    pub broad_us: u32,
+    /// Bounded character traversal preparation.
+    pub character_us: u32,
+    /// Bounded wheel-query preparation.
+    pub vehicle_us: u32,
+    /// Contact generation across substeps.
+    pub narrow_us: u32,
+    /// Contact, velocity, and constraint solve across substeps.
+    pub constraint_us: u32,
+    /// Quantize and sample semantic contact tracks into the proposal.
+    pub encode_us: u32,
+    /// Largest generated contact set in a substep.
+    pub max_contacts: u32,
+    /// Number of solved bodies.
+    pub bodies: u32,
+    /// Number of partition members, including any Motion-owned actors.
+    pub members: u32,
+    /// Number of participating canonical constraints.
+    pub constraints: u32,
+}
+
+fn micros(t: Instant) -> u32 {
+    u32::try_from(t.elapsed().as_micros()).unwrap_or(u32::MAX)
 }
 
 /// Solve Relics and Canon-driven Actors in `island`; skip attached children.
 #[must_use]
 pub fn solve_island(island: u16, view: &WorldView<'_>) -> SolveOut {
+    let start = Instant::now();
     if island == NO_ISLAND {
         return SolveOut {
             proposals: Vec::new(),
@@ -87,6 +120,7 @@ pub fn solve_island(island: u16, view: &WorldView<'_>) -> SolveOut {
             rejected_non_finite: Vec::new(),
             rejected_character_geometry: Vec::new(),
             rejected_vehicle_geometry: Vec::new(),
+            timings: SolveTimings::default(),
         };
     }
     let members = collect_members(island, view);
@@ -98,9 +132,17 @@ pub fn solve_island(island: u16, view: &WorldView<'_>) -> SolveOut {
             rejected_non_finite: Vec::new(),
             rejected_character_geometry: Vec::new(),
             rejected_vehicle_geometry: Vec::new(),
+            timings: SolveTimings::default(),
         };
     }
     let statics = collect_statics(view, &bodies);
+    let mut timings = SolveTimings {
+        broad_us: micros(start),
+        bodies: bodies.len() as u32,
+        members: members.len() as u32,
+        ..SolveTimings::default()
+    };
+    let character_start = Instant::now();
     if prepare_characters(view, &mut bodies, &statics).is_err() {
         return SolveOut {
             proposals: Vec::new(),
@@ -112,8 +154,11 @@ pub fn solve_island(island: u16, view: &WorldView<'_>) -> SolveOut {
                 .map(|b| b.sigil)
                 .collect(),
             rejected_vehicle_geometry: Vec::new(),
+            timings,
         };
     }
+    timings.character_us = micros(character_start);
+    let vehicle_start = Instant::now();
     if crate::vehicle::prepare_vehicles(&statics).is_err() {
         return SolveOut {
             proposals: Vec::new(),
@@ -125,9 +170,12 @@ pub fn solve_island(island: u16, view: &WorldView<'_>) -> SolveOut {
                 .filter(|b| b.vehicle.is_some())
                 .map(|b| b.sigil)
                 .collect(),
+            timings,
         };
     }
+    timings.vehicle_us = micros(vehicle_start);
     let mut joints = collect_joints(view, &bodies);
+    timings.constraints = joints.len() as u32;
     let dt = 1.0 / SUBSTEPS as f32;
     let mut last_support: Vec<Option<Support>> = vec![None; bodies.len()];
     for _ in 0..SUBSTEPS {
@@ -147,6 +195,7 @@ pub fn solve_island(island: u16, view: &WorldView<'_>) -> SolveOut {
                     .filter(|b| b.vehicle.is_some())
                     .map(|b| b.sigil)
                     .collect(),
+                timings,
             };
         }
         let impact_v: Vec<[f32; 3]> = bodies.iter().map(|b| b.v).collect();
@@ -158,7 +207,11 @@ pub fn solve_island(island: u16, view: &WorldView<'_>) -> SolveOut {
                 b.angle_md[axis] += b.omega_md[axis] * dt;
             }
         }
+        let narrow_start = Instant::now();
         let contacts = build_contacts(&bodies, &statics);
+        timings.narrow_us = timings.narrow_us.saturating_add(micros(narrow_start));
+        timings.max_contacts = timings.max_contacts.max(contacts.len() as u32);
+        let constraint_start = Instant::now();
         for _ in 0..ITERS {
             for c in &contacts {
                 apply_contact(&mut bodies, c);
@@ -171,8 +224,15 @@ pub fn solve_island(island: u16, view: &WorldView<'_>) -> SolveOut {
             apply_velocity_contact(&mut bodies, c, &impact_v);
         }
         fill_support(&bodies, &contacts, &mut last_support);
+        timings.constraint_us = timings
+            .constraint_us
+            .saturating_add(micros(constraint_start));
     }
-    emit(island, members, view, &bodies, &last_support, &joints)
+    let encode_start = Instant::now();
+    let mut out = emit(island, members, view, &bodies, &last_support, &joints);
+    timings.encode_us = micros(encode_start);
+    out.timings = timings;
+    out
 }
 
 fn prepare_characters(
@@ -1005,6 +1065,7 @@ fn emit(
                     .map(|b| b.mover)
                     .collect(),
                 rejected_vehicle_geometry: Vec::new(),
+                timings: SolveTimings::default(),
             };
         }
     };
@@ -1029,6 +1090,7 @@ fn emit(
         rejected_non_finite,
         rejected_character_geometry: Vec::new(),
         rejected_vehicle_geometry: Vec::new(),
+        timings: SolveTimings::default(),
     }
 }
 

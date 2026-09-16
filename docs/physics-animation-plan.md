@@ -2,8 +2,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Active — PHYS-A01–A10 landed; PHYS-A11 next |
-| Date | 2026-09-15 |
+| Status | Active — PHYS-A01–A11 landed; PHYS-A12 next |
+| Date | 2026-09-16 |
 | Scope | Production 3D physics, character resolution, vehicles, destruction, and animation-driven contact |
 | Preserves | Canon + Intent + Trace + Projection; K21 atomic commit; crate firewalls |
 
@@ -13,7 +13,7 @@ Klotho needs more than a stronger solver. It needs physical interaction to be au
 
 > Canon defines physical meaning and authored constraints. Physics and Motion derive bounded proposals. `CommitKernel` atomically admits them. Trace records gameplay consequences. Manifest presents the result.
 
-The landed `klotho-phys` establishes the correct authority boundary and proves gravity, oriented contact, stacking, character drive, animation-contact admission, Canon-bound four-wheel vehicle rigs, and admitted constraint breaks with fragment caps. It does not yet prove the combined Anvil slice.
+The landed `klotho-phys` establishes the correct authority boundary and proves gravity, oriented contact, stacking, character drive, animation-contact admission, Canon-bound four-wheel vehicle rigs, and admitted constraint breaks with fragment caps. PHYS-A11 adds a bounded combined Anvil slice and read-only diagnostics; PHYS-A12 owns release acceptance.
 
 Because the existing AAA sequence is marked complete, this work starts with an HLD amendment and a new PR series. It must not silently expand the claims of AAA-08 through AAA-10.
 
@@ -470,8 +470,8 @@ Each PR leaves the tree green and preserves existing non-Phys goldens.
 10. **PHYS-A10 — Breakable structures — landed**
     Admit constraint breaks, authoritative fragment caps, and Manifest-only debris.
 
-11. **PHYS-A11 — Anvil and production diagnostics**
-    Land the combined proving slice, capture/replay tools, overlays, rejection explanations, and performance telemetry.
+11. **PHYS-A11 — Anvil and production diagnostics — landed**
+    The bounded Anvil scene contains five crates with a rotated middle body, 200/250 mm stairs, 30°/50° slope geometry, hinge and breakable constraints, a translating/rotating platform with rider, a character pushing a crate, and a Canon-bound sword track. A 30-tick combined golden admits one sword hit and one break while push and platform motion use the same kernel. An invalid crate hull rejects its entire island byte-identically. Published-snapshot island captures retain Canon identity, epoch, tick and exact proposal payload; pure replay compares the proposal. Read-only overlays expose hulls, prior/proposed poses, character desire/resolution and step/slope policy, WAIT sweeps, support/sleep, and constraint impulses/thresholds. Distaff can request a capture without admitting it. Reject explanations name the kernel reason. Disposable timings record broad/character/vehicle/narrow/constraint/encode stages and p50/p95/p99/max summaries with body/contact/constraint/island-size maxima. Captures are in-memory diagnostics; pinned Linux, supported-OS, persistence, and long-run envelopes remain PHYS-A12 gates.
 
 12. **PHYS-A12 — Release acceptance**
     Run pinned determinism, supported-OS behavior, save/load, replay, scale, long-run stability, and crate-firewall gates; update HLD claims only after evidence lands.

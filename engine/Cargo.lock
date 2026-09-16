@@ -97,6 +97,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "anvil-slice"
+version = "0.1.0"
+dependencies = [
+ "klotho-canon",
+ "klotho-commit",
+ "klotho-core",
+ "klotho-ir",
+ "klotho-phys",
+ "klotho-trace",
+ "klotho-world",
+]
+
+[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1174,6 +1187,7 @@ dependencies = [
  "klotho-core",
  "klotho-input",
  "klotho-ir",
+ "klotho-phys",
  "klotho-space",
  "klotho-trace",
  "klotho-ui",

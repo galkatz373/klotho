@@ -33,6 +33,43 @@ pub fn format_rejects(rejects: &[(ProposalKind, RejectReason)]) -> String {
     lines.join("\n")
 }
 
+/// Explain the exact kernel reason on a rejected physical transaction.
+/// The explanation is diagnostic text; it cannot change the rejection policy.
+#[must_use]
+pub fn explain_phys_reject(reason: RejectReason) -> &'static str {
+    match reason {
+        RejectReason::WrongHull => {
+            "A body, contact, or constraint names a different Canon hull or shape binding."
+        }
+        RejectReason::WitnessMismatch => {
+            "The island payload, swept geometry, contact, character path, or break witness does not match the canonical state."
+        }
+        RejectReason::StaleEpoch | RejectReason::EpochMismatch => {
+            "The proposal was solved against a different Canon epoch or authoritative tick."
+        }
+        RejectReason::IslandTooLarge | RejectReason::TooManyIslands => {
+            "The physical partition exceeds a frozen island or payload cap."
+        }
+        RejectReason::Conflict => {
+            "An earlier proposal in this tick already wrote a body or semantic row in this island."
+        }
+        RejectReason::Law(_) => "A Canon Law rejected the complete proposed island state.",
+        RejectReason::Budget => "A bounded admission or fragment budget was exhausted.",
+        RejectReason::UnclaimedAgency | RejectReason::TimingMiss => {
+            "The motion contact lacks a valid player action window or Agency."
+        }
+        RejectReason::MissingAffordance(_) => {
+            "A required Canon affordance is absent from a semantic contact target."
+        }
+        RejectReason::Resource(_) => {
+            "The proposed semantic consequence cannot spend the required quantity."
+        }
+        RejectReason::HallucinatedFact | RejectReason::Residency => {
+            "A non-physical authority or residency prerequisite failed."
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use klotho_core::{RejectReason, Tick};

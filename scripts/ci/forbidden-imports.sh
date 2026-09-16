@@ -31,6 +31,7 @@ check_gameplay_tables engine/examples/ember-slice
 check_gameplay_tables engine/examples/drift-slice
 check_gameplay_tables engine/examples/chorus-slice
 check_gameplay_tables engine/examples/netlock-slice
+check_gameplay_tables engine/examples/anvil-slice
 check_gameplay_tables studio/crates/klotho-author
 check_gameplay_tables studio/crates/klotho-editor
 check_gameplay_tables studio/crates/klotho-ai
@@ -94,6 +95,7 @@ check_gameplay_jobs engine/examples/ember-slice
 check_gameplay_jobs engine/examples/drift-slice
 check_gameplay_jobs engine/examples/chorus-slice
 check_gameplay_jobs engine/examples/netlock-slice
+check_gameplay_jobs engine/examples/anvil-slice
 check_gameplay_jobs studio/crates/klotho-author
 check_gameplay_jobs studio/crates/klotho-editor
 check_gameplay_jobs studio/crates/klotho-ai
@@ -125,6 +127,7 @@ check_no_dcc engine/examples/ember-slice
 check_no_dcc engine/examples/drift-slice
 check_no_dcc engine/examples/chorus-slice
 check_no_dcc engine/examples/netlock-slice
+check_no_dcc engine/examples/anvil-slice
 check_no_dcc studio/crates/klotho-author
 check_no_dcc studio/crates/klotho-editor
 check_no_dcc studio/crates/klotho-eval
@@ -155,6 +158,7 @@ check_no_dialogue engine/examples/ember-slice
 check_no_dialogue engine/examples/drift-slice
 check_no_dialogue engine/examples/chorus-slice
 check_no_dialogue engine/examples/netlock-slice
+check_no_dialogue engine/examples/anvil-slice
 check_no_dialogue engine/crates/klotho-sim
 check_no_dialogue engine/crates/klotho-commit
 check_no_dialogue engine/crates/klotho-runtime
@@ -234,6 +238,7 @@ check_no_stream engine/examples/ember-slice
 check_no_stream engine/examples/drift-slice
 check_no_stream engine/examples/chorus-slice
 check_no_stream engine/examples/netlock-slice
+check_no_stream engine/examples/anvil-slice
 check_no_stream studio/crates/klotho-author
 check_no_stream studio/crates/klotho-editor
 check_no_stream studio/crates/klotho-ai

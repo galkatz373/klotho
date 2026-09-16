@@ -1,30 +1,21 @@
 [package]
-name = "klotho-debug"
+name = "anvil-slice"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Klotho debug: Trace player, reject inspector, 4 ms budget gate"
-readme = false
+description = "Anvil bounded physics and semantic contact regression"
 publish = false
 
 [dependencies]
 klotho-canon.workspace = true
 klotho-commit.workspace = true
-klotho-compile.workspace = true
 klotho-core.workspace = true
-klotho-input.workspace = true
 klotho-ir.workspace = true
 klotho-phys.workspace = true
 klotho-trace.workspace = true
-klotho-ui.workspace = true
 klotho-world.workspace = true
-
-[dev-dependencies]
-ash-slice = { path = "../../examples/ash-slice" }
-hearth-slice = { path = "../../examples/hearth-slice" }
-klotho-space.workspace = true
 
 [lints]
 workspace = true

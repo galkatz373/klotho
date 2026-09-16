@@ -27,6 +27,7 @@ klotho-input.workspace = true
 klotho-ir.workspace = true
 klotho-kai-bench.workspace = true
 klotho-prove.workspace = true
+klotho-debug.workspace = true
 klotho-manifest.workspace = true
 klotho-render.workspace = true
 klotho-ui.workspace = true

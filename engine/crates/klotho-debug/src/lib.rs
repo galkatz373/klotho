@@ -25,10 +25,16 @@ pub use event::{BudgetUsed, DebugEvent};
 pub use journey::{CaptureMark, JourneyKernel};
 pub use optimize::OptimizationMap;
 pub use player::{Played, TracePlayer, prefix_of_events};
-pub use reject::{diagnose_unclaimed_agency, format_rejects, inspect_event, inspect_rejects};
+pub use reject::{
+    diagnose_unclaimed_agency, explain_phys_reject, format_rejects, inspect_event, inspect_rejects,
+};
 
 pub use klotho_commit::CommitKernel;
 pub use klotho_ir::PlayerIntent;
+pub use klotho_phys::{
+    BodyOverlay, ConstraintOverlay, IslandCapture, ReplayMismatch, SolveTimings, SweepOverlay,
+    capture_island, replay_capture, summarize_timings,
+};
 pub use klotho_ui::{LoadError, SaveQuad, check_load, load, save_from_snapshot};
 
 #[cfg(test)]

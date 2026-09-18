@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Active — PHYS-A01–A12 acceptance gates landed; production throughput remains open |
+| Status | Active — PHYS-A01–A12 acceptance gates landed; production throughput remains open ([`docs/physics-throughput-plan.md`](physics-throughput-plan.md)) |
 | Date | 2026-09-16 |
 | Scope | Production 3D physics, character resolution, vehicles, destruction, and animation-driven contact |
 | Preserves | Canon + Intent + Trace + Projection; K21 atomic commit; crate firewalls |
@@ -13,7 +13,7 @@ Klotho needs more than a stronger solver. It needs physical interaction to be au
 
 > Canon defines physical meaning and authored constraints. Physics and Motion derive bounded proposals. `CommitKernel` atomically admits them. Trace records gameplay consequences. Manifest presents the result.
 
-The landed `klotho-phys` establishes the correct authority boundary and proves gravity, oriented contact, stacking, character drive, animation-contact admission, Canon-bound four-wheel vehicle rigs, and admitted constraint breaks with fragment caps. PHYS-A11 adds a bounded combined Anvil slice and read-only diagnostics. PHYS-A12 lands repeatable release gates and records the remaining throughput risk.
+The landed `klotho-phys` establishes the correct authority boundary and proves gravity, oriented contact, stacking, character drive, animation-contact admission, Canon-bound four-wheel vehicle rigs, and admitted constraint breaks with fragment caps. PHYS-A11 adds a bounded combined Anvil slice and read-only diagnostics. PHYS-A12 lands repeatable release gates and records the remaining throughput risk. How to close that risk is [`docs/physics-throughput-plan.md`](physics-throughput-plan.md).
 
 Because the existing AAA sequence is marked complete, this work starts with an HLD amendment and a new PR series. It must not silently expand the claims of AAA-08 through AAA-10.
 
